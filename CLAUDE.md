@@ -2,9 +2,7 @@
 
 You are implementing **Line of Sight**: a local-first, agent-agnostic companion viewer
 for coding-agent CLI sessions (Claude Code first, Codex CLI next). The full
-product rationale, scope, and technical design are already decided. **Do not
-re-litigate decisions** — they are recorded in the docs below with their
-reasoning.
+product rationale, scope, and technical design are already decided. 
 
 ## Read in this order (all in `docs/`)
 
@@ -30,6 +28,18 @@ reasoning.
 
 - Follow `docs/PLAN.md` milestone by milestone; each has acceptance criteria —
   verify them before moving on.
+- **Decision log.** You have latitude on implementation details (anything the
+  docs don't pin down, or mark as "implementer's choice"). Record every
+  non-obvious decision in `docs/DECISIONS.md` (create it) **at the moment you
+  make it**, not retroactively. One entry each: date, milestone, what you
+  decided, why, and a tag — `[choice]` for decisions within your latitude,
+  `[deviation]` for anything that changes what SPEC/ARCHITECTURE/PLAN
+  prescribe. For a `[deviation]`, also update the affected doc in the same
+  commit. The hard rules above and SPEC §6 (the cut list) are not deviatable —
+  if one seems wrong, stop and leave a question in DECISIONS.md instead of
+  proceeding. The owner reviews this file at the end.
+- Commit at least at every milestone boundary (smaller commits welcome), so
+  the decision log and git history line up for review.
 - M0 spike findings go into `docs/SPIKE_NOTES.md` (create it). Later milestones
   depend on those findings; if a spike contradicts an assumption in the docs,
   update the doc and note the change.
