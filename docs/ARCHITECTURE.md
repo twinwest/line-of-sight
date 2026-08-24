@@ -241,9 +241,15 @@ export interface ResponderRequest {
 Spawn per question (cwd = projectDir if available, else home):
 
 ```
-claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebFetch" \
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
+  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
   --output-format stream-json --include-partial-messages --verbose
 ```
+
+(WebFetch removed from the M0-era flag set and mutating tools hard-blocked —
+see DECISIONS.md 2026-08-24 M3: --allowedTools alone only auto-denies, while
+--disallowedTools removes the tools structurally; WebFetch would allow
+prompt-injection exfiltration of transcript text.)
 
 Stdout is jsonl; answer text = `stream_event` lines with
 `content_block_delta`/`text_delta` (ignore `system`, hook, and snapshot
@@ -287,7 +293,7 @@ Responder implementation is cheap enough to include in v1 if the spike passes.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--allowedTools "Read,Grep,Glob,WebFetch"` (no Write/Edit/Bash) |
+| claude-cli | `--allowedTools "Read,Grep,Glob"` + `--disallowedTools` on all mutating/exfiltrating tools |
 | codex-cli | `--sandbox read-only` |
 | api | no tools at all |
 

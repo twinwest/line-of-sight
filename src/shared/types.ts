@@ -36,6 +36,21 @@ export interface StoredEvent {
   body: unknown;
 }
 
+export interface SideChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  ts: number;
+}
+
+export interface SideChat {
+  id: string;
+  sessionId: string;
+  anchorMessageId: string;
+  anchorText: string;
+  createdAt: number;
+  turns: SideChatTurn[];
+}
+
 export type RenderBlock =
   | { type: 'text'; markdown: string }
   | { type: 'thinking'; text: string }

@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import { resolveResponder } from '../responders/index.js';
+import type { ResponderRequest } from '../responders/types.js';
 import type { Store, StoredEvent } from '../store/store.js';
 
 const WEB_DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
@@ -70,6 +72,92 @@ export function buildServer(store: Store, hub: SseHub): FastifyInstance {
 
   app.get<{ Querystring: { q?: string } }>('/api/search', (req) =>
     store.search(req.query.q ?? ''));
+
+  app.get('/api/responder/status', async () => {
+    const engine = await resolveResponder();
+    return { engine: engine?.id ?? null };
+  });
+
+  app.get<{ Querystring: { sessionId?: string } }>('/api/side-chats', (req, reply) => {
+    if (!req.query.sessionId) return reply.code(400).send({ error: 'sessionId required' });
+    return store.listSideChats(req.query.sessionId);
+  });
+
+  app.post<{ Body: { sessionId?: string; anchorMessageId?: string; anchorText?: string } }>(
+    '/api/side-chats', (req, reply) => {
+      const { sessionId, anchorMessageId, anchorText } = req.body ?? {};
+      if (!sessionId || !anchorMessageId || !anchorText) {
+        return reply.code(400).send({ error: 'sessionId, anchorMessageId, anchorText required' });
+      }
+      if (!store.getSession(sessionId)) return reply.code(404).send({ error: 'session not found' });
+      return store.createSideChat(sessionId, anchorMessageId, anchorText);
+    });
+
+  // one in-flight answer per side chat
+  const running = new Map<string, AbortController>();
+
+  app.post<{ Params: { id: string }; Body: { question?: string } }>(
+    '/api/side-chats/:id/ask', async (req, reply) => {
+      const chat = store.getSideChat(req.params.id);
+      if (!chat) return reply.code(404).send({ error: 'not found' });
+      const question = req.body?.question?.trim();
+      if (!question) return reply.code(400).send({ error: 'question required' });
+      const session = store.getSession(chat.sessionId);
+      if (!session) return reply.code(404).send({ error: 'session not found' });
+
+      const engine = await resolveResponder();
+      if (!engine) return reply.code(409).send({ error: 'no responder engine available' });
+
+      running.get(chat.id)?.abort();
+      const ctrl = new AbortController();
+      running.set(chat.id, ctrl);
+
+      // persist the question immediately — must survive a daemon crash mid-answer
+      store.appendSideChatTurn(chat.id, { role: 'user', text: question, ts: Date.now() });
+      store.incrementStat('question_asked');
+
+      const request: ResponderRequest = {
+        question,
+        anchorText: chat.anchorText,
+        sessionFilePath: session.filePath,
+        projectDir: session.projectDir,
+        priorTurns: chat.turns.map(({ role, text }) => ({ role, text })),
+      };
+      if (engine.id === 'api') {
+        request.inlineContext = store.inlineContext(chat.sessionId, chat.anchorMessageId);
+      }
+
+      reply.raw.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      });
+      reply.raw.on('close', () => { if (!reply.raw.writableFinished) ctrl.abort(); });
+      const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+      send({ engine: engine.id });
+      try {
+        const answer = await engine.answer(request, (text) => send({ text }), ctrl.signal);
+        store.appendSideChatTurn(chat.id, { role: 'assistant', text: answer, ts: Date.now() });
+        send({ done: true });
+      } catch (e) {
+        send({ error: ctrl.signal.aborted ? 'canceled' : String(e), engine: engine.id });
+      } finally {
+        if (running.get(chat.id) === ctrl) running.delete(chat.id);
+        reply.raw.end();
+      }
+      return reply;
+    });
+
+  app.post<{ Params: { id: string } }>('/api/side-chats/:id/cancel', (req) => {
+    running.get(req.params.id)?.abort();
+    return { ok: true };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/side-chats/:id', (req) => {
+    running.get(req.params.id)?.abort();
+    store.deleteSideChat(req.params.id);
+    return { ok: true };
+  });
 
   app.post<{ Params: { event: string } }>('/api/stats/:event', (req, reply) => {
     if (!STAT_EVENTS.has(req.params.event)) return reply.code(400).send({ error: 'unknown event' });

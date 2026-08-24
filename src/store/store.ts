@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
-import type { NormalizedEvent, SessionMeta, SessionPatch, StoredEvent, TitleSource } from '../shared/types.js';
+import type { NormalizedEvent, SessionMeta, SessionPatch, SideChat, SideChatTurn, StoredEvent, TitleSource } from '../shared/types.js';
 
-export type { StoredEvent };
+export type { SideChat, StoredEvent };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -207,6 +208,66 @@ export class Store {
       messageId: r.id,
       snippet: r.snip,
     }));
+  }
+
+  createSideChat(sessionId: string, anchorMessageId: string, anchorText: string): SideChat {
+    const chat: SideChat = {
+      id: randomUUID(), sessionId, anchorMessageId, anchorText,
+      createdAt: Date.now(), turns: [],
+    };
+    this.db.prepare(`
+      INSERT INTO side_chats (id, session_id, anchor_message_id, anchor_text, created_at, turns_json)
+      VALUES (?, ?, ?, ?, ?, '[]')
+    `).run(chat.id, sessionId, anchorMessageId, anchorText, chat.createdAt);
+    return chat;
+  }
+
+  getSideChat(id: string): SideChat | null {
+    const r = this.db.prepare('SELECT * FROM side_chats WHERE id = ?').get(id) as {
+      id: string; session_id: string; anchor_message_id: string;
+      anchor_text: string; created_at: number; turns_json: string;
+    } | undefined;
+    if (!r) return null;
+    return {
+      id: r.id, sessionId: r.session_id, anchorMessageId: r.anchor_message_id,
+      anchorText: r.anchor_text, createdAt: r.created_at,
+      turns: JSON.parse(r.turns_json) as SideChatTurn[],
+    };
+  }
+
+  listSideChats(sessionId: string): SideChat[] {
+    const ids = this.db.prepare(
+      'SELECT id FROM side_chats WHERE session_id = ? ORDER BY created_at',
+    ).all(sessionId) as { id: string }[];
+    return ids.map(({ id }) => this.getSideChat(id)!);
+  }
+
+  appendSideChatTurn(id: string, turn: SideChatTurn): void {
+    const chat = this.getSideChat(id);
+    if (!chat) throw new Error(`side chat ${id} not found`);
+    chat.turns.push(turn);
+    this.db.prepare('UPDATE side_chats SET turns_json = ? WHERE id = ?')
+      .run(JSON.stringify(chat.turns), id);
+  }
+
+  deleteSideChat(id: string): void {
+    this.db.prepare('DELETE FROM side_chats WHERE id = ?').run(id);
+  }
+
+  /** Plain-text context of ±n messages around an anchor (api-responder fallback). */
+  inlineContext(sessionId: string, anchorMessageId: string, n = 30, maxChars = 30_000): string {
+    const anchor = this.db.prepare(
+      'SELECT seq FROM messages WHERE session_id = ? AND id = ?',
+    ).get(sessionId, anchorMessageId) as { seq: number } | undefined;
+    if (!anchor) return '';
+    const rows = this.db.prepare(`
+      SELECT role, text_content FROM messages
+      WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
+      ORDER BY seq
+    `).all(sessionId, anchor.seq - n, anchor.seq + n) as { role: string; text_content: string }[];
+    const text = rows.filter((r) => r.text_content)
+      .map((r) => `[${r.role}]\n${r.text_content}`).join('\n\n');
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
   }
 
   incrementStat(event: string, day = new Date().toISOString().slice(0, 10)): void {
