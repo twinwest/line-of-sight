@@ -14,11 +14,15 @@ function blocks(e: StoredEvent): RenderBlock[] {
   return e.kind === 'message' && Array.isArray(e.body) ? (e.body as RenderBlock[]) : [];
 }
 
-/** A real user prompt (not a tool_result carrier). */
+/** A real user prompt — not a tool_result carrier, and not CLI plumbing
+ *  (<command-name>, <local-command-*>, <task-notification>, … — same
+ *  starts-with-'<' heuristic the adapter uses for titles). */
 function isUserPrompt(e: StoredEvent): boolean {
   if (e.kind !== 'message' || e.role !== 'user') return false;
   const bs = blocks(e);
-  return bs.length > 0 && !bs.every((b) => b.type === 'tool_result' || b.type === 'raw');
+  if (bs.length === 0 || bs.every((b) => b.type === 'tool_result' || b.type === 'raw')) return false;
+  const firstText = bs.find((b) => b.type === 'text');
+  return firstText?.type === 'text' && !firstText.markdown.trimStart().startsWith('<');
 }
 
 /** Assistant text — candidate for the turn's visible conclusion. */

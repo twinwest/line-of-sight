@@ -54,6 +54,22 @@ describe('buildTurns', () => {
     expect(shape(buildTurns(events))).toEqual(['p1', 't1', 'c1', 'p2', 'c2']);
   });
 
+  it('CLI plumbing user messages do not start turns', () => {
+    const plumbing = (id: string): StoredEvent => ({
+      id, seq: ++seq, kind: 'message', role: 'user', ts: 0,
+      body: [{ type: 'text', markdown: '<task-notification>done</task-notification>' }],
+    });
+    const events = [
+      prompt('p1'), narration('n1'), tool('t1'), plumbing('x1'), tool('t2'), narration('c1'),
+      prompt('p2'), narration('c2'),
+    ];
+    // x1 must not split the turn: n1,t1,x1,t2 all fold together
+    expect(shape(buildTurns(events))).toEqual([
+      'p1', 'fold(n1,t1,x1,t2)', 'c1',
+      'p2', 'c2',
+    ]);
+  });
+
   it('no user prompts → nothing folds', () => {
     const events = [meta('m1'), narration('n1'), narration('n2')];
     expect(shape(buildTurns(events))).toEqual(['m1', 'n1', 'n2']);
