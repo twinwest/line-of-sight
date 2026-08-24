@@ -83,7 +83,7 @@ export function putResponderConfig(cfg: { responderModel?: string; responderEffo
 export async function askStream(
   chatId: string,
   question: string,
-  on: { chunk: (t: string) => void; error: (msg: string) => void },
+  on: { chunk: (t: string) => void; error: (msg: string) => void; status?: (s: string) => void },
 ): Promise<void> {
   const res = await fetch(`/api/side-chats/${chatId}/ask`, {
     method: 'POST',
@@ -106,8 +106,10 @@ export async function askStream(
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 2);
       if (!line.startsWith('data:')) continue;
-      const ev = JSON.parse(line.slice(5)) as { text?: string; error?: string; engine?: string };
+      const ev = JSON.parse(line.slice(5)) as
+        { text?: string; error?: string; engine?: string; status?: string };
       if (ev.text) on.chunk(ev.text);
+      if (ev.status) on.status?.(ev.status);
       if (ev.error) on.error(ev.engine ? `[${ev.engine}] ${ev.error}` : ev.error);
     }
   }

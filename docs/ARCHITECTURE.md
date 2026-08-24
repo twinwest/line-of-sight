@@ -219,9 +219,10 @@ Codex session — that's a feature).
 export interface Responder {
   id: 'claude-cli' | 'codex-cli' | 'api';
   available(): Promise<boolean>;        // e.g. `which claude`
-  /** Streamed answer. MUST be read-only (see per-engine notes). */
+  /** Streamed answer. MUST be read-only (see per-engine notes).
+   *  onStatus: optional tool-activity progress for the panel. */
   answer(req: ResponderRequest, onChunk: (s: string) => void,
-         signal: AbortSignal): Promise<string>;
+         signal: AbortSignal, onStatus?: (s: string) => void): Promise<string>;
 }
 
 export interface ResponderRequest {
@@ -246,7 +247,7 @@ Spawn per question (cwd = projectDir if available, else home):
 ```
 claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
   --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
-  --no-session-persistence \
+  --no-session-persistence --setting-sources "" \
   --output-format stream-json --include-partial-messages --verbose
 ```
 

@@ -33,6 +33,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   const [turns, setTurns] = useState(chat.turns);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState<string | null>(null);   // in-flight answer text
+  const [progress, setProgress] = useState('');                      // responder tool activity
   const [error, setError] = useState('');
   const [lastQuestion, setLastQuestion] = useState('');
   const [status, setStatus] = useState<ResponderStatus | null | undefined>(undefined);
@@ -54,12 +55,15 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
     setLastQuestion(question);
     setTurns((t) => [...t, { role: 'user', text: question, ts: Date.now() }]);
     setStreaming('');
+    setProgress('');
     let acc = '';
     void askStream(chat.id, question, {
       chunk: (t) => { acc += t; setStreaming(acc); },
+      status: (s) => setProgress(s),
       error: (msg) => setError(msg),
     }).then(() => {
       setStreaming(null);
+      setProgress('');
       if (acc) setTurns((t) => [...t, { role: 'assistant', text: acc, ts: Date.now() }]);
       onChanged();
     });
@@ -127,7 +131,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
           <div className="turn assistant">
             {streaming
               ? <div className="md"><Markdown remarkPlugins={[remarkGfm]}>{streaming}</Markdown></div>
-              : <div className="typing">Thinking…</div>}
+              : <div className="typing">{progress ? `⏵ ${progress}` : 'Thinking…'}</div>}
             <button className="copy-btn cancel" onClick={() => cancelAsk(chat.id)}>Cancel</button>
           </div>
         )}

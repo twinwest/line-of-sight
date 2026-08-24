@@ -23,6 +23,10 @@ export const CLAUDE_ARGS = (prompt: string, opts: { model?: string; effort?: str
   // side_chats (B6); without this the run writes its own transcript into
   // ~/.claude/projects/ and pollutes the session list
   '--no-session-persistence',
+  // skip user/project settings: hooks, skills, and MCP servers are for the
+  // user's interactive sessions, not this throwaway QA run — measured ~1.3s
+  // off cold start; OAuth auth is unaffected (unlike --bare)
+  '--setting-sources', '',
   '--output-format', 'stream-json',
   '--include-partial-messages',
   '--verbose',
@@ -33,6 +37,7 @@ export const CLAUDE_ARGS = (prompt: string, opts: { model?: string; effort?: str
 interface StreamLine {
   type?: string;
   event?: { type?: string; delta?: { type?: string; text?: string } };
+  message?: { content?: unknown };
   result?: string;
   is_error?: boolean;
 }
@@ -53,6 +58,27 @@ export function textFromStreamLine(line: string): string {
   return '';
 }
 
+/** Progress line for the panel: "Grep welcome page", "Read /path/to.jsonl" ('' if none).
+ *  Complete tool_use blocks arrive on `assistant` snapshot lines. */
+export function statusFromStreamLine(line: string): string {
+  let parsed: StreamLine;
+  try {
+    parsed = JSON.parse(line) as StreamLine;
+  } catch {
+    return '';
+  }
+  if (parsed.type !== 'assistant' || !Array.isArray(parsed.message?.content)) return '';
+  for (const block of parsed.message.content as Record<string, unknown>[]) {
+    if (block.type !== 'tool_use') continue;
+    const input = (block.input ?? {}) as Record<string, unknown>;
+    const arg = [input.file_path, input.path, input.pattern, input.query, input.command]
+      .find((v) => typeof v === 'string') as string | undefined;
+    const s = `${String(block.name ?? 'tool')} ${arg ?? ''}`.trim();
+    return s.length > 80 ? s.slice(0, 79) + '…' : s;
+  }
+  return '';
+}
+
 export const claudeCliResponder: Responder = {
   id: 'claude-cli',
 
@@ -62,7 +88,8 @@ export const claudeCliResponder: Responder = {
     });
   },
 
-  answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal): Promise<string> {
+  answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal,
+         onStatus?: (s: string) => void): Promise<string> {
     const { responderModel, responderEffort } = readConfig();
     return new Promise((resolve, reject) => {
       const child = spawn('claude', CLAUDE_ARGS(composePrompt(req), {
@@ -79,9 +106,12 @@ export const claudeCliResponder: Responder = {
         buf += chunk.toString('utf8');
         let nl;
         while ((nl = buf.indexOf('\n')) !== -1) {
-          const text = textFromStreamLine(buf.slice(0, nl));
+          const line = buf.slice(0, nl);
           buf = buf.slice(nl + 1);
-          if (text) { answer += text; onChunk(text); }
+          const text = textFromStreamLine(line);
+          if (text) { answer += text; onChunk(text); continue; }
+          const status = statusFromStreamLine(line);
+          if (status) onStatus?.(status);
         }
       });
       child.stderr.on('data', (c: Buffer) => { stderr += c.toString('utf8'); });

@@ -1,9 +1,10 @@
 export interface Responder {
   id: 'claude-cli' | 'codex-cli' | 'api';
   available(): Promise<boolean>;
-  /** Streamed answer. MUST be read-only (per-engine enforcement). */
+  /** Streamed answer. MUST be read-only (per-engine enforcement).
+   *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */
   answer(req: ResponderRequest, onChunk: (s: string) => void,
-         signal: AbortSignal): Promise<string>;
+         signal: AbortSignal, onStatus?: (s: string) => void): Promise<string>;
 }
 
 export interface ResponderRequest {

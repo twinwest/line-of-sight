@@ -163,7 +163,8 @@ export function buildServer(store: Store, hub: SseHub): FastifyInstance {
       const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
       send({ engine: engine.id });
       try {
-        const answer = await engine.answer(request, (text) => send({ text }), ctrl.signal);
+        const answer = await engine.answer(request, (text) => send({ text }), ctrl.signal,
+          (status) => send({ status }));
         store.appendSideChatTurn(chat.id, { role: 'assistant', text: answer, ts: Date.now() });
         send({ done: true });
       } catch (e) {

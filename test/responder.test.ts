@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_ARGS, textFromStreamLine } from '../src/responders/claudeCli.js';
+import { CLAUDE_ARGS, statusFromStreamLine, textFromStreamLine } from '../src/responders/claudeCli.js';
 import { composePrompt } from '../src/responders/prompt.js';
 import { Store } from '../src/store/store.js';
 
@@ -38,6 +38,7 @@ describe('claude-cli command construction', () => {
       '--allowedTools', 'Read,Grep,Glob',
       '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch',
       '--no-session-persistence',
+      '--setting-sources', '',
       '--output-format', 'stream-json',
       '--include-partial-messages',
       '--verbose',
@@ -55,6 +56,18 @@ describe('claude-cli command construction', () => {
     expect(CLAUDE_ARGS('P')).not.toContain('--effort');
     const args = CLAUDE_ARGS('P', { model: 'claude-sonnet-5', effort: 'low' });
     expect(args.slice(-4)).toEqual(['--model', 'claude-sonnet-5', '--effort', 'low']);
+  });
+
+  it('extracts tool activity for progress display', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Grep', input: { pattern: 'welcome page' } }] },
+    });
+    expect(statusFromStreamLine(line)).toBe('Grep welcome page');
+    expect(statusFromStreamLine(JSON.stringify({
+      type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] },
+    }))).toBe('');
+    expect(statusFromStreamLine('not json')).toBe('');
   });
 
   it('extracts only text deltas from stream-json lines', () => {
