@@ -59,7 +59,10 @@ function foldBody(body: StoredEvent[]): TurnItem[] {
   ];
 }
 
-export function buildTurns(events: StoredEvent[]): TurnItem[] {
+/** foldLastTurn: fold the final turn too — used once the session goes idle
+ *  (the 60s running heuristic is the only end-of-session signal there is);
+ *  while running it stays expanded for live-follow. */
+export function buildTurns(events: StoredEvent[], opts: { foldLastTurn?: boolean } = {}): TurnItem[] {
   const promptIdxs = events.reduce<number[]>((acc, e, idx) => {
     if (isUserPrompt(e)) acc.push(idx);
     return acc;
@@ -74,8 +77,8 @@ export function buildTurns(events: StoredEvent[]): TurnItem[] {
     const end = t + 1 < promptIdxs.length ? promptIdxs[t + 1]! : events.length;
     items.push({ type: 'event', event: events[start]! });
     const body = events.slice(start + 1, end);
-    const isLastTurn = t === promptIdxs.length - 1;
-    items.push(...(isLastTurn
+    const keepExpanded = t === promptIdxs.length - 1 && !opts.foldLastTurn;
+    items.push(...(keepExpanded
       ? body.map((event): TurnItem => ({ type: 'event', event }))
       : foldBody(body)));
   }

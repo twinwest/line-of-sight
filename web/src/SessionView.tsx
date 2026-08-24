@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { nav } from './App';
 import {
   createSideChat, fetchSession, fetchSideChats,
@@ -35,6 +35,12 @@ export function SessionView({ id, targetMessageId = null }:
   const [askBtn, setAskBtn] = useState<AskButton | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  // periodic re-render so running→idle flips (and the last turn folds) promptly
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    const t = setInterval(tick, 10_000);
+    return () => clearInterval(t);
+  }, []);
 
   const refreshChats = useCallback(() => {
     void fetchSideChats(id).then(setSideChats, () => {});
@@ -135,7 +141,13 @@ export function SessionView({ id, targetMessageId = null }:
     return map;
   }, [sideChats]);
 
-  const items = useMemo(() => buildTurns(events), [events]);
+  const lastActivity = Math.max(session?.updatedAt ?? 0, events.at(-1)?.ts ?? 0);
+  const running = Date.now() - lastActivity < RUNNING_MS;
+
+  // last turn: expanded while running (live-follow), folds once the session
+  // goes idle — the 60s heuristic is the only end-of-session signal
+  const items = useMemo(() => buildTurns(events, { foldLastTurn: !running }),
+    [events, running]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
@@ -165,7 +177,6 @@ export function SessionView({ id, targetMessageId = null }:
 
   if (error) return <div className="page error">{error}</div>;
   if (!session) return <div className="page">Loading…</div>;
-  const running = Date.now() - session.updatedAt < RUNNING_MS;
   return (
     <div className="session-view">
       <div className="session-header">

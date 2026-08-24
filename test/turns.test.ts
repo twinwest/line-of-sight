@@ -70,6 +70,16 @@ describe('buildTurns', () => {
     ]);
   });
 
+  it('foldLastTurn folds the final turn like any other (idle session)', () => {
+    const events = [
+      prompt('p1'), narration('n1'), tool('t1'), toolResult('r1'), narration('c1'),
+    ];
+    expect(shape(buildTurns(events, { foldLastTurn: true }))).toEqual([
+      'p1', 'fold(n1,t1,r1)', 'c1',
+    ]);
+    expect(shape(buildTurns(events))).toEqual(['p1', 'n1', 't1', 'r1', 'c1']);
+  });
+
   it('no user prompts → nothing folds', () => {
     const events = [meta('m1'), narration('n1'), narration('n2')];
     expect(shape(buildTurns(events))).toEqual(['m1', 'n1', 'n2']);
