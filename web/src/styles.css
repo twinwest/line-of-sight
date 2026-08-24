@@ -255,6 +255,17 @@ body {
 }
 .preset:hover { border-color: var(--accent); }
 
+.engine-row {
+  display: flex; gap: 0.4rem; align-items: center; padding: 0.4rem 0.75rem 0;
+  font-size: 0.75rem;
+}
+.engine-label { color: var(--fg-dim); flex: none; }
+.engine-row select {
+  background: var(--bg); color: var(--fg-dim); border: 1px solid var(--border);
+  border-radius: 5px; font: inherit; font-size: 0.75rem; padding: 0.1rem 0.3rem;
+  max-width: 11rem;
+}
+
 .panel-input {
   display: flex; gap: 0.4rem; padding: 0.6rem 0.75rem;
   border-top: 1px solid var(--border);

@@ -11,10 +11,25 @@ export interface SightConfig {
   responderEffort?: string;
 }
 
-export function readConfig(): SightConfig {
+const CONFIG_FILE = path.join(SIGHT_DIR, 'config.json');
+
+export function readConfig(file = CONFIG_FILE): SightConfig {
   try {
-    return JSON.parse(fs.readFileSync(path.join(SIGHT_DIR, 'config.json'), 'utf8')) as SightConfig;
+    return JSON.parse(fs.readFileSync(file, 'utf8')) as SightConfig;
   } catch {
     return {};
   }
+}
+
+/** Merge a partial config into the file. undefined = leave untouched; '' = clear the key. */
+export function writeConfig(patch: Partial<SightConfig>, file = CONFIG_FILE): SightConfig {
+  const merged: Record<string, unknown> = { ...readConfig(file) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    if (v === '') delete merged[k];
+    else merged[k] = v;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(merged, null, 2) + '\n');
+  return merged as SightConfig;
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import { readConfig, writeConfig } from '../shared/config.js';
 import { resolveResponder } from '../responders/index.js';
 import type { ResponderRequest } from '../responders/types.js';
 import type { Store, StoredEvent } from '../store/store.js';
@@ -87,8 +88,22 @@ export function buildServer(store: Store, hub: SseHub): FastifyInstance {
 
   app.get('/api/responder/status', async () => {
     const engine = await resolveResponder();
-    return { engine: engine?.id ?? null };
+    const { responderModel, responderEffort } = readConfig();
+    // never expose apiKey to the frontend
+    return { engine: engine?.id ?? null, responderModel: responderModel ?? '', responderEffort: responderEffort ?? '' };
   });
+
+  const EFFORTS = new Set(['', 'low', 'medium', 'high', 'xhigh', 'max']);
+
+  app.put<{ Body: { responderModel?: string; responderEffort?: string } }>(
+    '/api/responder/config', (req, reply) => {
+      const { responderModel, responderEffort } = req.body ?? {};
+      if (responderEffort !== undefined && !EFFORTS.has(responderEffort)) {
+        return reply.code(400).send({ error: 'invalid effort' });
+      }
+      writeConfig({ responderModel, responderEffort });
+      return { ok: true };
+    });
 
   app.get<{ Querystring: { sessionId?: string } }>('/api/side-chats', (req, reply) => {
     if (!req.query.sessionId) return reply.code(400).send({ error: 'sessionId required' });

@@ -59,10 +59,24 @@ export function cancelAsk(id: string): void {
   void fetch(`/api/side-chats/${id}/cancel`, { method: 'POST' }).catch(() => {});
 }
 
-export async function fetchResponderStatus(): Promise<string | null> {
+export interface ResponderStatus {
+  engine: string | null;
+  responderModel: string;
+  responderEffort: string;
+}
+
+export async function fetchResponderStatus(): Promise<ResponderStatus | null> {
   const res = await fetch('/api/responder/status');
   if (!res.ok) return null;
-  return ((await res.json()) as { engine: string | null }).engine;
+  return res.json() as Promise<ResponderStatus>;
+}
+
+export function putResponderConfig(cfg: { responderModel?: string; responderEffort?: string }): void {
+  void fetch('/api/responder/config', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(cfg),
+  }).catch(() => {});
 }
 
 /** POST a question; stream chunks via callbacks. Resolves when the stream ends. */

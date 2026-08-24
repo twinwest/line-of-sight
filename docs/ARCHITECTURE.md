@@ -321,6 +321,8 @@ POST /api/side-chats/:id/ask              → body { question }; response = SSE 
 POST /api/side-chats/:id/cancel
 DELETE /api/side-chats/:id
 POST /api/stats/:event                    → increment (viewer_open | question_asked)
+GET  /api/responder/status                → { engine, responderModel, responderEffort } (never apiKey)
+PUT  /api/responder/config                → { responderModel?, responderEffort? } → ~/.sight/config.json
 GET  /api/health
 ```
 

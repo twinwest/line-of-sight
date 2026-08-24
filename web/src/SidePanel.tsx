@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  askStream, cancelAsk, deleteSideChat, fetchResponderStatus,
-  type SideChat,
+  askStream, cancelAsk, deleteSideChat, fetchResponderStatus, putResponderConfig,
+  type ResponderStatus, type SideChat,
 } from './api';
+
+const MODELS = ['', 'claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'];
+const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 const PRESETS = ['What is this?', "What's the evidence for this?", 'What alternatives were ruled out?'];
 
@@ -32,13 +35,13 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   const [streaming, setStreaming] = useState<string | null>(null);   // in-flight answer text
   const [error, setError] = useState('');
   const [lastQuestion, setLastQuestion] = useState('');
-  const [engine, setEngine] = useState<string | null | undefined>(undefined);
+  const [status, setStatus] = useState<ResponderStatus | null | undefined>(undefined);
   const [anchorExpanded, setAnchorExpanded] = useState(false);
   const [width, setWidth] = useState(400);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setTurns(chat.turns); setError(''); setStreaming(null); }, [chat.id]);
-  useEffect(() => { void fetchResponderStatus().then(setEngine); }, []);
+  useEffect(() => { void fetchResponderStatus().then(setStatus); }, []);
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns, streaming]);
@@ -105,7 +108,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
         {anchorShown}
       </blockquote>
       <div className="panel-body" ref={bodyRef}>
-        {engine === null && (
+        {status?.engine === null && (
           <div className="setup-hint">
             No answer engine found. Install the <code>claude</code> CLI, or put an API key in{' '}
             <code>~/.sight/config.json</code>:{' '}
@@ -142,6 +145,29 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
           {PRESETS.map((p) => (
             <button key={p} className="preset" onClick={() => ask(p)}>{p}</button>
           ))}
+        </div>
+      )}
+      {status?.engine && (
+        <div className="engine-row">
+          <span className="engine-label">{status.engine}</span>
+          <select
+            title="responder model"
+            value={status.responderModel}
+            onChange={(e) => {
+              putResponderConfig({ responderModel: e.target.value });
+              setStatus({ ...status, responderModel: e.target.value });
+            }}>
+            {MODELS.map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
+          </select>
+          <select
+            title="responder effort"
+            value={status.responderEffort}
+            onChange={(e) => {
+              putResponderConfig({ responderEffort: e.target.value });
+              setStatus({ ...status, responderEffort: e.target.value });
+            }}>
+            {EFFORTS.map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
+          </select>
         </div>
       )}
       <form className="panel-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
