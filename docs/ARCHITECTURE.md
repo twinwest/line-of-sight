@@ -1,0 +1,342 @@
+# Line of Sight — Technical Architecture (v1)
+
+Status: FINAL for v1, except items marked **[VERIFY IN M0]** — those are
+assumptions the M0 spikes must confirm; if a spike contradicts one, update this
+doc and record the finding in `docs/SPIKE_NOTES.md`.
+
+---
+
+## 1. System overview
+
+```
+ ┌──────────────────────────────┐        ┌─────────────────────────────┐
+ │ Terminal                     │        │  ~/.claude/projects/**.jsonl │
+ │  $ sight claude ...          │        │  ~/.codex/sessions/**.jsonl  │ (v1.5)
+ │   └─ spawns `claude` (stdio  │        └──────────────┬──────────────┘
+ │      inherited, fail-open)   │                       │ fs watch + scan (read-only)
+ └──────────────┬───────────────┘                       ▼
+                │ ensures running            ┌─────────────────────────┐
+                ▼                            │ Daemon (Node/TS, single │
+ ┌──────────────────────────────┐  HTTP/SSE  │ process)                │
+ │ Browser: http://localhost:   │◀──────────▶│  · Adapters (ingestion) │
+ │ 4989  (React SPA)            │            │  · SQLite store + FTS5  │
+ │  · session list  · viewer    │            │  · HTTP API + SSE       │
+ │  · select-to-ask · search    │            │  · Responder runner     │
+ └──────────────────────────────┘            └───────────┬─────────────┘
+                                                         │ spawn, read-only tools
+                                                         ▼
+                                             `claude -p ...` / `codex exec ...`
+                                             / direct API (BYOK fallback)
+```
+
+One daemon process serves everything. No proxying of the agent's traffic, no
+hooks required (pure file-tailing keeps us fail-open and version-independent).
+
+## 2. Tech stack (decided — do not substitute)
+
+- **Language**: TypeScript (strict), Node.js ≥ 20. Single npm package,
+  workspaces optional but not required.
+- **Daemon/HTTP**: Fastify. Live updates via **SSE** (simpler than WebSocket;
+  we only push server→client).
+- **Store**: `better-sqlite3`, single DB file `~/.sight/sight.db`, WAL
+  mode. Full-text search via **FTS5 with the `trigram` tokenizer** (built into
+  the SQLite bundled by better-sqlite3; trigram handles CJK + substring
+  matching without a segmenter). **[VERIFY IN M0]** trigram availability; if
+  absent, fall back to `unicode61` + a LIKE-based CJK fallback path.
+- **File watching**: `chokidar` on the transcript root dirs.
+- **Frontend**: Vite + React + TypeScript. Styling: plain CSS modules or
+  Tailwind — implementer's choice, but no heavy UI framework. Markdown
+  rendering: `react-markdown` + `rehype-highlight` (code highlighting).
+  Sanitize rendered HTML (transcripts contain untrusted content —
+  agent/webpage text must not become live HTML/scripts).
+- **CLI**: `commander`. Distributed as an npm bin (`npm link` during dogfood).
+  Note: publish as npm package `line-of-sight` (name verified available
+  2026-08-19) with `"bin": {"sight": ...}`. The npm package `sight` itself is
+  taken by a stale 2022 lib — irrelevant, since only the bin name is `sight`.
+  GitHub home: the `getlineofsight` org (registered 2026-08); target repo
+  `getlineofsight/line-of-sight`. Domain not registered yet (deferred until
+  public release; first choice `lineofsight.dev`).
+- **Tests**: `vitest`.
+
+## 3. Repository layout
+
+```
+line-of-sight/
+  package.json
+  src/
+    cli/            # commander entry: wrap, start/stop/status, open, stats
+    daemon/         # fastify server, SSE hub, lifecycle (pidfile)
+    adapters/       # Adapter interface + claudeCode.ts (+ codex.ts in v1.5)
+    store/          # sqlite schema, queries, FTS
+    responders/     # Responder interface + claudeCli.ts, codexCli.ts, api.ts
+    shared/         # types shared with frontend (SessionMeta, RenderBlock, ...)
+  web/              # vite react app (built to web/dist, served by daemon)
+  test/
+  docs/
+```
+
+## 4. Ingestion: the Adapter interface
+
+```ts
+// src/adapters/types.ts
+export interface AgentAdapter {
+  id: 'claude-code' | 'codex';           // extend by union, no registry magic
+  /** Absolute dirs to scan/watch for transcripts. */
+  roots(): string[];
+  /** Cheap check: is this file a session transcript this adapter owns? */
+  matches(filePath: string): boolean;
+  /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
+  parseLine(line: string, ctx: { filePath: string }): NormalizedEvent[];
+  /** Derive session metadata from path + first events. */
+  sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
+}
+```
+
+### Normalized model (shared/types.ts)
+
+```ts
+export interface SessionMeta {
+  id: string;              // adapter-scoped stable id (claude: session uuid from filename)
+  adapter: 'claude-code' | 'codex';
+  filePath: string;
+  projectDir: string | null;
+  title: string;           // first user prompt, truncated to 120 chars
+  startedAt: number; updatedAt: number;
+  messageCount: number;
+}
+
+export type NormalizedEvent =
+  | { kind: 'message'; id: string; role: 'user' | 'assistant';
+      ts: number; blocks: RenderBlock[] }
+  | { kind: 'meta'; id: string; ts: number; label: string; raw: unknown }  // summaries, system entries
+  | { kind: 'unknown'; id: string; ts: number; raw: unknown };             // defensive fallback
+
+export type RenderBlock =
+  | { type: 'text'; markdown: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'tool_use'; toolName: string; summary: string; input: unknown }
+  | { type: 'tool_result'; toolUseId: string | null; summary: string;
+      output: string; isError: boolean }
+  | { type: 'raw'; json: unknown };   // anything unrecognized inside a message
+```
+
+Notes:
+- `id` must be stable across re-parses (use the transcript's own uuid when
+  present; else `filePath:lineNo`). Q&A anchors reference message ids.
+- `summary` for tool blocks is computed at parse time (e.g. `Read src/x.ts`,
+  `Bash: npm test`). Keep heuristics per-adapter, simple, and safe on missing
+  fields.
+
+### Claude Code adapter specifics **[VERIFY ALL IN M0]**
+
+- Transcript root: `~/.claude/projects/`. One subdirectory per project cwd
+  (path munged: `/Users/x/proj` → `-Users-x-proj`), containing
+  `<session-uuid>.jsonl` files.
+- Line schema (observed as of 2026; treat as unstable): JSON objects with
+  fields like `type` (`user` | `assistant` | `summary` | `system` | ...),
+  `uuid`, `parentUuid`, `timestamp` (ISO), `sessionId`, `cwd`, and `message`
+  (an Anthropic Messages-API-shaped object: `role`, `content` array of blocks
+  — `text`, `tool_use`, `tool_result`, `thinking`, ...). Tool results usually
+  arrive as `type: "user"` entries whose content is `tool_result` blocks —
+  render those as part of the tool flow, not as user prompts.
+- Sidechain/subagent entries may exist (`isSidechain` or similar) — v1: render
+  them collapsed under a `meta` label; do not try to thread them.
+- **M0 task**: read several real files from this machine's
+  `~/.claude/projects/`, enumerate observed `type` values and message block
+  types, record in SPIKE_NOTES.md, and encode fixtures from (redacted) real
+  lines for the parser tests.
+
+### Ingestion pipeline
+
+1. On daemon start: scan all adapter roots; for each transcript file, if
+   `(filePath, size, mtime)` differs from the stored checkpoint, incrementally
+   parse from the stored byte offset (files are append-only; if size shrank,
+   re-parse from 0).
+2. chokidar watches roots; on change, same incremental parse; new events go to
+   (a) SQLite (messages + FTS) and (b) the SSE hub for live viewers.
+3. Parsing must be line-buffered and tolerant of a partial last line (keep the
+   tail in the checkpoint, don't parse until newline arrives).
+
+## 5. Store (SQLite)
+
+```sql
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY, adapter TEXT, file_path TEXT UNIQUE, project_dir TEXT,
+  title TEXT, started_at INTEGER, updated_at INTEGER, message_count INTEGER,
+  byte_offset INTEGER DEFAULT 0, partial_tail TEXT DEFAULT ''
+);
+CREATE TABLE messages (
+  id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
+  blocks_json TEXT,               -- serialized RenderBlock[]
+  text_content TEXT,              -- concatenated searchable text
+  PRIMARY KEY (session_id, id)
+);
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+  text_content, content='messages', tokenize='trigram'
+);
+CREATE TABLE side_chats (
+  id TEXT PRIMARY KEY, session_id TEXT, anchor_message_id TEXT,
+  anchor_text TEXT, created_at INTEGER,
+  turns_json TEXT                 -- [{role:'user'|'assistant', text, ts}]
+);
+CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
+```
+
+- FTS kept in sync with triggers or explicit insert-after-write (implementer's
+  choice; test it).
+- The DB is derived data **except** `side_chats` and `stats` (user-owned;
+  never wiped by a re-index; `sight reindex` may drop/rebuild sessions +
+  messages only).
+
+## 6. Responder (the answering engine) — pluggable, decoupled from the viewed agent
+
+The engine answering side-chat questions is **per-user**, independent of which
+agent produced the viewed session (a Claude engine may answer questions about a
+Codex session — that's a feature).
+
+```ts
+export interface Responder {
+  id: 'claude-cli' | 'codex-cli' | 'api';
+  available(): Promise<boolean>;        // e.g. `which claude`
+  /** Streamed answer. MUST be read-only (see per-engine notes). */
+  answer(req: ResponderRequest, onChunk: (s: string) => void,
+         signal: AbortSignal): Promise<string>;
+}
+
+export interface ResponderRequest {
+  question: string;
+  anchorText: string;
+  sessionFilePath: string;   // pointer — engine reads it itself when it has tools
+  projectDir: string | null;
+  priorTurns: { role: 'user' | 'assistant'; text: string }[];
+}
+```
+
+**Resolution order** (configurable in `~/.sight/config.json`):
+1. `claude-cli` if `claude` on PATH
+2. `codex-cli` if `codex` on PATH
+3. `api` if `apiKey` configured
+4. none → UI shows setup hint (SPEC 5.4).
+
+### claude-cli responder **[VERIFY FLAGS IN M0]**
+
+Spawn per question (cwd = projectDir if available, else home):
+
+```
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebFetch"
+```
+
+- Composed prompt template (keep in one file, `responders/prompt.ts`):
+  system-style preamble ("You are answering a reader's question about a
+  coding-agent session. The full transcript is at <sessionFilePath> — read the
+  relevant parts with your tools. The project lives at <projectDir>. Be
+  grounded: cite what in the transcript or files supports your answer. Answer
+  concisely.") + prior side-chat turns + `ANCHOR (user-selected text): ...` +
+  `QUESTION: ...`.
+- **Pointer, not payload**: do NOT inline the whole transcript. The engine
+  reads the jsonl itself via Read/Grep. (Fallback for engines without tools:
+  inline the anchor's surrounding ±30 messages, truncated to ~30k chars.)
+- Billing rides the user's existing Claude subscription/login — that is the
+  point of this design (target users are subscribers without API keys).
+- M0 must verify: `-p` non-interactive mode works while another interactive
+  `claude` session is running; `--allowedTools` restricts as expected
+  (attempted Write/Edit is blocked); output arrives on stdout; flag for
+  streamed output if available (else buffer and deliver once).
+
+### codex-cli responder **[VERIFY IN M0]**
+
+```
+codex exec --sandbox read-only "<composed prompt>"
+```
+Same prompt template. M0: 10-minute smoke test only (exists, runs, is
+read-only); full support may land with the Codex adapter in v1.5, but the
+Responder implementation is cheap enough to include in v1 if the spike passes.
+
+### api responder (BYOK fallback)
+
+- Direct Anthropic Messages API, model `claude-sonnet-5`, `max_tokens` 4096,
+  streaming. No tools — uses the inline-context fallback (±30 messages around
+  the anchor).
+- Config: `~/.sight/config.json` → `{ "responder": "api", "apiKey": "..." }`.
+  Never log the key.
+
+### Read-only enforcement summary (product promise B5)
+
+| Engine | Mechanism |
+|---|---|
+| claude-cli | `--allowedTools "Read,Grep,Glob,WebFetch"` (no Write/Edit/Bash) |
+| codex-cli | `--sandbox read-only` |
+| api | no tools at all |
+
+If an engine cannot guarantee read-only, it must not receive tool access —
+degrade to inline context.
+
+## 7. HTTP API (daemon, port 4989 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
+
+```
+GET  /api/sessions?project=&q=            → SessionMeta[]
+GET  /api/sessions/:id                    → SessionMeta + events (paginated: ?before_seq=&limit=200)
+GET  /api/sessions/:id/stream             → SSE: new NormalizedEvents as they ingest
+GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippetHtml }]
+GET  /api/side-chats?sessionId=           → SideChat[] (for margin markers)
+POST /api/side-chats                      → create { sessionId, anchorMessageId, anchorText }
+POST /api/side-chats/:id/ask              → body { question }; response = SSE stream of chunks; persists turn on completion
+POST /api/side-chats/:id/cancel
+DELETE /api/side-chats/:id
+POST /api/stats/:event                    → increment (viewer_open | question_asked)
+GET  /api/health
+```
+
+Serve `web/dist` statically at `/`. SPA routes: `/` (session list),
+`/s/:sessionId` (viewer, `?m=<messageId>` scroll target).
+
+## 8. CLI behaviors (fail-open details)
+
+`sight claude [args...]`:
+1. Best-effort (wrap in try/catch, 1s timeout budget total): ensure daemon —
+   check pidfile + `/api/health`; if down, spawn detached
+   (`child_process.spawn(node daemonEntry, { detached: true, stdio: 'ignore' })`).
+2. Best-effort: open browser to `http://localhost:4989` **only if** no viewer
+   opened in the last 6h (daemon tracks last `viewer_open`; ask
+   `/api/health?includeLastOpen=1`); use `open` (macOS) via a small
+   cross-platform helper.
+3. Always: `spawn('claude', args, { stdio: 'inherit' })`; forward SIGINT/SIGTERM;
+   `process.exit(childCode)`.
+Steps 1–2 failing must not delay step 3 by more than ~1s and must never abort it.
+
+Daemon lifecycle: pidfile `~/.sight/daemon.pid`; `sight stop` sends
+SIGTERM; stale pidfiles are detected via `/api/health` probe.
+
+## 9. Frontend structure (guidance, not pixel spec)
+
+- Layout: left = content (list or transcript), right = collapsible side-chat
+  panel. Global header: app name, search box, project filter (on list page).
+- Transcript message rendering per RenderBlock type; tool_use/tool_result and
+  thinking are `<details>`-style collapsed rows; `unknown`/`raw` are collapsed
+  JSON `<pre>`.
+- Selection → Ask button: on `mouseup` inside the transcript container, if
+  `window.getSelection()` is non-empty and within one message element, show
+  the floating button anchored to the selection rect. Record
+  `anchorMessageId` = that message's id.
+- Margin marker: absolute-positioned dot in the message gutter when
+  `/api/side-chats` reports anchors for that message.
+- Keep state simple: React Query or plain fetch+useState; no Redux.
+- Dark/light: follow `prefers-color-scheme`; both must be readable (developer
+  audience defaults to dark).
+
+## 10. Error handling & logging
+
+- Daemon log: `~/.sight/daemon.log` (append, size-capped rotate at 5MB).
+- Parse warnings logged once per file per schema-surprise (no log spam per line).
+- Responder failures surface in the side panel as a readable error with the
+  engine name and a retry button — never a silent empty answer.
+
+## 11. Security notes
+
+- Bind 127.0.0.1 only. No auth in v1 (localhost, single user) — acceptable and
+  documented.
+- Sanitize all rendered markdown/HTML (transcripts contain untrusted text from
+  webpages/tools). No `dangerouslySetInnerHTML` on unsanitized content.
+- Responder prompts include transcript content — that content is untrusted;
+  the read-only tool cage (B5) is the mitigation for prompt-injection attempts
+  from transcript text. Never widen the toolset.
