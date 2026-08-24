@@ -37,6 +37,7 @@ describe('claude-cli command construction', () => {
       '-p', 'PROMPT',
       '--allowedTools', 'Read,Grep,Glob',
       '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch',
+      '--no-session-persistence',
       '--output-format', 'stream-json',
       '--include-partial-messages',
       '--verbose',

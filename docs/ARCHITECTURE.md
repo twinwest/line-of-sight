@@ -246,6 +246,7 @@ Spawn per question (cwd = projectDir if available, else home):
 ```
 claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
   --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
+  --no-session-persistence \
   --output-format stream-json --include-partial-messages --verbose
 ```
 

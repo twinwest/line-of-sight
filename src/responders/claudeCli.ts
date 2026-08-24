@@ -18,6 +18,10 @@ export const CLAUDE_ARGS = (prompt: string): string[] => [
   '-p', prompt,
   '--allowedTools', ALLOWED_TOOLS,
   '--disallowedTools', DISALLOWED_TOOLS,
+  // responder runs must not appear as sessions: the Q&A already lives in
+  // side_chats (B6); without this the run writes its own transcript into
+  // ~/.claude/projects/ and pollutes the session list
+  '--no-session-persistence',
   '--output-format', 'stream-json',
   '--include-partial-messages',
   '--verbose',
