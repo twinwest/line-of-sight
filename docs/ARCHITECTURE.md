@@ -50,7 +50,9 @@ hooks required (pure file-tailing keeps us fail-open and version-independent).
   rendering: `react-markdown` + `rehype-highlight` (code highlighting).
   Sanitize rendered HTML (transcripts contain untrusted content —
   agent/webpage text must not become live HTML/scripts).
-- **CLI**: `commander`. Distributed as an npm bin (`npm link` during dogfood).
+- **CLI**: hand-rolled dispatch, no arg-parsing library (see DECISIONS.md
+  2026-08-24 M4 — wrapper passthrough safety + startup latency).
+  Distributed as an npm bin (`npm link` during dogfood).
   Note: publish as npm package `line-of-sight` (name verified available
   2026-08-19) with `"bin": {"sight": ...}`. The npm package `sight` itself is
   taken by a stale 2022 lib — irrelevant, since only the bin name is `sight`.
@@ -65,7 +67,7 @@ hooks required (pure file-tailing keeps us fail-open and version-independent).
 line-of-sight/
   package.json
   src/
-    cli/            # commander entry: wrap, start/stop/status, open, stats
+    cli/            # bin entry: wrap, start/stop/status, open, stats
     daemon/         # fastify server, SSE hub, lifecycle (pidfile)
     adapters/       # Adapter interface + claudeCode.ts (+ codex.ts in v1.5)
     store/          # sqlite schema, queries, FTS
@@ -198,6 +200,7 @@ CREATE TABLE side_chats (
   turns_json TEXT                 -- [{role:'user'|'assistant', text, ts}]
 );
 CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
+CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
 ```
 
 - FTS kept in sync with triggers or explicit insert-after-write (implementer's
@@ -306,7 +309,7 @@ degrade to inline context.
 GET  /api/sessions?project=&q=            → SessionMeta[]
 GET  /api/sessions/:id                    → SessionMeta + events (paginated: ?before_seq=&limit=200)
 GET  /api/sessions/:id/stream             → SSE: new NormalizedEvents as they ingest
-GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippetHtml }]
+GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippet }]  (match ranges U+0001…U+0002-delimited, no HTML — DECISIONS 2026-08-24 M4)
 GET  /api/side-chats?sessionId=           → SideChat[] (for margin markers)
 POST /api/side-chats                      → create { sessionId, anchorMessageId, anchorText }
 POST /api/side-chats/:id/ask              → body { question }; response = SSE stream of chunks; persists turn on completion

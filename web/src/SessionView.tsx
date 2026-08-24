@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { nav } from './App';
 import {
   createSideChat, fetchSession, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
@@ -23,7 +24,8 @@ function merge(prev: StoredEvent[], incoming: StoredEvent[]): StoredEvent[] {
 
 interface AskButton { messageId: string; text: string; x: number; y: number }
 
-export function SessionView({ id }: { id: string }) {
+export function SessionView({ id, targetMessageId = null }:
+    { id: string; targetMessageId?: string | null }) {
   const [session, setSession] = useState<SessionMeta | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [error, setError] = useState('');
@@ -38,11 +40,22 @@ export function SessionView({ id }: { id: string }) {
   }, [id]);
 
   useEffect(() => {
-    fetchSession(id).then(({ session, events }) => {
+    fetchSession(id, undefined, targetMessageId).then(({ session, events }) => {
       setSession(session);
       setEvents(events);
       requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+        const el = scrollRef.current;
+        if (!el) return;
+        const target = targetMessageId
+          && el.querySelector(`.event[data-mid="${CSS.escape(targetMessageId)}"]`);
+        if (target) {
+          atBottom.current = false;
+          target.scrollIntoView({ block: 'center' });
+          target.classList.add('flash');
+          setTimeout(() => target.classList.remove('flash'), 2500);
+        } else {
+          el.scrollTo({ top: el.scrollHeight });
+        }
       });
     }, (e: unknown) => setError(String(e)));
     refreshChats();
@@ -162,6 +175,9 @@ export function SessionView({ id }: { id: string }) {
           />
         )}
       </div>
+      {targetMessageId && (
+        <button className="jump-latest" onClick={() => nav(`/s/${id}`)}>↓ Latest</button>
+      )}
       {askBtn && (
         <button
           className="ask-btn"

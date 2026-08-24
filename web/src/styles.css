@@ -24,9 +24,47 @@ body {
 
 .topbar {
   padding: 0.5rem 1rem; border-bottom: 1px solid var(--border);
-  background: var(--bg2); flex: none;
+  background: var(--bg2); flex: none; display: flex; align-items: center; gap: 1.5rem;
 }
 .brand { color: var(--fg); text-decoration: none; font-weight: 600; }
+
+.search-box { position: relative; flex: 1; max-width: 34rem; }
+.search-box input {
+  width: 100%; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.3rem 0.7rem; font: inherit; font-size: 0.85rem;
+}
+.search-results {
+  position: absolute; top: 110%; left: 0; right: 0; z-index: 30;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  max-height: 70vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 0.4rem;
+}
+.search-group { margin-bottom: 0.5rem; }
+.search-group-title {
+  font-size: 0.75rem; font-weight: 600; color: var(--fg-dim);
+  padding: 0.25rem 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.search-hit {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--fg); font: inherit; font-size: 0.82rem; padding: 0.3rem 0.5rem;
+  border-radius: 6px; cursor: pointer; overflow-wrap: break-word;
+}
+.search-hit:hover { background: var(--bg2); }
+.search-hit mark { background: var(--accent); color: #fff; border-radius: 2px; padding: 0 1px; }
+
+.jump-latest {
+  position: fixed; bottom: 1.2rem; right: 1.5rem; z-index: 15;
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 999px; padding: 0.35rem 1rem; font: inherit; font-size: 0.82rem;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.event.flash { animation: flash-bg 2.5s ease-out; }
+@keyframes flash-bg {
+  0%, 40% { box-shadow: 0 0 0 3px var(--accent); border-radius: 8px; }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
 
 .page { padding: 1rem; max-width: 64rem; margin: 0 auto; width: 100%; overflow-y: auto; }
 .error { color: var(--error); }

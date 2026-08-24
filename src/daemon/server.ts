@@ -42,17 +42,29 @@ export function buildServer(store: Store, hub: SseHub): FastifyInstance {
     });
   }
 
-  app.get('/api/health', () => ({ ok: true, pid: process.pid }));
+  app.get<{ Querystring: { includeLastOpen?: string } }>('/api/health', (req) => {
+    const base = { ok: true, pid: process.pid };
+    if (req.query.includeLastOpen) {
+      return { ...base, lastViewerOpen: Number(store.getKv('last_viewer_open') ?? 0) };
+    }
+    return base;
+  });
 
   app.get<{ Querystring: { project?: string; q?: string } }>('/api/sessions', (req) =>
     store.listSessions({ project: req.query.project, q: req.query.q }));
 
-  app.get<{ Params: { id: string }; Querystring: { before_seq?: string; limit?: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { before_seq?: string; limit?: string; m?: string } }>(
     '/api/sessions/:id', (req, reply) => {
       const session = store.getSession(req.params.id);
       if (!session) return reply.code(404).send({ error: 'not found' });
+      let beforeSeq = req.query.before_seq ? Number(req.query.before_seq) : undefined;
+      if (req.query.m) {
+        // window ending shortly after the target message (search jump)
+        const seq = store.getMessageSeq(req.params.id, req.query.m);
+        if (seq !== null) beforeSeq = seq + 100;
+      }
       const events = store.getEvents(req.params.id, {
-        beforeSeq: req.query.before_seq ? Number(req.query.before_seq) : undefined,
+        beforeSeq,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       return { session, events };
@@ -162,6 +174,7 @@ export function buildServer(store: Store, hub: SseHub): FastifyInstance {
   app.post<{ Params: { event: string } }>('/api/stats/:event', (req, reply) => {
     if (!STAT_EVENTS.has(req.params.event)) return reply.code(400).send({ error: 'unknown event' });
     store.incrementStat(req.params.event);
+    if (req.params.event === 'viewer_open') store.setKv('last_viewer_open', String(Date.now()));
     return { ok: true };
   });
 

@@ -36,7 +36,12 @@ CREATE TABLE IF NOT EXISTS side_chats (
   turns_json TEXT
 );
 CREATE TABLE IF NOT EXISTS stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
 `;
+
+/** Snippet match delimiters — control chars that can't collide with content. */
+export const MARK_START = '\u0001';
+export const MARK_END = '\u0002';
 
 const TITLE_PRIORITY: Record<TitleSource, number> = { prompt: 1, ai: 2, custom: 3 };
 
@@ -172,6 +177,12 @@ export class Store {
     return r ? toMeta(r) : null;
   }
 
+  getMessageSeq(sessionId: string, messageId: string): number | null {
+    const r = this.db.prepare('SELECT seq FROM messages WHERE session_id = ? AND id = ?')
+      .get(sessionId, messageId) as { seq: number } | undefined;
+    return r?.seq ?? null;
+  }
+
   getEvents(sessionId: string, opts: { beforeSeq?: number; limit?: number } = {}): StoredEvent[] {
     const rows = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages
@@ -193,10 +204,10 @@ export class Store {
     // trigram FTS needs >= 3 chars; shorter queries (common 2-char CJK words) use LIKE
     const rows = query.length >= 3
       ? this.db.prepare(`
-          SELECT m.session_id, m.id, snippet(messages_fts, 0, '<mark>', '</mark>', '…', 12) snip
+          SELECT m.session_id, m.id, snippet(messages_fts, 0, ?, ?, '…', 12) snip
           FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid
           WHERE messages_fts MATCH ? ORDER BY rank LIMIT 100
-        `).all(`"${query.replaceAll('"', '""')}"`)
+        `).all(MARK_START, MARK_END, `"${query.replaceAll('"', '""')}"`)
       : this.db.prepare(`
           SELECT session_id, id, substr(text_content, MAX(1, instr(text_content, ?) - 40), 120) snip
           FROM messages WHERE text_content LIKE '%' || ? || '%' LIMIT 100
@@ -275,6 +286,16 @@ export class Store {
       INSERT INTO stats (day, event, count) VALUES (?, ?, 1)
       ON CONFLICT(day, event) DO UPDATE SET count = count + 1
     `).run(day, event);
+  }
+
+  setKv(key: string, value: string): void {
+    this.db.prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, value);
+  }
+
+  getKv(key: string): string | null {
+    const r = this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined;
+    return r?.value ?? null;
   }
 
   getStats(days: number): { day: string; event: string; count: number }[] {

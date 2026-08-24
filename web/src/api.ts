@@ -9,9 +9,10 @@ export async function fetchSessions(): Promise<SessionMeta[]> {
   return res.json() as Promise<SessionMeta[]>;
 }
 
-export async function fetchSession(id: string, beforeSeq?: number):
+export async function fetchSession(id: string, beforeSeq?: number, targetMessageId?: string | null):
     Promise<{ session: SessionMeta; events: StoredEvent[] }> {
-  const qs = beforeSeq !== undefined ? `?before_seq=${beforeSeq}` : '';
+  const qs = beforeSeq !== undefined ? `?before_seq=${beforeSeq}`
+    : targetMessageId ? `?m=${encodeURIComponent(targetMessageId)}` : '';
   const res = await fetch(`/api/sessions/${id}${qs}`);
   if (!res.ok) throw new Error(`session: ${res.status}`);
   return res.json() as Promise<{ session: SessionMeta; events: StoredEvent[] }>;
@@ -19,6 +20,19 @@ export async function fetchSession(id: string, beforeSeq?: number):
 
 export function postStat(event: 'viewer_open' | 'question_asked'): void {
   void fetch(`/api/stats/${event}`, { method: 'POST' }).catch(() => {});
+}
+
+export interface SearchHit {
+  sessionId: string;
+  sessionTitle: string;
+  messageId: string;
+  snippet: string;   // match ranges delimited by \u0001...\u0002
+}
+
+export async function search(q: string): Promise<SearchHit[]> {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error(`search: ${res.status}`);
+  return res.json() as Promise<SearchHit[]>;
 }
 
 export async function fetchSideChats(sessionId: string): Promise<SideChat[]> {

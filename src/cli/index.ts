@@ -3,17 +3,20 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Command } from 'commander';
 import { PID_FILE, PORT, SIGHT_DIR } from '../shared/paths.js';
 
 const DAEMON_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'daemon', 'main.js');
+const URL_BASE = `http://127.0.0.1:${PORT}`;
+const OPEN_COOLDOWN_MS = 6 * 3600 * 1000;
 
-async function health(timeoutMs = 800): Promise<{ ok: boolean; pid?: number }> {
+async function health(timeoutMs = 500, includeLastOpen = false):
+    Promise<{ ok: boolean; pid?: number; lastViewerOpen?: number }> {
   try {
-    const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, {
+    const res = await fetch(`${URL_BASE}/api/health${includeLastOpen ? '?includeLastOpen=1' : ''}`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.ok ? ((await res.json()) as { ok: boolean; pid: number }) : { ok: false };
+    return res.ok ? ((await res.json()) as { ok: boolean; pid: number; lastViewerOpen?: number })
+      : { ok: false };
   } catch {
     return { ok: false };
   }
@@ -37,11 +40,15 @@ function readPid(): number | null {
   }
 }
 
-async function startDaemon(): Promise<boolean> {
-  if ((await health()).ok) return true;
+function spawnDaemon(): void {
   fs.mkdirSync(SIGHT_DIR, { recursive: true });
   const child = spawn(process.execPath, [DAEMON_ENTRY], { detached: true, stdio: 'ignore' });
   child.unref();
+}
+
+async function startDaemon(): Promise<boolean> {
+  if ((await health()).ok) return true;
+  spawnDaemon();
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 150));
     if ((await health()).ok) return true;
@@ -49,25 +56,65 @@ async function startDaemon(): Promise<boolean> {
   return false;
 }
 
-const program = new Command('sight');
+function openBrowser(): void {
+  const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(cmd, [URL_BASE], { detached: true, stdio: 'ignore' }).unref();
+}
 
-program.command('start').description('start the daemon').action(async () => {
+/** `sight claude|codex [args...]` — fail-open wrapper (SPEC B4, ARCHITECTURE §8).
+ *  Steps 1–2 are best-effort with a hard time budget; step 3 always runs. */
+async function wrap(agent: string, args: string[]): Promise<never> {
+  try {
+    const budget = new Promise<null>((r) => setTimeout(r, 1000, null));
+    await Promise.race([budget, (async () => {
+      let h = await health(300, true);
+      if (!h.ok) {
+        spawnDaemon();
+        // brief wait so a cold start can still get its viewer tab; if the
+        // daemon isn't healthy in time, open nothing (a dead tab is worse)
+        for (let i = 0; i < 4 && !h.ok; i++) {
+          await new Promise((r) => setTimeout(r, 150));
+          h = await health(200, true);
+        }
+      }
+      if (h.ok) openBrowserMaybe(h.lastViewerOpen ?? 0);
+    })()]);
+  } catch { /* fail-open: never block the agent */ }
+
+  const child = spawn(agent, args, { stdio: 'inherit' });
+  child.on('error', (e: NodeJS.ErrnoException) => {
+    console.error(e.code === 'ENOENT' ? `sight: '${agent}' not found on PATH` : String(e));
+    process.exit(127);
+  });
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.on(sig, () => { child.kill(sig); });
+  }
+  return new Promise<never>(() => {
+    child.on('exit', (code, signal) => {
+      process.exit(code ?? (signal ? 128 + 15 : 1));
+    });
+  });
+}
+
+function openBrowserMaybe(lastViewerOpen: number): void {
+  if (Date.now() - lastViewerOpen > OPEN_COOLDOWN_MS) openBrowser();
+}
+
+async function cmdStart(): Promise<void> {
   if ((await health()).ok) { console.log(`daemon already running on port ${PORT}`); return; }
   const ok = await startDaemon();
-  console.log(ok ? `daemon started on http://127.0.0.1:${PORT}` : 'daemon failed to start (see ~/.sight/daemon.log)');
-  process.exit(ok ? 0 : 1);
-});
+  console.log(ok ? `daemon started on ${URL_BASE}` : 'daemon failed to start (see ~/.sight/daemon.log)');
+  if (!ok) process.exitCode = 1;
+}
 
-program.command('stop').description('stop the daemon').action(async () => {
+async function cmdStop(): Promise<void> {
   const pid = readPid();
   const h = await health();
-  if (!h.ok && pid === null) { console.log('daemon not running'); return; }
   const target = h.pid ?? pid;
   if (target == null) { console.log('daemon not running'); return; }
   // pidfile pids can be recycled by the OS — only SIGTERM a pid that is
   // actually our daemon (health-confirmed, or command line matches).
-  const isOurs = h.pid != null || isSightDaemon(target);
-  if (!isOurs) {
+  if (h.pid == null && !isSightDaemon(target)) {
     try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
     console.log('daemon not running (removed stale pidfile)');
     return;
@@ -79,20 +126,58 @@ program.command('stop').description('stop the daemon').action(async () => {
     try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
     console.log('daemon not running (removed stale pidfile)');
   }
-});
+}
 
-program.command('status').description('daemon status').action(async () => {
+async function cmdStatus(): Promise<void> {
   const h = await health();
   if (h.ok) {
-    console.log(`daemon running on http://127.0.0.1:${PORT} (pid ${h.pid})`);
+    console.log(`daemon running on ${URL_BASE} (pid ${h.pid})`);
   } else {
     const pid = readPid();
     console.log(pid ? `daemon not responding (stale pidfile, pid ${pid})` : 'daemon not running');
     process.exitCode = 1;
   }
-});
+}
 
-program.parseAsync().catch((e: unknown) => {
-  console.error(String(e));
-  process.exit(1);
-});
+async function cmdStats(): Promise<void> {
+  // read the DB directly so stats work even with the daemon down
+  const { Store } = await import('../store/store.js');
+  const { DB_FILE } = await import('../shared/paths.js');
+  const store = new Store(DB_FILE);
+  const rows = store.getStats(14);
+  store.close();
+  if (!rows.length) { console.log('no stats recorded in the last 14 days'); return; }
+  const days = [...new Set(rows.map((r) => r.day))].sort();
+  console.log('day         viewer_open  question_asked');
+  for (const day of days) {
+    const get = (ev: string) => rows.find((r) => r.day === day && r.event === ev)?.count ?? 0;
+    console.log(`${day}  ${String(get('viewer_open')).padStart(11)}  ${String(get('question_asked')).padStart(14)}`);
+  }
+  const total = (ev: string) => rows.filter((r) => r.event === ev).reduce((s, r) => s + r.count, 0);
+  console.log(`totals      ${String(total('viewer_open')).padStart(11)}  ${String(total('question_asked')).padStart(14)}`);
+}
+
+const [cmd, ...rest] = process.argv.slice(2);
+switch (cmd) {
+  // wrappers bypass arg parsing entirely — everything passes through untouched
+  case 'claude':
+  case 'codex':
+    void wrap(cmd, rest);
+    break;
+  case 'start': void cmdStart(); break;
+  case 'stop': void cmdStop(); break;
+  case 'status': void cmdStatus(); break;
+  case 'open':
+    void (async () => { await startDaemon(); openBrowser(); })();
+    break;
+  case 'stats': void cmdStats(); break;
+  default:
+    console.log(`usage: sight <command>
+
+  sight claude [args...]   run claude with the viewer alongside
+  sight codex [args...]    run codex with the viewer alongside
+  sight start|stop|status  daemon lifecycle
+  sight open               open the viewer in the browser
+  sight stats              dogfood usage stats (last 14 days)`);
+    if (cmd !== undefined && cmd !== 'help' && cmd !== '--help' && cmd !== '-h') process.exitCode = 1;
+}

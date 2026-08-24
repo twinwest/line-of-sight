@@ -6,6 +6,10 @@ import { Ingester } from './ingest.js';
 import { buildServer, SseHub } from './server.js';
 
 fs.mkdirSync(SIGHT_DIR, { recursive: true });
+try {
+  // size-capped rotation: keep one previous generation
+  if (fs.statSync(LOG_FILE).size > 5 * 1024 * 1024) fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
+} catch { /* no log yet */ }
 const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 const log = (msg: string) => logStream.write(`${new Date().toISOString()} ${msg}\n`);
 

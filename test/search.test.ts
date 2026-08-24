@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Store } from '../src/store/store.js';
+import { MARK_START, Store } from '../src/store/store.js';
 
 function makeStore(): Store {
   const store = new Store(':memory:');
@@ -21,7 +21,7 @@ describe('search', () => {
     const hits = makeStore().search('cremental pars');
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ sessionId: 's1', messageId: 'm1', sessionTitle: 'test session' });
-    expect(hits[0]!.snippet).toContain('<mark>');
+    expect(hits[0]!.snippet).toContain(MARK_START);
   });
 
   it('finds CJK phrases >= 3 chars via FTS', () => {
