@@ -41,8 +41,9 @@ hooks required (pure file-tailing keeps us fail-open and version-independent).
 - **Store**: `better-sqlite3`, single DB file `~/.sight/sight.db`, WAL
   mode. Full-text search via **FTS5 with the `trigram` tokenizer** (built into
   the SQLite bundled by better-sqlite3; trigram handles CJK + substring
-  matching without a segmenter). **[VERIFY IN M0]** trigram availability; if
-  absent, fall back to `unicode61` + a LIKE-based CJK fallback path.
+  matching without a segmenter). **[VERIFIED M0]** trigram available
+  (SQLite 3.53.4), but queries < 3 chars match nothing — use `LIKE '%q%'` on
+  `messages.text_content` for queries shorter than 3 characters.
 - **File watching**: `chokidar` on the transcript root dirs.
 - **Frontend**: Vite + React + TypeScript. Styling: plain CSS modules or
   Tailwind — implementer's choice, but no heavy UI framework. Markdown
@@ -100,7 +101,7 @@ export interface SessionMeta {
   adapter: 'claude-code' | 'codex';
   filePath: string;
   projectDir: string | null;
-  title: string;           // first user prompt, truncated to 120 chars
+  title: string;           // custom-title > ai-title > first user prompt, truncated to 120 chars
   startedAt: number; updatedAt: number;
   messageCount: number;
 }
@@ -127,24 +128,30 @@ Notes:
   `Bash: npm test`). Keep heuristics per-adapter, simple, and safe on missing
   fields.
 
-### Claude Code adapter specifics **[VERIFY ALL IN M0]**
+### Claude Code adapter specifics **[VERIFIED M0 — details in SPIKE_NOTES.md]**
 
 - Transcript root: `~/.claude/projects/`. One subdirectory per project cwd
-  (path munged: `/Users/x/proj` → `-Users-x-proj`), containing
-  `<session-uuid>.jsonl` files.
-- Line schema (observed as of 2026; treat as unstable): JSON objects with
-  fields like `type` (`user` | `assistant` | `summary` | `system` | ...),
-  `uuid`, `parentUuid`, `timestamp` (ISO), `sessionId`, `cwd`, and `message`
-  (an Anthropic Messages-API-shaped object: `role`, `content` array of blocks
-  — `text`, `tool_use`, `tool_result`, `thinking`, ...). Tool results usually
-  arrive as `type: "user"` entries whose content is `tool_result` blocks —
-  render those as part of the tool flow, not as user prompts.
-- Sidechain/subagent entries may exist (`isSidechain` or similar) — v1: render
-  them collapsed under a `meta` label; do not try to thread them.
-- **M0 task**: read several real files from this machine's
-  `~/.claude/projects/`, enumerate observed `type` values and message block
-  types, record in SPIKE_NOTES.md, and encode fixtures from (redacted) real
-  lines for the parser tests.
+  (path munged **lossily**: `/` and `_` both → `-`; derive projectDir from
+  the `cwd` field on message lines, never from the dir name), containing
+  `<session-uuid>.jsonl` files. `matches()` accepts only top-level
+  `<uuid>.jsonl` — sibling dirs hold subagent transcripts
+  (`<uuid>/subagents/agent-*.jsonl`, ignored in v1) and `memory/*.md`.
+- Line schema (observed on CLI 2.1.202–2.1.241; treat as unstable): JSON
+  objects with `type` — observed: `user`, `assistant`, `system`, `attachment`,
+  `mode`, `permission-mode`, `last-prompt`, `ai-title`, `custom-title`,
+  `agent-name`, `bridge-session`, `queue-operation`, `file-history-snapshot`,
+  `file-history-delta`, `atis-latch` (no `summary` seen) — plus `uuid`,
+  `parentUuid`, `timestamp` (ISO ms Z), `sessionId`, `cwd`, and on message
+  lines `message` (Messages-API-shaped; `content` is a **string or** array of
+  blocks — `text`, `tool_use`, `tool_result`, `thinking`, `image`,
+  `fallback`, ...). `tool_result.content` is itself string or array. Tool
+  results arrive as `type: "user"` entries whose content is `tool_result`
+  blocks — render those as part of the tool flow, not as user prompts.
+  Non-message types are small — render as `meta`. `custom-title`/`ai-title`
+  feed the session title (see SPEC 5.2).
+- Top-level lines never had `isSidechain: true` (subagents live in the
+  subagents dir); keep the defensive `meta` rendering if one ever appears.
+- Fixtures from real (redacted) lines: `test/fixtures/claude-code/`.
 
 ### Ingestion pipeline
 
@@ -218,13 +225,19 @@ export interface ResponderRequest {
 3. `api` if `apiKey` configured
 4. none → UI shows setup hint (SPEC 5.4).
 
-### claude-cli responder **[VERIFY FLAGS IN M0]**
+### claude-cli responder **[VERIFIED M0]**
 
 Spawn per question (cwd = projectDir if available, else home):
 
 ```
-claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebFetch"
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebFetch" \
+  --output-format stream-json --include-partial-messages --verbose
 ```
+
+Stdout is jsonl; answer text = `stream_event` lines with
+`content_block_delta`/`text_delta` (ignore `system`, hook, and snapshot
+lines — `-p` runs the user's hooks, which is accepted noise; `--bare` would
+skip them but breaks OAuth auth).
 
 - Composed prompt template (keep in one file, `responders/prompt.ts`):
   system-style preamble ("You are answering a reader's question about a
@@ -238,12 +251,11 @@ claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebFetch"
   inline the anchor's surrounding ±30 messages, truncated to ~30k chars.)
 - Billing rides the user's existing Claude subscription/login — that is the
   point of this design (target users are subscribers without API keys).
-- M0 must verify: `-p` non-interactive mode works while another interactive
-  `claude` session is running; `--allowedTools` restricts as expected
-  (attempted Write/Edit is blocked); output arrives on stdout; flag for
-  streamed output if available (else buffer and deliver once).
+- M0 verified: works concurrently with an interactive `claude` session;
+  `--allowedTools` blocks writes (file not created); latency seconds-scale
+  (~8s trivial, ~24s transcript-reading question).
 
-### codex-cli responder **[VERIFY IN M0]**
+### codex-cli responder **[M0: codex not installed on dev machine — ships v1.5]**
 
 ```
 codex exec --sandbox read-only "<composed prompt>"

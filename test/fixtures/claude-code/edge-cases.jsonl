@@ -1,0 +1,5 @@
+{"type":"user","message":{"role":"user","content":"truncated line with no closing brace
+not json at all
+{"type":"some-future-type","uuid":"00000000-0000-0000-0000-000000000001","payload":{"nested":true}}
+{"type":"assistant","uuid":"00000000-0000-0000-0000-000000000002","timestamp":"2026-08-24T00:00:00.000Z","message":{"role":"assistant","content":[{"type":"never-seen-block","stuff":123}]}}
+{"type":"user","uuid":"00000000-0000-0000-0000-000000000003","timestamp":"2026-08-24T00:00:00.000Z","message":null}
