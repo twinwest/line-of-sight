@@ -7,7 +7,7 @@ import type { Responder, ResponderRequest } from './types.js';
 // Raw fetch (not the SDK) keeps this file the daemon's single outbound-network
 // site, trivially auditable per SPEC §7.
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-5';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 
 export const apiResponder: Responder = {
   id: 'api',
@@ -17,7 +17,7 @@ export const apiResponder: Responder = {
   },
 
   async answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal): Promise<string> {
-    const apiKey = readConfig().apiKey;
+    const { apiKey, responderModel, responderEffort } = readConfig();
     if (!apiKey) throw new Error('no API key configured');
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -28,9 +28,10 @@ export const apiResponder: Responder = {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: responderModel ?? DEFAULT_MODEL,
         max_tokens: 4096,
         stream: true,
+        ...(responderEffort ? { output_config: { effort: responderEffort } } : {}),
         messages: [{ role: 'user', content: composePrompt(req) }],
       }),
     });

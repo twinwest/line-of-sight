@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import os from 'node:os';
+import { readConfig } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
 import type { Responder, ResponderRequest } from './types.js';
 
@@ -14,7 +15,7 @@ const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,W
 
 // Flags verified in M0 (SPIKE_NOTES S2): stream-json needs --verbose;
 // answer text arrives as stream_event/content_block_delta/text_delta lines.
-export const CLAUDE_ARGS = (prompt: string): string[] => [
+export const CLAUDE_ARGS = (prompt: string, opts: { model?: string; effort?: string } = {}): string[] => [
   '-p', prompt,
   '--allowedTools', ALLOWED_TOOLS,
   '--disallowedTools', DISALLOWED_TOOLS,
@@ -25,6 +26,8 @@ export const CLAUDE_ARGS = (prompt: string): string[] => [
   '--output-format', 'stream-json',
   '--include-partial-messages',
   '--verbose',
+  ...(opts.model ? ['--model', opts.model] : []),
+  ...(opts.effort ? ['--effort', opts.effort] : []),
 ];
 
 interface StreamLine {
@@ -60,8 +63,11 @@ export const claudeCliResponder: Responder = {
   },
 
   answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal): Promise<string> {
+    const { responderModel, responderEffort } = readConfig();
     return new Promise((resolve, reject) => {
-      const child = spawn('claude', CLAUDE_ARGS(composePrompt(req)), {
+      const child = spawn('claude', CLAUDE_ARGS(composePrompt(req), {
+        model: responderModel, effort: responderEffort,
+      }), {
         cwd: req.projectDir ?? os.homedir(),
         stdio: ['ignore', 'pipe', 'pipe'],
         signal,

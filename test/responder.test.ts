@@ -50,6 +50,13 @@ describe('claude-cli command construction', () => {
     }
   });
 
+  it('appends --model/--effort only when configured', () => {
+    expect(CLAUDE_ARGS('P')).not.toContain('--model');
+    expect(CLAUDE_ARGS('P')).not.toContain('--effort');
+    const args = CLAUDE_ARGS('P', { model: 'claude-sonnet-5', effort: 'low' });
+    expect(args.slice(-4)).toEqual(['--model', 'claude-sonnet-5', '--effort', 'low']);
+  });
+
   it('extracts only text deltas from stream-json lines', () => {
     expect(textFromStreamLine(JSON.stringify({
       type: 'stream_event',

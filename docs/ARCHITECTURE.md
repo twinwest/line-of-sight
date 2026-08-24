@@ -292,6 +292,10 @@ Responder implementation is cheap enough to include in v1 if the spike passes.
   the anchor).
 - Config: `~/.sight/config.json` → `{ "responder": "api", "apiKey": "..." }`.
   Never log the key.
+- Optional for any engine: `"responderModel"` (claude-cli `--model` / api
+  model id; default `claude-sonnet-5` for api, CLI default otherwise) and
+  `"responderEffort"` (low|medium|high|xhigh|max). Read per-ask — no daemon
+  restart needed.
 
 ### Read-only enforcement summary (product promise B5)
 
