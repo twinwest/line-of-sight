@@ -93,8 +93,6 @@ function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean {
 }
 
 export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }) {
-  const [showRaw, setShowRaw] = useState(false);
-
   if (event.kind !== 'message') {
     const body = event.body as { label?: string; raw?: unknown } | null;
     const label = event.kind === 'meta' ? (body?.label ?? 'meta') : 'unknown entry';
@@ -120,18 +118,13 @@ export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }
           <span className="role">{event.role}</span>
           <span className="event-actions">
             <CopyButton text={md} label="Copy Markdown" />
-            <button className="copy-btn" onClick={() => setShowRaw((v) => !v)}>
-              {showRaw ? 'Rendered' : 'Raw'}
-            </button>
             {event.ts > 0 && <span className="event-ts">
               {new Date(event.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
             </span>}
           </span>
         </div>
       )}
-      {showRaw
-        ? <pre className="raw-view scrolly">{md()}</pre>
-        : blocks.map((b, i) => <Block key={i} block={b} />)}
+      {blocks.map((b, i) => <Block key={i} block={b} />)}
     </div>
   );
 });

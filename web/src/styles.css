@@ -150,10 +150,6 @@ body {
 .scrolly { max-height: 24rem; overflow: auto; }
 .pre-wrap { white-space: pre-wrap; }
 .thinking .fold-body { color: var(--fg-dim); font-style: italic; }
-.raw-view {
-  background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.8rem;
-  white-space: pre-wrap; font-size: 0.82rem;
-}
 
 /* markdown content */
 .md { overflow-wrap: break-word; }
