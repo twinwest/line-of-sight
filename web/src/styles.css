@@ -60,6 +60,19 @@ body {
   cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* collapsed intermediate steps of a finished turn */
+.turn-fold { margin: 0.25rem 0 0.75rem; }
+.turn-fold > summary {
+  cursor: pointer; list-style: none; color: var(--fg-dim); font-size: 0.8rem;
+  padding: 0.15rem 0.4rem; border-radius: 6px; display: inline-flex;
+  align-items: center; gap: 0.4rem;
+}
+.turn-fold > summary:hover { background: var(--bg2); color: var(--fg); }
+.turn-fold[open] {
+  border-left: 2px solid var(--border); padding-left: 0.6rem;
+}
+.margin-marker.in-summary { position: static; display: inline-block; }
+
 .event.flash { animation: flash-bg 2.5s ease-out; }
 @keyframes flash-bg {
   0%, 40% { box-shadow: 0 0 0 3px var(--accent); border-radius: 8px; }

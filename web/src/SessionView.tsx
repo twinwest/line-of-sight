@@ -6,6 +6,7 @@ import {
 } from './api';
 import { EventRow } from './Message';
 import { SidePanel } from './SidePanel';
+import { buildTurns } from './turns';
 
 const RUNNING_MS = 60_000;
 
@@ -134,6 +135,21 @@ export function SessionView({ id, targetMessageId = null }:
     return map;
   }, [sideChats]);
 
+  const items = useMemo(() => buildTurns(events), [events]);
+
+  const renderEvent = (e: StoredEvent) => (
+    <div className="event-wrap" key={e.id}>
+      {chatsByMessage.has(e.id) && (
+        <button
+          className="margin-marker"
+          title="side chats on this message"
+          onClick={() => setOpenChat(chatsByMessage.get(e.id)!.at(-1)!)}
+        />
+      )}
+      <EventRow event={e} />
+    </div>
+  );
+
   if (error) return <div className="page error">{error}</div>;
   if (!session) return <div className="page">Loading…</div>;
   const running = Date.now() - session.updatedAt < RUNNING_MS;
@@ -151,18 +167,32 @@ export function SessionView({ id, targetMessageId = null }:
           {(events[0]?.seq ?? 1) > 1 && (
             <button className="load-earlier" onClick={loadEarlier}>Load earlier</button>
           )}
-          {events.map((e) => (
-            <div className="event-wrap" key={e.id}>
-              {chatsByMessage.has(e.id) && (
-                <button
-                  className="margin-marker"
-                  title="side chats on this message"
-                  onClick={() => setOpenChat(chatsByMessage.get(e.id)!.at(-1)!)}
-                />
-              )}
-              <EventRow event={e} />
-            </div>
-          ))}
+          {items.map((item, idx) => {
+            if (item.type === 'event') return renderEvent(item.event);
+            const anchored = item.events.filter((e) => chatsByMessage.has(e.id));
+            const containsTarget = !!targetMessageId
+              && item.events.some((e) => e.id === targetMessageId);
+            return (
+              <details className="turn-fold" key={`fold-${item.events[0]?.id ?? idx}`}
+                open={containsTarget || undefined}>
+                <summary>
+                  ⏵ {item.events.length} steps
+                  {item.toolCalls > 0 && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
+                  {anchored.length > 0 && (
+                    <button
+                      className="margin-marker in-summary"
+                      title="side chats inside these steps"
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        setOpenChat(chatsByMessage.get(anchored[0]!.id)!.at(-1)!);
+                      }}
+                    />
+                  )}
+                </summary>
+                {item.events.map(renderEvent)}
+              </details>
+            );
+          })}
         </div>
         {openChat && (
           <SidePanel
