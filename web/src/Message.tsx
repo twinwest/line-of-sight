@@ -96,14 +96,14 @@ export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }
   const [showRaw, setShowRaw] = useState(false);
 
   if (event.kind !== 'message') {
-    const label = event.kind === 'meta'
-      ? String((event.body as { subtype?: string } | null)?.subtype ?? 'meta')
-      : 'unknown entry';
+    const body = event.body as { label?: string; raw?: unknown } | null;
+    const label = event.kind === 'meta' ? (body?.label ?? 'meta') : 'unknown entry';
+    const payload = event.kind === 'meta' && body && 'raw' in body ? body.raw : event.body;
     return (
       <div className="event meta-event" data-mid={event.id}>
         <details className="fold raw">
           <summary>{label}</summary>
-          <pre className="fold-body scrolly">{JSON.stringify(event.body, null, 2)}</pre>
+          <pre className="fold-body scrolly">{JSON.stringify(payload, null, 2)}</pre>
         </details>
       </div>
     );

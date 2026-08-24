@@ -122,7 +122,10 @@ export class Store {
     const stored: StoredEvent[] = [];
     for (const ev of events) {
       const role = ev.kind === 'message' ? ev.role : ev.kind;
-      const body = ev.kind === 'message' ? ev.blocks : ev.raw;
+      // meta events keep their display label alongside the raw payload
+      const body = ev.kind === 'message' ? ev.blocks
+        : ev.kind === 'meta' ? { label: ev.label, raw: ev.raw }
+        : ev.raw;
       const r = insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev));
       if (ev.kind === 'message' && r.changes > 0) newMessages++;
       if (ev.ts > lastTs) lastTs = ev.ts;

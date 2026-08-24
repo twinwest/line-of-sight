@@ -80,6 +80,16 @@ describe('incremental ingest', () => {
     expect(store.getSession(SESSION)!.title).toBe('rewritten');
   });
 
+  it('meta events keep their label through the store round-trip', () => {
+    fs.writeFileSync(file,
+      line('u1', 'hi')
+      + JSON.stringify({ type: 'system', subtype: 'turn_duration', uuid: 'sys1',
+          timestamp: '2026-08-24T00:00:01.000Z' }) + '\n');
+    ingester.ingestFile(adapter(), file);
+    const meta = store.getEvents(SESSION).find((e) => e.kind === 'meta')!;
+    expect((meta.body as { label: string }).label).toBe('system: turn_duration');
+  });
+
   it('start() scans existing files and skips subagent/memory files', () => {
     fs.writeFileSync(file, line('u1', 'scanned'));
     const subDir = path.join(root, '-tmp-proj', SESSION, 'subagents');
