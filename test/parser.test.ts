@@ -76,13 +76,26 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(aev).toMatchObject({ kind: 'meta', sessionPatch: { titleSource: 'ai' } });
   });
 
-  it('bookkeeping types are dropped, system/attachment kept as meta', () => {
+  it('bookkeeping types are dropped, system kept as meta', () => {
     const byType = (t: string) => lines.filter((l) => JSON.parse(l).type === t)
       .flatMap((l) => adapter.parseLine(l, ctx));
     expect(byType('mode')).toHaveLength(0);
     expect(byType('file-history-snapshot')).toHaveLength(0);
+    // the fixture attachment is date_change — reminder-class, dropped
+    expect(byType('attachment')).toHaveLength(0);
     expect(byType('system')[0]).toMatchObject({ kind: 'meta' });
-    expect(byType('attachment')[0]).toMatchObject({ kind: 'meta' });
+  });
+
+  it('reminder attachments drop; hook and unknown attachments stay', () => {
+    const mk = (sub: string) => JSON.stringify({
+      type: 'attachment', uuid: 'a1', attachment: { type: sub, content: 'x' },
+    });
+    expect(adapter.parseLine(mk('total_tokens_reminder'), ctx)).toHaveLength(0);
+    expect(adapter.parseLine(mk('task_reminder'), ctx)).toHaveLength(0);
+    expect(adapter.parseLine(mk('hook_success'), ctx)[0])
+      .toMatchObject({ kind: 'meta', label: 'attachment: hook_success' });
+    expect(adapter.parseLine(mk('some_future_subtype'), ctx)[0])
+      .toMatchObject({ kind: 'meta' });
   });
 });
 

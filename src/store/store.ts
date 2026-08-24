@@ -121,6 +121,12 @@ export class Store {
     let lastTs = 0;
     const stored: StoredEvent[] = [];
     for (const ev of events) {
+      // patch-only carriers (title lines: raw === null) update the session
+      // but have nothing to display — no row, no SSE broadcast
+      if (ev.kind === 'meta' && ev.raw === null) {
+        if (ev.sessionPatch) this.applyPatch(sessionId, ev.sessionPatch);
+        continue;
+      }
       const role = ev.kind === 'message' ? ev.role : ev.kind;
       // meta events keep their display label alongside the raw payload
       const body = ev.kind === 'message' ? ev.blocks

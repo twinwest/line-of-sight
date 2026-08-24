@@ -4,7 +4,7 @@ import {
   createSideChat, fetchSession, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
-import { EventRow } from './Message';
+import { EventRow, isToolFlow } from './Message';
 import { SidePanel } from './SidePanel';
 import { buildTurns } from './turns';
 
@@ -137,7 +137,7 @@ export function SessionView({ id, targetMessageId = null }:
 
   const items = useMemo(() => buildTurns(events), [events]);
 
-  const renderEvent = (e: StoredEvent) => (
+  const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
       {chatsByMessage.has(e.id) && (
         <button
@@ -146,9 +146,22 @@ export function SessionView({ id, targetMessageId = null }:
           onClick={() => setOpenChat(chatsByMessage.get(e.id)!.at(-1)!)}
         />
       )}
-      <EventRow event={e} />
+      <EventRow event={e} showRole={showRole} />
     </div>
   );
+
+  /** Render a run of events, labeling the role only when it changes.
+   *  Headless tool-flow rows don't interrupt the continuity. */
+  const renderRun = (evs: StoredEvent[]) => {
+    let prevRole: string | null = null;
+    return evs.map((e) => {
+      const headed = e.kind === 'message'
+        && !isToolFlow(e.role, Array.isArray(e.body) ? e.body : []);
+      const showRole = headed && e.role !== prevRole;
+      if (headed) prevRole = e.role;
+      return renderEvent(e, showRole);
+    });
+  };
 
   if (error) return <div className="page error">{error}</div>;
   if (!session) return <div className="page">Loading…</div>;
@@ -167,32 +180,42 @@ export function SessionView({ id, targetMessageId = null }:
           {(events[0]?.seq ?? 1) > 1 && (
             <button className="load-earlier" onClick={loadEarlier}>Load earlier</button>
           )}
-          {items.map((item, idx) => {
-            if (item.type === 'event') return renderEvent(item.event);
-            const anchored = item.events.filter((e) => chatsByMessage.has(e.id));
-            const containsTarget = !!targetMessageId
-              && item.events.some((e) => e.id === targetMessageId);
-            return (
-              <details className="turn-fold" key={`fold-${item.events[0]?.id ?? idx}`}
-                open={containsTarget || undefined}>
-                <summary>
-                  ⏵ {item.events.length} steps
-                  {item.toolCalls > 0 && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
-                  {anchored.length > 0 && (
-                    <button
-                      className="margin-marker in-summary"
-                      title="side chats inside these steps"
-                      onClick={(ev) => {
-                        ev.preventDefault();
-                        setOpenChat(chatsByMessage.get(anchored[0]!.id)!.at(-1)!);
-                      }}
-                    />
-                  )}
-                </summary>
-                {item.events.map(renderEvent)}
-              </details>
-            );
-          })}
+          {(() => {
+            const out: React.ReactNode[] = [];
+            let run: StoredEvent[] = [];
+            const flush = () => {
+              if (run.length) { out.push(...renderRun(run)); run = []; }
+            };
+            items.forEach((item, idx) => {
+              if (item.type === 'event') { run.push(item.event); return; }
+              flush();
+              const anchored = item.events.filter((e) => chatsByMessage.has(e.id));
+              const containsTarget = !!targetMessageId
+                && item.events.some((e) => e.id === targetMessageId);
+              out.push(
+                <details className="turn-fold" key={`fold-${item.events[0]?.id ?? idx}`}
+                  open={containsTarget || undefined}>
+                  <summary>
+                    ⏵ {item.events.length} steps
+                    {item.toolCalls > 0 && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
+                    {anchored.length > 0 && (
+                      <button
+                        className="margin-marker in-summary"
+                        title="side chats inside these steps"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          setOpenChat(chatsByMessage.get(anchored[0]!.id)!.at(-1)!);
+                        }}
+                      />
+                    )}
+                  </summary>
+                  {renderRun(item.events)}
+                </details>,
+              );
+            });
+            flush();
+            return out;
+          })()}
         </div>
         {openChat && (
           <SidePanel

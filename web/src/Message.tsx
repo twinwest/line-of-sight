@@ -88,11 +88,12 @@ function messageMarkdown(blocks: RenderBlock[]): string {
 }
 
 /** A user message whose blocks are all tool_result is part of the tool flow. */
-function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean {
+export function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean {
   return role === 'user' && blocks.length > 0 && blocks.every((b) => b.type === 'tool_result' || b.type === 'raw');
 }
 
-export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }) {
+export const EventRow = memo(function EventRow({ event, showRole = true }:
+    { event: StoredEvent; showRole?: boolean }) {
   if (event.kind !== 'message') {
     const body = event.body as { label?: string; raw?: unknown } | null;
     const label = event.kind === 'meta' ? (body?.label ?? 'meta') : 'unknown entry';
@@ -115,7 +116,7 @@ export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
       {!toolFlow && (
         <div className="event-head">
-          <span className="role">{event.role}</span>
+          <span className="role">{showRole ? event.role : ''}</span>
           <span className="event-actions">
             <CopyButton text={md} label="Copy Markdown" />
             {event.ts > 0 && <span className="event-ts">

@@ -12,6 +12,16 @@ const DROP_TYPES = new Set([
   'atis-latch', 'agent-name',
 ]);
 
+// Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES +
+// dogfood): dropped like DROP_TYPES. Hook outputs, edited_text_file, and
+// unknown subtypes keep rendering as meta.
+const ATTACHMENT_DROP = new Set([
+  'total_tokens_reminder', 'task_reminder', 'deferred_tools_delta',
+  'skill_listing', 'agent_listing_delta', 'batching_reminder_sent',
+  'date_change', 'plan_mode', 'plan_mode_exit', 'command_permissions',
+  'auto_mode', 'silent_turn_reminder', 'mcp_instructions_delta',
+]);
+
 const UUID_JSONL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/;
 
 type Json = Record<string, unknown>;
@@ -155,9 +165,11 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       }
 
       if (type === 'system' || type === 'attachment') {
-        const label = type === 'system'
-          ? `system: ${str(line.subtype) ?? ''}`.trim()
-          : `attachment: ${str((line.attachment as Json | undefined)?.type as unknown) ?? ''}`.trim();
+        const subtype = type === 'system'
+          ? str(line.subtype)
+          : str((line.attachment as Json | undefined)?.type as unknown);
+        if (type === 'attachment' && subtype && ATTACHMENT_DROP.has(subtype)) return [];
+        const label = `${type}: ${subtype ?? ''}`.trim().replace(/:$/, '');
         return [{ kind: 'meta', id, ts, label, raw: line }];
       }
 
