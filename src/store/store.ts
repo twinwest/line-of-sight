@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
-import type { NormalizedEvent, SessionMeta, SessionPatch, TitleSource } from '../shared/types.js';
+import type { NormalizedEvent, SessionMeta, SessionPatch, StoredEvent, TitleSource } from '../shared/types.js';
+
+export type { StoredEvent };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -36,16 +38,6 @@ CREATE TABLE IF NOT EXISTS stats (day TEXT, event TEXT, count INTEGER, PRIMARY K
 `;
 
 const TITLE_PRIORITY: Record<TitleSource, number> = { prompt: 1, ai: 2, custom: 3 };
-
-export interface StoredEvent {
-  id: string;
-  seq: number;
-  kind: 'message' | 'meta' | 'unknown';
-  role: string | null;
-  ts: number;
-  /** message: RenderBlock[]; meta/unknown: the raw event payload. */
-  body: unknown;
-}
 
 interface SessionRow {
   id: string; adapter: string; file_path: string; project_dir: string | null;
@@ -107,8 +99,9 @@ export class Store {
       title = '', title_source = NULL WHERE id = ?`).run(sessionId);
   }
 
-  /** Append a batch of events and advance the checkpoint, in one transaction. */
-  appendEvents = this.txn((sessionId: string, events: NormalizedEvent[], newByteOffset: number) => {
+  /** Append a batch of events and advance the checkpoint, in one transaction.
+   *  Returns the events as stored (with seq) for SSE broadcast. */
+  appendEvents = this.txn((sessionId: string, events: NormalizedEvent[], newByteOffset: number): StoredEvent[] => {
     const maxSeq = (this.db.prepare('SELECT MAX(seq) s FROM messages WHERE session_id = ?')
       .get(sessionId) as { s: number | null }).s ?? 0;
     const insert = this.db.prepare(`
@@ -120,6 +113,7 @@ export class Store {
     let seq = maxSeq;
     let newMessages = 0;
     let lastTs = 0;
+    const stored: StoredEvent[] = [];
     for (const ev of events) {
       const role = ev.kind === 'message' ? ev.role : ev.kind;
       const body = ev.kind === 'message' ? ev.blocks : ev.raw;
@@ -127,6 +121,11 @@ export class Store {
       if (ev.kind === 'message' && r.changes > 0) newMessages++;
       if (ev.ts > lastTs) lastTs = ev.ts;
       if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(sessionId, ev.sessionPatch);
+      stored.push({
+        id: ev.id, seq, ts: ev.ts, kind: ev.kind,
+        role: ev.kind === 'message' ? ev.role : null,
+        body: body ?? null,
+      });
     }
     this.db.prepare(`
       UPDATE sessions SET byte_offset = ?, message_count = message_count + ?,
@@ -134,6 +133,7 @@ export class Store {
         started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END
       WHERE id = ?
     `).run(newByteOffset, newMessages, lastTs, events[0]?.ts ?? 0, sessionId);
+    return stored;
   });
 
   private applyPatch(sessionId: string, patch: SessionPatch): void {
@@ -181,7 +181,7 @@ export class Store {
     return rows.reverse().map((r) => ({
       id: r.id, seq: r.seq, ts: r.ts,
       kind: r.role === 'meta' || r.role === 'unknown' ? r.role : 'message',
-      role: r.role === 'meta' || r.role === 'unknown' ? null : r.role,
+      role: r.role === 'meta' || r.role === 'unknown' ? null : (r.role as 'user' | 'assistant'),
       body: JSON.parse(r.blocks_json) as unknown,
     }));
   }
@@ -222,7 +222,7 @@ export class Store {
     `).all(`-${days} days`) as { day: string; event: string; count: number }[];
   }
 
-  private txn<A extends unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+  private txn<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
     return (...args) => this.db.transaction(fn)(...args);
   }
 }

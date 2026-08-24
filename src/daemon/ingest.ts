@@ -3,9 +3,9 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { AgentAdapter } from '../adapters/types.js';
 import type { NormalizedEvent } from '../shared/types.js';
-import type { Store } from '../store/store.js';
+import type { Store, StoredEvent } from '../store/store.js';
 
-export type IngestListener = (sessionId: string, events: NormalizedEvent[]) => void;
+export type IngestListener = (sessionId: string, events: StoredEvent[]) => void;
 
 /** Files whose lines already produced a parse warning (log once per file). */
 const warned = new Set<string>();
@@ -80,8 +80,8 @@ export class Ingester {
       session = { id: meta.id, byteOffset: 0 };
     }
     if (consumed === 0) return;
-    this.store.appendEvents(session.id, events, offset + consumed);
-    if (events.length) for (const fn of this.listeners) fn(session.id, events);
+    const stored = this.store.appendEvents(session.id, events, offset + consumed);
+    if (stored.length) for (const fn of this.listeners) fn(session.id, stored);
   }
 
   /** Read [offset, size), split complete lines (partial tail stays unconsumed). */

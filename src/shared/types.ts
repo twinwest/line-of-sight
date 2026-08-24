@@ -25,6 +25,17 @@ export type NormalizedEvent =
       sessionPatch?: SessionPatch }
   | { kind: 'unknown'; id: string; ts: number; raw: unknown };  // defensive fallback
 
+/** An event as stored/served by the daemon (seq-ordered within a session). */
+export interface StoredEvent {
+  id: string;
+  seq: number;
+  kind: 'message' | 'meta' | 'unknown';
+  role: 'user' | 'assistant' | null;
+  ts: number;
+  /** message: RenderBlock[]; meta/unknown: the raw event payload. */
+  body: unknown;
+}
+
 export type RenderBlock =
   | { type: 'text'; markdown: string }
   | { type: 'thinking'; text: string }
