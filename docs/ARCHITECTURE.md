@@ -87,7 +87,7 @@ export interface AgentAdapter {
   /** Cheap check: is this file a session transcript this adapter owns? */
   matches(filePath: string): boolean;
   /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
-  parseLine(line: string, ctx: { filePath: string }): NormalizedEvent[];
+  parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */
   sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
 }
@@ -108,9 +108,18 @@ export interface SessionMeta {
 
 export type NormalizedEvent =
   | { kind: 'message'; id: string; role: 'user' | 'assistant';
-      ts: number; blocks: RenderBlock[] }
-  | { kind: 'meta'; id: string; ts: number; label: string; raw: unknown }  // summaries, system entries
+      ts: number; blocks: RenderBlock[]; sessionPatch?: SessionPatch }
+  | { kind: 'meta'; id: string; ts: number; label: string; raw: unknown;
+      sessionPatch?: SessionPatch }                                        // system/attachment entries
   | { kind: 'unknown'; id: string; ts: number; raw: unknown };             // defensive fallback
+
+// Session metadata revealed mid-file (titles, cwd); applied by ingest with
+// title precedence custom > ai > prompt (see DECISIONS.md 2026-08-24).
+export interface SessionPatch {
+  projectDir?: string;
+  title?: string;
+  titleSource?: 'custom' | 'ai' | 'prompt';
+}
 
 export type RenderBlock =
   | { type: 'text'; markdown: string }
@@ -161,16 +170,18 @@ Notes:
    re-parse from 0).
 2. chokidar watches roots; on change, same incremental parse; new events go to
    (a) SQLite (messages + FTS) and (b) the SSE hub for live viewers.
-3. Parsing must be line-buffered and tolerant of a partial last line (keep the
-   tail in the checkpoint, don't parse until newline arrives).
+3. Parsing must be line-buffered and tolerant of a partial last line (the
+   checkpoint stays at the last complete newline; the tail is re-read once the
+   newline arrives).
 
 ## 5. Store (SQLite)
 
 ```sql
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY, adapter TEXT, file_path TEXT UNIQUE, project_dir TEXT,
-  title TEXT, started_at INTEGER, updated_at INTEGER, message_count INTEGER,
-  byte_offset INTEGER DEFAULT 0, partial_tail TEXT DEFAULT ''
+  title TEXT DEFAULT '', title_source TEXT,
+  started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
+  byte_offset INTEGER DEFAULT 0   -- always at a line boundary; partial tails re-read
 );
 CREATE TABLE messages (
   id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
