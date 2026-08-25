@@ -4,7 +4,7 @@ import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
-import { EventRow, isToolFlow } from './Message';
+import { EventRow, hasEventHead } from './Message';
 import { SidePanel } from './SidePanel';
 import { buildTurns } from './turns';
 
@@ -188,12 +188,11 @@ export function SessionView({ id, targetMessageId = null }:
   );
 
   /** Render a run of events, labeling the role only when it changes.
-   *  Headless tool-flow rows don't interrupt the continuity. */
+   *  Headless rows (tool flows, tool_use/thinking-only) don't interrupt it. */
   const renderRun = (evs: StoredEvent[]) => {
     let prevRole: string | null = null;
     return evs.map((e) => {
-      const headed = e.kind === 'message'
-        && !isToolFlow(e.role, Array.isArray(e.body) ? e.body : []);
+      const headed = hasEventHead(e);
       const showRole = headed && e.role !== prevRole;
       if (headed) prevRole = e.role;
       return renderEvent(e, showRole);

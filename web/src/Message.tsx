@@ -97,6 +97,15 @@ export function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean 
   return role === 'user' && blocks.length > 0 && blocks.every((b) => b.type === 'tool_result' || b.type === 'raw');
 }
 
+/** Only prose messages get a head (role label, Copy Markdown, timestamp):
+ *  tool_use/thinking-only rows have nothing to copy — a hover head there is
+ *  a lie (and an empty spacer line). */
+export function hasEventHead(event: StoredEvent): boolean {
+  if (event.kind !== 'message' || !Array.isArray(event.body)) return false;
+  const blocks = event.body as RenderBlock[];
+  return !isToolFlow(event.role, blocks) && blocks.some((b) => b.type === 'text');
+}
+
 export const EventRow = memo(function EventRow({ event, showRole = true }:
     { event: StoredEvent; showRole?: boolean }) {
   if (event.kind !== 'message') {
@@ -119,7 +128,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
   const md = () => messageMarkdown(blocks);
   return (
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
-      {!toolFlow && (
+      {hasEventHead(event) && (
         <div className="event-head">
           <span className="role">{showRole ? event.role : ''}</span>
           <span className="event-actions">
