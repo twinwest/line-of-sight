@@ -169,9 +169,9 @@ export function SessionView({ id, targetMessageId = null }:
   // the timestamp heuristic covers agents/versions that don't expose one
   const running = session?.live || Date.now() - lastActivity < RUNNING_MS;
 
-  // last turn: expanded while running (live-follow), folds once the session
-  // goes idle
-  const items = useMemo(() => buildTurns(events, { foldLastTurn: !running }),
+  // trailing tool run: expanded while running (live-follow), folds once the
+  // session goes idle
+  const items = useMemo(() => buildTurns(events, { foldTail: !running }),
     [events, running]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (

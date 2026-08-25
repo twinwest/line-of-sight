@@ -9,7 +9,7 @@ const prompt = (id: string): StoredEvent => ({
 });
 const narration = (id: string): StoredEvent => ({
   id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
-  body: [{ type: 'text', markdown: 'let me look…' }],
+  body: [{ type: 'text', markdown: 'Issue #3 filed, verifying next:' }],
 });
 const tool = (id: string): StoredEvent => ({
   id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
@@ -19,78 +19,60 @@ const toolResult = (id: string): StoredEvent => ({
   id, seq: ++seq, kind: 'message', role: 'user', ts: 0,
   body: [{ type: 'tool_result', toolUseId: null, summary: 's', output: 'o', isError: false }],
 });
+const thinking = (id: string): StoredEvent => ({
+  id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
+  body: [{ type: 'thinking', text: 'hmm' }],
+});
 const meta = (id: string): StoredEvent => ({
-  id, seq: ++seq, kind: 'meta', role: null, ts: 0, body: { label: 'system: turn_duration', raw: {} },
+  id, seq: ++seq, kind: 'meta', role: null, ts: 0, body: { label: 'system: away_summary', raw: {} },
+});
+const plumbing = (id: string): StoredEvent => ({
+  id, seq: ++seq, kind: 'message', role: 'user', ts: 0,
+  body: [{ type: 'text', markdown: '<task-notification>done</task-notification>' }],
 });
 
 const shape = (items: ReturnType<typeof buildTurns>) =>
   items.map((i) => (i.type === 'fold' ? `fold(${i.events.map((e) => e.id).join(',')})` : i.event.id));
 
-describe('buildTurns', () => {
-  it('folds intermediate steps of finished turns; last turn stays expanded', () => {
+describe('buildTurns (step folding: prose always visible)', () => {
+  it('folds contiguous tool runs between prose, keeps every text visible', () => {
     const events = [
-      prompt('p1'), narration('n1'), tool('t1'), toolResult('r1'), narration('c1'),
-      prompt('p2'), narration('n2'), tool('t2'), toolResult('r2'), narration('c2'),
+      prompt('p1'),
+      narration('n1'), tool('t1'), toolResult('r1'), thinking('th1'), tool('t2'), toolResult('r2'),
+      narration('n2'), tool('t3'), toolResult('r3'),
+      narration('c1'),
     ];
-    expect(shape(buildTurns(events))).toEqual([
-      'p1', 'fold(n1,t1,r1)', 'c1',
-      'p2', 'n2', 't2', 'r2', 'c2',   // last turn untouched
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+      'p1', 'n1', 'fold(t1,r1,th1,t2,r2)', 'n2', 'fold(t3,r3)', 'c1',
     ]);
   });
 
-  it('trailing meta noise folds without hiding the conclusion', () => {
-    const events = [
-      prompt('p1'), tool('t1'), toolResult('r1'), narration('c1'), meta('m1'),
-      prompt('p2'), narration('c2'),
-    ];
-    expect(shape(buildTurns(events))).toEqual([
-      'p1', 'fold(t1,r1,m1)', 'c1',
-      'p2', 'c2',
+  it('plumbing user messages and meta fold with the run', () => {
+    const events = [prompt('p1'), tool('t1'), plumbing('x1'), meta('m1'), narration('c1')];
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+      'p1', 'fold(t1,x1,m1)', 'c1',
     ]);
   });
 
-  it('a single intermediate step is not worth a fold', () => {
-    const events = [prompt('p1'), tool('t1'), narration('c1'), prompt('p2'), narration('c2')];
-    expect(shape(buildTurns(events))).toEqual(['p1', 't1', 'c1', 'p2', 'c2']);
+  it('a single non-prose event stays inline', () => {
+    const events = [prompt('p1'), tool('t1'), narration('c1')];
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['p1', 't1', 'c1']);
   });
 
-  it('CLI plumbing user messages do not start turns', () => {
-    const plumbing = (id: string): StoredEvent => ({
-      id, seq: ++seq, kind: 'message', role: 'user', ts: 0,
-      body: [{ type: 'text', markdown: '<task-notification>done</task-notification>' }],
-    });
-    const events = [
-      prompt('p1'), narration('n1'), tool('t1'), plumbing('x1'), tool('t2'), narration('c1'),
-      prompt('p2'), narration('c2'),
-    ];
-    // x1 must not split the turn: n1,t1,x1,t2 all fold together
-    expect(shape(buildTurns(events))).toEqual([
-      'p1', 'fold(n1,t1,x1,t2)', 'c1',
-      'p2', 'c2',
-    ]);
+  it('trailing run stays expanded while running, folds when idle', () => {
+    const events = [prompt('p1'), narration('n1'), tool('t1'), toolResult('r1'), tool('t2')];
+    expect(shape(buildTurns(events))).toEqual(['p1', 'n1', 't1', 'r1', 't2']);
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['p1', 'n1', 'fold(t1,r1,t2)']);
   });
 
-  it('foldLastTurn folds the final turn like any other (idle session)', () => {
-    const events = [
-      prompt('p1'), narration('n1'), tool('t1'), toolResult('r1'), narration('c1'),
-    ];
-    expect(shape(buildTurns(events, { foldLastTurn: true }))).toEqual([
-      'p1', 'fold(n1,t1,r1)', 'c1',
-    ]);
-    expect(shape(buildTurns(events))).toEqual(['p1', 'n1', 't1', 'r1', 'c1']);
-  });
-
-  it('no user prompts → nothing folds', () => {
-    const events = [meta('m1'), narration('n1'), narration('n2')];
-    expect(shape(buildTurns(events))).toEqual(['m1', 'n1', 'n2']);
-  });
-
-  it('preamble before the first prompt folds; tool calls counted', () => {
-    const events = [meta('m1'), meta('m2'), prompt('p1'), narration('c1')];
-    const items = buildTurns(events);
-    expect(shape(items)).toEqual(['fold(m1,m2)', 'p1', 'c1']);
-    const events2 = [prompt('p1'), tool('t1'), tool('t2'), toolResult('r1'), narration('c1'), prompt('p2'), narration('c2')];
-    const fold = buildTurns(events2).find((i) => i.type === 'fold')!;
+  it('counts tool calls per fold', () => {
+    const events = [prompt('p1'), tool('t1'), tool('t2'), toolResult('r1'), narration('c1')];
+    const fold = buildTurns(events, { foldTail: true }).find((i) => i.type === 'fold')!;
     expect(fold.type === 'fold' && fold.toolCalls).toBe(2);
+  });
+
+  it('session preamble (meta before first prompt) folds', () => {
+    const events = [meta('m1'), meta('m2'), prompt('p1'), narration('c1')];
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['fold(m1,m2)', 'p1', 'c1']);
   });
 });
