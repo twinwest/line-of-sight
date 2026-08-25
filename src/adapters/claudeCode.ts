@@ -99,19 +99,32 @@ function contentToBlocks(content: unknown): RenderBlock[] {
 }
 
 /** pid → process start time as `ps` prints it, for pids that still exist.
- *  One `ps` call for the whole batch; a missing pid means the process is gone. */
-function procStarts(pids: number[]): Map<number, string> {
-  const map = new Map<number, string>();
-  if (!pids.length) return map;
+ *  One `ps` call for the whole batch; a missing pid means the process is gone.
+ *  `null` when ps itself is unusable — the caller must not read that as
+ *  "every process is dead" and black out the running indicator wholesale. */
+function procStarts(pids: number[]): Map<number, string> | null {
+  if (!pids.length) return new Map();
   // spawnSync, not execFileSync: ps exits non-zero when any listed pid is gone,
   // and the surviving pids are still on stdout — throwing would lose them all
-  const { stdout } = spawnSync('ps', ['-p', pids.join(','), '-o', 'pid=,lstart='],
+  const { stdout, error } = spawnSync('ps', ['-p', pids.join(','), '-o', 'pid=,lstart='],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  for (const line of (stdout ?? '').split('\n')) {
+  if (error || stdout == null) return null;   // no ps on this platform
+  const map = new Map<number, string>();
+  for (const line of stdout.split('\n')) {
     const m = /^\s*(\d+)\s+(\S.*\S)/.exec(line);
     if (m) map.set(Number(m[1]), m[2]!);
   }
   return map;
+}
+
+/** Is this pid alive at all? The pre-`ps` check, kept as the fallback. */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Does the running process match the start time the session file recorded?
@@ -180,9 +193,16 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         } catch { /* stale or unreadable */ }
       }
       // absent from ps ⇒ process gone; start-time mismatch ⇒ the pid was
-      // recycled by an unrelated process and this file is stale
+      // recycled by an unrelated process and this file is stale. If ps is
+      // unusable, degrade to the plain liveness check rather than reporting
+      // every session as dead — a recycled pid is a cosmetic wart, a blacked-out
+      // running indicator is the M5 bug this whole signal exists to fix.
       const starts = procStarts(busy.map((b) => b.pid));
       for (const b of busy) {
+        if (!starts) {
+          if (pidAlive(b.pid)) live.set(b.id, b.since);
+          continue;
+        }
         const psStart = starts.get(b.pid);
         if (psStart && startsMatch(b.procStart, psStart)) live.set(b.id, b.since);
       }

@@ -176,6 +176,19 @@ describe('claudeCode.liveSessions', () => {
       .toBe(Date.parse('Mon Aug 24 11:41:26 2026 GMT-0700'));
   });
 
+  it('falls back to a plain liveness check when ps is unusable', () => {
+    fs.rmSync(path.join(sessions, '7.json'));
+    write('8.json', { pid: process.pid, sessionId: 'no-ps', status: 'busy', statusUpdatedAt: 7 });
+    const noPath = { ...process.env, PATH: path.join(tmp, 'empty-bin') };
+    const prev = process.env.PATH;
+    process.env.PATH = noPath.PATH;
+    try {
+      expect(live.liveSessions!()).toEqual(new Map([['no-ps', 7]]));
+    } finally {
+      process.env.PATH = prev;
+    }
+  });
+
   it('is empty when the directory does not exist', () => {
     expect(claudeCodeAdapter('/tmp/definitely-not-here/projects').liveSessions!())
       .toEqual(new Map());
