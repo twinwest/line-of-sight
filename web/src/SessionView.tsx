@@ -25,6 +25,18 @@ function merge(prev: StoredEvent[], incoming: StoredEvent[]): StoredEvent[] {
 
 interface AskButton { messageId: string; text: string; x: number; y: number }
 
+/** Pulsing tail indicator with elapsed time since the last transcript write. */
+function Generating({ since }: { since: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.floor((now - since) / 1000));
+  const elapsed = since === 0 ? '' : s < 60 ? ` ${s}s` : ` ${Math.floor(s / 60)}m ${s % 60}s`;
+  return <div className="generating">✦ generating…{elapsed}</div>;
+}
+
 export function SessionView({ id, targetMessageId = null }:
     { id: string; targetMessageId?: string | null }) {
   const [session, setSession] = useState<SessionMeta | null>(null);
@@ -251,7 +263,7 @@ export function SessionView({ id, targetMessageId = null }:
             flush();
             return out;
           })()}
-          {session.live && <div className="generating">✦ generating…</div>}
+          {session.live && <Generating since={lastMsgTs} />}
         </div>
         {openChat && (
           <SidePanel
