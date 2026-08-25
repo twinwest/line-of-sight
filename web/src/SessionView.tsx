@@ -25,7 +25,7 @@ function merge(prev: StoredEvent[], incoming: StoredEvent[]): StoredEvent[] {
 
 interface AskButton { messageId: string; text: string; x: number; y: number }
 
-/** Pulsing tail indicator with elapsed time since the last transcript write. */
+/** Pulsing tail indicator with elapsed time since the turn started. */
 function Generating({ since }: { since: number }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -263,7 +263,10 @@ export function SessionView({ id, targetMessageId = null }:
             flush();
             return out;
           })()}
-          {session.live && <Generating since={lastMsgTs} />}
+          {/* busySince is the agent's own turn-start clock; lastMsgTs is a
+              fallback and is wrong when the loaded window ends mid-history
+              (search jump), so prefer busySince whenever the CLI reports it */}
+          {session.live && <Generating since={session.busySince || lastMsgTs} />}
         </div>
         {openChat && (
           <SidePanel

@@ -92,9 +92,10 @@ export interface AgentAdapter {
   parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */
   sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
-  /** Ids of sessions whose agent process is mid-turn right now, if the agent
-   *  exposes such a signal. MUST NOT throw; empty set when unavailable. */
-  liveSessionIds?(): Set<string>;
+  /** sessionId → when the turn started (ms, 0 if unknown), for sessions whose
+   *  agent process is mid-turn right now, if the agent exposes such a signal.
+   *  MUST NOT throw; empty map when unavailable. */
+  liveSessions?(): Map<string, number>;
 }
 ```
 

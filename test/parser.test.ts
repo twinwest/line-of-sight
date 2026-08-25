@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -128,26 +129,55 @@ describe('claudeCode.matches', () => {
   });
 });
 
-describe('claudeCode.liveSessionIds', () => {
+describe('claudeCode.liveSessions', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sight-live-'));
   const sessions = path.join(tmp, 'sessions');
   fs.mkdirSync(sessions);
   const live = claudeCodeAdapter(path.join(tmp, 'projects'));
   const write = (name: string, body: unknown) =>
     fs.writeFileSync(path.join(sessions, name), JSON.stringify(body));
+  // this process's real start time, in each of the two formats startsMatch accepts:
+  // exactly what ps prints (local), and the same instant as a UTC wall clock
+  const localForm = execFileSync('ps', ['-p', String(process.pid), '-o', 'lstart='],
+    { encoding: 'utf8' }).trim();
+  const utcForm = new Date(Date.parse(localForm)).toUTCString().replace(/ GMT$/, '');
 
-  it('returns only busy sessions with a live pid', () => {
-    write('1.json', { pid: process.pid, sessionId: 'busy-alive', status: 'busy' });
+  it('returns busy sessions with a live pid, mapped to statusUpdatedAt', () => {
+    write('1.json', { pid: process.pid, sessionId: 'busy-alive', status: 'busy', statusUpdatedAt: 1234 });
     write('2.json', { pid: process.pid, sessionId: 'idle-alive', status: 'idle' });
-    write('3.json', { pid: 2 ** 30, sessionId: 'busy-dead', status: 'busy' });
+    write('3.json', { pid: 99998, sessionId: 'busy-dead', status: 'busy' });
     write('4.json', { sessionId: 'no-pid', status: 'busy' });
+    write('6.json', { pid: 2 ** 30, sessionId: 'busy-huge-pid', status: 'busy' });
     fs.writeFileSync(path.join(sessions, '5.json'), '{ not json');
     fs.writeFileSync(path.join(sessions, 'other.key'), 'ignored');
-    expect(live.liveSessionIds!()).toEqual(new Set(['busy-alive']));
+    expect(live.liveSessions!()).toEqual(new Map([['busy-alive', 1234]]));
+  });
+
+  it('drops a session whose pid was recycled by another process', () => {
+    fs.rmSync(path.join(sessions, '1.json'));
+    write('7.json', {
+      pid: process.pid, sessionId: 'recycled', status: 'busy',
+      procStart: 'Mon Aug 24 18:41:26 2026',
+    });
+    expect(live.liveSessions!().has('recycled')).toBe(false);
+  });
+
+  it('accepts procStart written as UTC or as local time', () => {
+    for (const [name, procStart] of [['utc', utcForm], ['local', localForm]] as const) {
+      write('7.json', { pid: process.pid, sessionId: name, status: 'busy', procStart });
+      expect(live.liveSessions!().has(name)).toBe(true);
+    }
+  });
+
+  // pins the real-world shape: procStart is a UTC wall clock with no zone
+  // marker, while `ps -o lstart=` prints the same instant in local time
+  it('reads Claude Code\'s own procStart format as UTC', () => {
+    expect(Date.parse('Mon Aug 24 18:41:26 2026 UTC'))
+      .toBe(Date.parse('Mon Aug 24 11:41:26 2026 GMT-0700'));
   });
 
   it('is empty when the directory does not exist', () => {
-    expect(claudeCodeAdapter('/tmp/definitely-not-here/projects').liveSessionIds!())
-      .toEqual(new Set());
+    expect(claudeCodeAdapter('/tmp/definitely-not-here/projects').liveSessions!())
+      .toEqual(new Map());
   });
 });

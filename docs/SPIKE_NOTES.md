@@ -93,3 +93,34 @@ better-sqlite3 (v12, SQLite 3.53.4): `tokenize='trigram'` available.
   including 2-char CJK words, which are common.
 - Decision: trigram FTS for queries ≥ 3 chars; `LIKE '%q%'` scan on
   `messages.text_content` for shorter queries (see DECISIONS.md).
+
+## Addendum 2026-08-25 — transcript write granularity (no token streaming)
+
+Measured because the viewer shows a long answer only when it lands whole.
+Polled a live transcript's size once a second while a turn ran:
+
+```
+t=6s    7 lines      user message + metadata
+t=7s    8 lines
+t=8..18s 8 lines     model generating — file does not move
+t=19s  11 lines      +4KB in one write
+```
+
+- **Blocks, not tokens.** Nothing is written mid-block. Token-level streaming
+  from the transcript is impossible; `--include-partial-messages` exists only
+  for `-p` (the responder path already uses it).
+- **But each block is its own line, written when that block completes** — not
+  batched at turn end. Real gaps within one `requestId`:
+  `thinking 17:29:41 (31KB) → text 17:31:03 (5.8KB)`, 82s apart;
+  another 85s apart. Line-by-line ingest already delivers this for free, so
+  thinking reaches the viewer a minute-plus before the final answer.
+- The only genuinely live source is the TUI's own stdout via a PTY. Rejected:
+  it is full-screen ANSI redraw (needs a headless terminal emulator, breaks on
+  every CC rendering change), it puts a layer between the user and their agent
+  in violation of B4 fail-open, and it carries *less* than the JSONL (thinking
+  collapsed, tool output truncated).
+
+Two fields in `~/.claude/sessions/<pid>.json` were not being used and now are:
+`procStart` (UTC wall clock, no zone marker — `ps -o lstart=` prints the same
+instant in local time) and `statusUpdatedAt` (turn start, epoch ms). See
+DECISIONS.md 2026-08-25.

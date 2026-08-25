@@ -8,6 +8,7 @@ export interface SessionMeta {
   updatedAt: number;
   messageCount: number;
   live?: boolean;          // API-only: agent process is mid-turn (never stored)
+  busySince?: number;      // API-only: when that turn started (0 if unknown)
 }
 
 export type TitleSource = 'custom' | 'ai' | 'prompt';

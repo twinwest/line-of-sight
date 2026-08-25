@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -97,6 +98,34 @@ function contentToBlocks(content: unknown): RenderBlock[] {
   });
 }
 
+/** pid → process start time as `ps` prints it, for pids that still exist.
+ *  One `ps` call for the whole batch; a missing pid means the process is gone. */
+function procStarts(pids: number[]): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!pids.length) return map;
+  // spawnSync, not execFileSync: ps exits non-zero when any listed pid is gone,
+  // and the surviving pids are still on stdout — throwing would lose them all
+  const { stdout } = spawnSync('ps', ['-p', pids.join(','), '-o', 'pid=,lstart='],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  for (const line of (stdout ?? '').split('\n')) {
+    const m = /^\s*(\d+)\s+(\S.*\S)/.exec(line);
+    if (m) map.set(Number(m[1]), m[2]!);
+  }
+  return map;
+}
+
+/** Does the running process match the start time the session file recorded?
+ *  `procStart` is a UTC wall clock with no zone marker while `ps -o lstart=`
+ *  prints local (verified across 11 sessions), so accept either reading — a
+ *  recycled pid won't match both, and a future format change can't silently
+ *  black out every live session. Unparseable ⇒ accept (fail-open on the check). */
+function startsMatch(procStart: string | null, psStart: string): boolean {
+  if (!procStart) return true;
+  const actual = Date.parse(psStart);
+  if (Number.isNaN(actual)) return true;
+  return Date.parse(`${procStart} UTC`) === actual || Date.parse(procStart) === actual;
+}
+
 /** First user prompt lines that are CLI plumbing, not a real prompt. */
 function isRealPrompt(line: Json, text: string): boolean {
   if (line.isMeta === true) return false;
@@ -117,12 +146,13 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     },
 
     // ~/.claude/sessions/<pid>.json is written by the CLI itself and carries
-    // {sessionId, pid, status: 'busy'|'idle'} — the only signal that survives a
-    // long model turn, which writes no transcript lines at all. Undocumented,
-    // so every step is best-effort: a missing dir or changed shape just means
-    // no live sessions, and the timestamp heuristic stays in charge.
-    liveSessionIds() {
-      const live = new Set<string>();
+    // {sessionId, pid, procStart, status: 'busy'|'idle', statusUpdatedAt} — the
+    // only signal that survives a long model turn, which writes no transcript
+    // lines at all. Undocumented, so every step is best-effort: a missing dir or
+    // changed shape just means no live sessions, and the timestamp heuristic
+    // stays in charge.
+    liveSessions() {
+      const live = new Map<string, number>();
       const dir = path.join(root, '..', 'sessions');
       let files: string[];
       try {
@@ -130,17 +160,31 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       } catch {
         return live;
       }
+      const busy: { id: string; pid: number; procStart: string | null; since: number }[] = [];
       for (const f of files) {
         if (!f.endsWith('.json')) continue;
         try {
           const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Json;
           const id = str(s.sessionId);
-          // ponytail: a recycled pid could keep a dead session's dot green;
-          // check procStart if that ever shows up in practice
-          if (!id || s.status !== 'busy' || typeof s.pid !== 'number') continue;
-          process.kill(s.pid, 0);   // throws if the process is gone
-          live.add(id);
-        } catch { /* stale, unreadable, or dead pid */ }
+          // out-of-range pids make ps bail on the whole batch, taking the valid
+          // pids with it — drop them here (2^22 = Linux pid_max)
+          if (!id || s.status !== 'busy'
+              || typeof s.pid !== 'number' || s.pid <= 0 || s.pid >= 2 ** 22) continue;
+          busy.push({
+            id,
+            pid: s.pid,
+            procStart: str(s.procStart),
+            // when the turn started; 0 lets the client fall back to its own clock
+            since: typeof s.statusUpdatedAt === 'number' ? s.statusUpdatedAt : 0,
+          });
+        } catch { /* stale or unreadable */ }
+      }
+      // absent from ps ⇒ process gone; start-time mismatch ⇒ the pid was
+      // recycled by an unrelated process and this file is stale
+      const starts = procStarts(busy.map((b) => b.pid));
+      for (const b of busy) {
+        const psStart = starts.get(b.pid);
+        if (psStart && startsMatch(b.procStart, psStart)) live.set(b.id, b.since);
       }
       return live;
     },

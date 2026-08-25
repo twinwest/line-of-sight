@@ -18,7 +18,7 @@ const adapter = claudeCodeAdapter();
 const ingester = new Ingester(store, [adapter], log);
 const hub = new SseHub();
 ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
-const app = buildServer(store, hub, () => adapter.liveSessionIds?.() ?? new Set());
+const app = buildServer(store, hub, () => adapter.liveSessions?.() ?? new Map());
 
 try {
   await app.listen({ port: PORT, host: '127.0.0.1' });
