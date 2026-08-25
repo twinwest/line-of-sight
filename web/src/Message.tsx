@@ -30,7 +30,12 @@ function CodePre(props: React.HTMLAttributes<HTMLPreElement>) {
   );
 }
 
-const MD_COMPONENTS = { pre: CodePre };
+/** Links always open in a new tab — never navigate the viewer away. */
+function ExtLink({ node: _node, ...props }: React.ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
+  return <a {...props} target="_blank" rel="noreferrer" />;
+}
+
+const MD_COMPONENTS = { pre: CodePre, a: ExtLink };
 const MD_REMARK = [remarkGfm];
 const MD_REHYPE = [rehypeHighlight];
 

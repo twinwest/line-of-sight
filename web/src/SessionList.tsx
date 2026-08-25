@@ -25,8 +25,15 @@ export function SessionList() {
 
   useEffect(() => {
     fetchSessions().then(setSessions, (e: unknown) => setError(String(e)));
-    const t = setInterval(() => fetchSessions().then(setSessions, () => {}), 10_000);
-    return () => clearInterval(t);
+    const poll = () => fetchSessions().then(setSessions, () => {});
+    const t = setInterval(poll, 10_000);
+    // background tabs get their timers throttled/frozen — resync on return
+    const onVisible = () => { if (!document.hidden) void poll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const projects = useMemo(
