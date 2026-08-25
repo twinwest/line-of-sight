@@ -73,6 +73,16 @@ body {
 }
 .margin-marker.in-summary { position: static; display: inline-block; }
 
+/* agent is mid-turn but the transcript is quiet (blocks land only when complete) */
+.generating {
+  color: var(--fg-dim); font-size: 0.85rem; padding: 0.4rem 0.3rem;
+  animation: generating-pulse 1.6s ease-in-out infinite;
+}
+@keyframes generating-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .event.flash { animation: flash-bg 2.5s ease-out; }
 @keyframes flash-bg {
   0%, 40% { box-shadow: 0 0 0 3px var(--accent); border-radius: 8px; }

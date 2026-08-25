@@ -251,6 +251,7 @@ export function SessionView({ id, targetMessageId = null }:
             flush();
             return out;
           })()}
+          {session.live && <div className="generating">✦ generating…</div>}
         </div>
         {openChat && (
           <SidePanel
