@@ -58,7 +58,7 @@ export function SessionList() {
         {shown.map((s) => (
           <a key={s.id} className="session-row" href={`/s/${s.id}`}
              onClick={(e) => { e.preventDefault(); nav(`/s/${s.id}`); }}>
-            <span className={`dot ${Date.now() - s.updatedAt < RUNNING_MS ? 'live' : ''}`} />
+            <span className={`dot ${s.live || Date.now() - s.updatedAt < RUNNING_MS ? 'live' : ''}`} />
             <span className="row-title">{s.title || '(untitled)'}</span>
             <span className="badge">{s.adapter === 'claude-code' ? 'claude' : s.adapter}</span>
             <span className="row-dir">{shortDir(s.projectDir)}</span>

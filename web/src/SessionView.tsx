@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nav } from './App';
 import {
-  createSideChat, fetchSession, fetchSideChats,
+  createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
 import { EventRow, isToolFlow } from './Message';
@@ -35,12 +35,12 @@ export function SessionView({ id, targetMessageId = null }:
   const [askBtn, setAskBtn] = useState<AskButton | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-  // periodic re-render so running→idle flips (and the last turn folds) promptly
-  const [, tick] = useReducer((x: number) => x + 1, 0);
+  // poll the meta so busy→idle flips (and the last turn folds) promptly: `live`
+  // and updatedAt change with no SSE event to announce them
   useEffect(() => {
-    const t = setInterval(tick, 10_000);
+    const t = setInterval(() => { void fetchSessionMeta(id).then(setSession, () => {}); }, 10_000);
     return () => clearInterval(t);
-  }, []);
+  }, [id]);
 
   const refreshChats = useCallback(() => {
     void fetchSideChats(id).then(setSideChats, () => {});
@@ -165,10 +165,12 @@ export function SessionView({ id, targetMessageId = null }:
     if (events[i]!.kind === 'message') { lastMsgTs = events[i]!.ts; break; }
   }
   const lastActivity = Math.max(session?.updatedAt ?? 0, lastMsgTs);
-  const running = Date.now() - lastActivity < RUNNING_MS;
+  // session.live is the agent's own busy flag (long model turns write nothing);
+  // the timestamp heuristic covers agents/versions that don't expose one
+  const running = session?.live || Date.now() - lastActivity < RUNNING_MS;
 
   // last turn: expanded while running (live-follow), folds once the session
-  // goes idle — the 60s heuristic is the only end-of-session signal
+  // goes idle
   const items = useMemo(() => buildTurns(events, { foldLastTurn: !running }),
     [events, running]);
 

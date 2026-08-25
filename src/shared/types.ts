@@ -7,6 +7,7 @@ export interface SessionMeta {
   startedAt: number;
   updatedAt: number;
   messageCount: number;
+  live?: boolean;          // API-only: agent process is mid-turn (never stored)
 }
 
 export type TitleSource = 'custom' | 'ai' | 'prompt';

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
@@ -113,6 +114,35 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     matches(filePath) {
       return UUID_JSONL.test(path.basename(filePath))
         && path.dirname(path.dirname(filePath)) === root;
+    },
+
+    // ~/.claude/sessions/<pid>.json is written by the CLI itself and carries
+    // {sessionId, pid, status: 'busy'|'idle'} — the only signal that survives a
+    // long model turn, which writes no transcript lines at all. Undocumented,
+    // so every step is best-effort: a missing dir or changed shape just means
+    // no live sessions, and the timestamp heuristic stays in charge.
+    liveSessionIds() {
+      const live = new Set<string>();
+      const dir = path.join(root, '..', 'sessions');
+      let files: string[];
+      try {
+        files = fs.readdirSync(dir);
+      } catch {
+        return live;
+      }
+      for (const f of files) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Json;
+          const id = str(s.sessionId);
+          // ponytail: a recycled pid could keep a dead session's dot green;
+          // check procStart if that ever shows up in practice
+          if (!id || s.status !== 'busy' || typeof s.pid !== 'number') continue;
+          process.kill(s.pid, 0);   // throws if the process is gone
+          live.add(id);
+        } catch { /* stale, unreadable, or dead pid */ }
+      }
+      return live;
     },
 
     parseLine(rawLine, ctx) {

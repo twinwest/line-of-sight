@@ -18,6 +18,13 @@ export async function fetchSession(id: string, beforeSeq?: number, targetMessage
   return res.json() as Promise<{ session: SessionMeta; events: StoredEvent[] }>;
 }
 
+/** Session metadata only (limit=0) — cheap enough to poll for the `live` flag. */
+export async function fetchSessionMeta(id: string): Promise<SessionMeta> {
+  const res = await fetch(`/api/sessions/${id}?limit=0`);
+  if (!res.ok) throw new Error(`session: ${res.status}`);
+  return (await res.json() as { session: SessionMeta }).session;
+}
+
 export function postStat(event: 'viewer_open' | 'question_asked'): void {
   void fetch(`/api/stats/${event}`, { method: 'POST' }).catch(() => {});
 }

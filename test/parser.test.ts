@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../src/adapters/claudeCode.js';
@@ -124,5 +125,29 @@ describe('claudeCode.matches', () => {
     expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/agent-x.jsonl`)).toBe(false);
     expect(adapter.matches(`${root}/-proj/memory/MEMORY.md`)).toBe(false);
     expect(adapter.matches(`${root}/-proj/notes.jsonl`)).toBe(false);
+  });
+});
+
+describe('claudeCode.liveSessionIds', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sight-live-'));
+  const sessions = path.join(tmp, 'sessions');
+  fs.mkdirSync(sessions);
+  const live = claudeCodeAdapter(path.join(tmp, 'projects'));
+  const write = (name: string, body: unknown) =>
+    fs.writeFileSync(path.join(sessions, name), JSON.stringify(body));
+
+  it('returns only busy sessions with a live pid', () => {
+    write('1.json', { pid: process.pid, sessionId: 'busy-alive', status: 'busy' });
+    write('2.json', { pid: process.pid, sessionId: 'idle-alive', status: 'idle' });
+    write('3.json', { pid: 2 ** 30, sessionId: 'busy-dead', status: 'busy' });
+    write('4.json', { sessionId: 'no-pid', status: 'busy' });
+    fs.writeFileSync(path.join(sessions, '5.json'), '{ not json');
+    fs.writeFileSync(path.join(sessions, 'other.key'), 'ignored');
+    expect(live.liveSessionIds!()).toEqual(new Set(['busy-alive']));
+  });
+
+  it('is empty when the directory does not exist', () => {
+    expect(claudeCodeAdapter('/tmp/definitely-not-here/projects').liveSessionIds!())
+      .toEqual(new Set());
   });
 });

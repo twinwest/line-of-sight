@@ -14,10 +14,11 @@ const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 const log = (msg: string) => logStream.write(`${new Date().toISOString()} ${msg}\n`);
 
 const store = new Store(DB_FILE);
-const ingester = new Ingester(store, [claudeCodeAdapter()], log);
+const adapter = claudeCodeAdapter();
+const ingester = new Ingester(store, [adapter], log);
 const hub = new SseHub();
 ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
-const app = buildServer(store, hub);
+const app = buildServer(store, hub, () => adapter.liveSessionIds?.() ?? new Set());
 
 try {
   await app.listen({ port: PORT, host: '127.0.0.1' });
