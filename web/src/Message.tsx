@@ -4,6 +4,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { RenderBlock, StoredEvent } from './api';
 import { diffLines } from './diff';
+import { parsePlumbing } from './plumbing';
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -131,13 +132,22 @@ export function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean 
   return role === 'user' && blocks.length > 0 && blocks.every((b) => b.type === 'tool_result' || b.type === 'raw');
 }
 
+/** CLI-plumbing user message (task notifications, command wrappers, …). */
+function plumbingOf(event: StoredEvent): ReturnType<typeof parsePlumbing> {
+  if (event.kind !== 'message' || event.role !== 'user' || !Array.isArray(event.body)) return null;
+  const first = (event.body as RenderBlock[]).find((b) => b.type === 'text');
+  return first?.type === 'text' ? parsePlumbing(first.markdown) : null;
+}
+
 /** Only prose messages get a head (role label, Copy Markdown, timestamp):
  *  tool_use/thinking-only rows have nothing to copy — a hover head there is
- *  a lie (and an empty spacer line). */
+ *  a lie (and an empty spacer line). Plumbing is not the user speaking. */
 export function hasEventHead(event: StoredEvent): boolean {
   if (event.kind !== 'message' || !Array.isArray(event.body)) return false;
   const blocks = event.body as RenderBlock[];
-  return !isToolFlow(event.role, blocks) && blocks.some((b) => b.type === 'text');
+  return !isToolFlow(event.role, blocks)
+    && blocks.some((b) => b.type === 'text')
+    && !plumbingOf(event);
 }
 
 export const EventRow = memo(function EventRow({ event, showRole = true }:
@@ -157,6 +167,30 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
   }
 
   const blocks = event.body as RenderBlock[];
+
+  // plumbing user lines render as a fold, never as user speech
+  const plumbing = plumbingOf(event);
+  if (plumbing) {
+    const label = plumbing.label.length > 100 ? plumbing.label.slice(0, 99) + '…' : plumbing.label;
+    const rawText = blocks.find((b) => b.type === 'text');
+    return (
+      <div className="event tool-flow" data-mid={event.id}>
+        <details className="fold tool">
+          <summary>⏵ {label}</summary>
+          {plumbing.result !== null
+            ? <div className="md fold-body">
+                <Markdown remarkPlugins={MD_REMARK} rehypePlugins={MD_REHYPE} components={MD_COMPONENTS}>
+                  {plumbing.result}
+                </Markdown>
+              </div>
+            : <pre className="fold-body scrolly pre-wrap">
+                {rawText?.type === 'text' ? rawText.markdown : ''}
+              </pre>}
+        </details>
+      </div>
+    );
+  }
+
   const toolFlow = isToolFlow(event.role, blocks);
   const roleClass = toolFlow ? 'tool-flow' : event.role;
   const md = () => messageMarkdown(blocks);
