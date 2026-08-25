@@ -72,7 +72,24 @@ export function SessionView({ id, targetMessageId = null }:
       const incoming = JSON.parse(msg.data as string) as StoredEvent[];
       setEvents((prev) => merge(prev, incoming));
     };
-    return () => es.close();
+
+    // events missed while the stream was down (or the tab was backgrounded and
+    // throttled) never arrive on their own — re-pull the tail on reconnect/return
+    const resync = () => {
+      void fetchSession(id).then(({ session: meta, events: tail }) => {
+        setSession(meta);
+        setEvents((prev) => merge(prev, tail));
+      }, () => {});
+    };
+    let opened = false;
+    es.onopen = () => { if (opened) resync(); opened = true; };
+    const onVisible = () => { if (!document.hidden) resync(); };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      es.close();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [id, refreshChats]);
 
   // sticky auto-scroll: follow the tail only if already at the bottom
@@ -141,7 +158,13 @@ export function SessionView({ id, targetMessageId = null }:
     return map;
   }, [sideChats]);
 
-  const lastActivity = Math.max(session?.updatedAt ?? 0, events.at(-1)?.ts ?? 0);
+  // activity = real messages only; meta rows (away_summary, …) arriving after
+  // idle must not re-expand the last turn or re-light the dot
+  let lastMsgTs = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]!.kind === 'message') { lastMsgTs = events[i]!.ts; break; }
+  }
+  const lastActivity = Math.max(session?.updatedAt ?? 0, lastMsgTs);
   const running = Date.now() - lastActivity < RUNNING_MS;
 
   // last turn: expanded while running (live-follow), folds once the session

@@ -80,14 +80,17 @@ describe('incremental ingest', () => {
     expect(store.getSession(SESSION)!.title).toBe('rewritten');
   });
 
-  it('meta events keep their label through the store round-trip', () => {
+  it('meta events keep their label; meta writes do not bump activity', () => {
     fs.writeFileSync(file,
       line('u1', 'hi')
-      + JSON.stringify({ type: 'system', subtype: 'turn_duration', uuid: 'sys1',
-          timestamp: '2026-08-24T00:00:01.000Z' }) + '\n');
+      + JSON.stringify({ type: 'system', subtype: 'away_summary', uuid: 'sys1',
+          content: 'recap', timestamp: '2026-08-24T01:00:00.000Z' }) + '\n');
     ingester.ingestFile(adapter(), file);
     const meta = store.getEvents(SESSION).find((e) => e.kind === 'meta')!;
-    expect((meta.body as { label: string }).label).toBe('system: turn_duration');
+    expect((meta.body as { label: string }).label).toBe('system: away_summary');
+    // updated_at reflects the message (00:00), not the later meta write (01:00)
+    expect(store.getSession(SESSION)!.updatedAt)
+      .toBe(Date.parse('2026-08-24T00:00:00.000Z'));
   });
 
   it('start() scans existing files and skips subagent/memory files', () => {

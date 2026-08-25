@@ -134,7 +134,9 @@ export class Store {
         : ev.raw;
       const r = insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev));
       if (ev.kind === 'message' && r.changes > 0) newMessages++;
-      if (ev.ts > lastTs) lastTs = ev.ts;
+      // only real messages count as activity — trailing bookkeeping writes
+      // (away_summary etc.) must not make an idle session look running
+      if (ev.kind === 'message' && ev.ts > lastTs) lastTs = ev.ts;
       if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(sessionId, ev.sessionPatch);
       stored.push({
         id: ev.id, seq, ts: ev.ts, kind: ev.kind,

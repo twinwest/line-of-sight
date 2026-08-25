@@ -83,7 +83,13 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(byType('file-history-snapshot')).toHaveLength(0);
     // the fixture attachment is date_change — reminder-class, dropped
     expect(byType('attachment')).toHaveLength(0);
-    expect(byType('system')[0]).toMatchObject({ kind: 'meta' });
+    // the fixture system line is turn_duration — timing bookkeeping, dropped
+    expect(byType('system')).toHaveLength(0);
+    const away = JSON.stringify({
+      type: 'system', subtype: 'away_summary', uuid: 's1', content: 'recap text',
+    });
+    expect(adapter.parseLine(away, ctx)[0])
+      .toMatchObject({ kind: 'meta', label: 'system: away_summary' });
   });
 
   it('reminder attachments drop; hook and unknown attachments stay', () => {

@@ -168,6 +168,8 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         const subtype = type === 'system'
           ? str(line.subtype)
           : str((line.attachment as Json | undefined)?.type as unknown);
+        // turn_duration: pure timing bookkeeping, one per turn — drop
+        if (type === 'system' && subtype === 'turn_duration') return [];
         if (type === 'attachment' && subtype && ATTACHMENT_DROP.has(subtype)) return [];
         const label = `${type}: ${subtype ?? ''}`.trim().replace(/:$/, '');
         return [{ kind: 'meta', id, ts, label, raw: line }];
