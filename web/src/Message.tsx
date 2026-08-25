@@ -3,6 +3,7 @@ import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { RenderBlock, StoredEvent } from './api';
+import { diffLines } from './diff';
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -39,6 +40,38 @@ const MD_COMPONENTS = { pre: CodePre, a: ExtLink };
 const MD_REMARK = [remarkGfm];
 const MD_REHYPE = [rehypeHighlight];
 
+function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const marker = { ctx: ' ', del: '-', add: '+', skip: ' ' } as const;
+  return (
+    <pre className="fold-body scrolly diff">
+      {diffLines(oldText, newText).map((l, i) => (
+        <div key={i} className={`diff-line ${l.kind}`}>{marker[l.kind]} {l.text}</div>
+      ))}
+    </pre>
+  );
+}
+
+/** Semantic render for file-editing tools; null → fall back to raw JSON. */
+function editDiff(toolName: string, input: unknown): React.ReactNode | null {
+  const i = (input ?? {}) as Record<string, unknown>;
+  if (toolName === 'Edit' && typeof i.old_string === 'string' && typeof i.new_string === 'string') {
+    return <DiffView oldText={i.old_string} newText={i.new_string} />;
+  }
+  if (toolName === 'Write' && typeof i.content === 'string') {
+    return <DiffView oldText="" newText={i.content} />;
+  }
+  if (toolName === 'MultiEdit' && Array.isArray(i.edits)) {
+    const edits = i.edits.filter((e): e is { old_string: string; new_string: string } => {
+      const ed = e as Record<string, unknown>;
+      return typeof ed.old_string === 'string' && typeof ed.new_string === 'string';
+    });
+    if (!edits.length) return null;
+    return <>{edits.map((e, idx) =>
+      <DiffView key={idx} oldText={e.old_string} newText={e.new_string} />)}</>;
+  }
+  return null;
+}
+
 function Block({ block }: { block: RenderBlock }) {
   switch (block.type) {
     case 'text':
@@ -60,7 +93,8 @@ function Block({ block }: { block: RenderBlock }) {
       return (
         <details className="fold tool">
           <summary>⏵ {block.summary}</summary>
-          <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>
+          {editDiff(block.toolName, block.input)
+            ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
         </details>
       );
     case 'tool_result':

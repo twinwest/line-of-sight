@@ -161,6 +161,11 @@ body {
   padding: 0.3rem 0.6rem; font-size: 0.82rem;
 }
 .scrolly { max-height: 24rem; overflow: auto; }
+.diff { padding: 0.3rem 0; }
+.diff-line { padding: 0 0.6rem; white-space: pre-wrap; }
+.diff-line.del { background: rgba(217, 45, 32, 0.12); color: var(--error); }
+.diff-line.add { background: rgba(47, 179, 68, 0.12); color: var(--live); }
+.diff-line.skip { color: var(--fg-dim); font-style: italic; }
 .pre-wrap { white-space: pre-wrap; }
 .thinking .fold-body { color: var(--fg-dim); font-style: italic; }
 
