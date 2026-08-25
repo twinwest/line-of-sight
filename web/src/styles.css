@@ -257,8 +257,12 @@ body {
   background: var(--user-bg); border-radius: 8px; padding: 0.4rem 0.7rem;
   font-weight: 500;
 }
-.turn.assistant { padding: 0 0.1rem; }
-.turn-copy { position: absolute; right: 0; top: 0; opacity: 0; }
+.turn.assistant { padding: 0 0.1rem; display: flow-root; }
+/* Copy floats in the flow, so the first line wraps before it. An absolute
+   overlay here sat on top of the prose (and .copy-btn has no background, so
+   the text showed through the button). Same idiom as .event-head: reserve the
+   space, fade the button in on hover — no layout shift, no collision. */
+.turn-copy { float: right; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s; }
 .turn.assistant:hover .turn-copy { opacity: 1; }
 .typing { color: var(--fg-dim); font-style: italic; }
 .cancel { margin-top: 0.4rem; }
