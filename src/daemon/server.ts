@@ -32,7 +32,8 @@ export class SseHub {
 const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
 
 export function buildServer(store: Store, hub: SseHub,
-    liveSessions: () => Map<string, number> = () => new Map()): FastifyInstance {
+    liveSessions: () => Map<string, { state: 'busy' | 'waiting'; since: number }>
+      = () => new Map()): FastifyInstance {
   const app = Fastify({ logger: false });
 
   if (fs.existsSync(WEB_DIST)) {
@@ -52,12 +53,16 @@ export function buildServer(store: Store, hub: SseHub,
     return base;
   });
 
-  /** Mark sessions whose agent process is mid-turn (see AgentAdapter.liveSessions). */
+  /** Mark sessions whose agent process is active (see AgentAdapter.liveSessions). */
   const withLive = <T extends { id: string }>(metas: T[]): T[] => {
     const live = liveSessions();
-    return live.size
-      ? metas.map((m) => (live.has(m.id) ? { ...m, live: true, busySince: live.get(m.id) } : m))
-      : metas;
+    if (!live.size) return metas;
+    return metas.map((m) => {
+      const s = live.get(m.id);
+      return s
+        ? { ...m, live: true, waiting: s.state === 'waiting', busySince: s.since }
+        : m;
+    });
   };
 
   app.get<{ Querystring: { project?: string; q?: string } }>('/api/sessions', (req) =>

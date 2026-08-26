@@ -162,13 +162,18 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     },
 
     // ~/.claude/sessions/<pid>.json is written by the CLI itself and carries
-    // {sessionId, pid, procStart, status: 'busy'|'idle', statusUpdatedAt} — the
-    // only signal that survives a long model turn, which writes no transcript
-    // lines at all. Undocumented, so every step is best-effort: a missing dir or
-    // changed shape just means no live sessions, and the timestamp heuristic
-    // stays in charge.
+    // {sessionId, pid, procStart, status, statusUpdatedAt} — the only signal
+    // that survives a long model turn, which writes no transcript lines at all.
+    // Observed statuses: 'busy' (mid-turn), 'waiting' (parked on the user),
+    // 'shell', 'idle'. `waiting` is the ONLY live source for "the CLI needs
+    // you": a blocking tool's tool_use line is written together with its
+    // result, i.e. only after the user answers (SPIKE_NOTES 2026-08-26), so
+    // the transcript cannot show a pending question while it is pending.
+    // Undocumented, so every step is best-effort: a missing dir or changed
+    // shape just means no live sessions, and the timestamp heuristic stays in
+    // charge.
     liveSessions() {
-      const live = new Map<string, number>();
+      const live = new Map<string, { state: 'busy' | 'waiting'; since: number }>();
       const dir = path.join(root, '..', 'sessions');
       let files: string[];
       try {
@@ -176,21 +181,24 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       } catch {
         return live;
       }
-      const busy: { id: string; pid: number; procStart: string | null; since: number }[] = [];
+      const busy: { id: string; pid: number; procStart: string | null;
+        state: 'busy' | 'waiting'; since: number }[] = [];
       for (const f of files) {
         if (!f.endsWith('.json')) continue;
         try {
           const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Json;
           const id = str(s.sessionId);
+          const state = s.status === 'busy' ? 'busy' : s.status === 'waiting' ? 'waiting' : null;
           // out-of-range pids make ps bail on the whole batch, taking the valid
           // pids with it — drop them here (2^22 = Linux pid_max)
-          if (!id || s.status !== 'busy'
+          if (!id || !state
               || typeof s.pid !== 'number' || s.pid <= 0 || s.pid >= 2 ** 22) continue;
           busy.push({
             id,
             pid: s.pid,
             procStart: str(s.procStart),
-            // when the turn started; 0 lets the client fall back to its own clock
+            state,
+            // when that state began; 0 lets the client fall back to its own clock
             since: typeof s.statusUpdatedAt === 'number' ? s.statusUpdatedAt : 0,
           });
         } catch { /* stale or unreadable */ }
@@ -202,12 +210,13 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       // running indicator is the M5 bug this whole signal exists to fix.
       const starts = procStarts(busy.map((b) => b.pid));
       for (const b of busy) {
+        const entry = { state: b.state, since: b.since };
         if (!starts) {
-          if (pidAlive(b.pid)) live.set(b.id, b.since);
+          if (pidAlive(b.pid)) live.set(b.id, entry);
           continue;
         }
         const psStart = starts.get(b.pid);
-        if (psStart && startsMatch(b.procStart, psStart)) live.set(b.id, b.since);
+        if (psStart && startsMatch(b.procStart, psStart)) live.set(b.id, entry);
       }
       return live;
     },

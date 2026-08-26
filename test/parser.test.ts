@@ -146,15 +146,23 @@ describe('claudeCode.liveSessions', () => {
     { encoding: 'utf8' }).trim();
   const utcForm = new Date(Date.parse(localForm)).toUTCString().replace(/ GMT$/, '');
 
-  it('returns busy sessions with a live pid, mapped to statusUpdatedAt', () => {
+  it('returns busy and waiting sessions with a live pid, mapped to statusUpdatedAt', () => {
     write('1.json', { pid: process.pid, sessionId: 'busy-alive', status: 'busy', statusUpdatedAt: 1234 });
     write('2.json', { pid: process.pid, sessionId: 'idle-alive', status: 'idle' });
     write('3.json', { pid: 99998, sessionId: 'busy-dead', status: 'busy' });
     write('4.json', { sessionId: 'no-pid', status: 'busy' });
     write('6.json', { pid: 2 ** 30, sessionId: 'busy-huge-pid', status: 'busy' });
+    // parked on the user: live, and the only signal for it (SPIKE_NOTES 2026-08-26)
+    write('9.json', {
+      pid: process.pid, sessionId: 'waiting-alive', status: 'waiting', statusUpdatedAt: 5678,
+    });
+    write('10.json', { pid: process.pid, sessionId: 'shell-alive', status: 'shell' });
     fs.writeFileSync(path.join(sessions, '5.json'), '{ not json');
     fs.writeFileSync(path.join(sessions, 'other.key'), 'ignored');
-    expect(live.liveSessions!()).toEqual(new Map([['busy-alive', 1234]]));
+    expect(live.liveSessions!()).toEqual(new Map([
+      ['busy-alive', { state: 'busy', since: 1234 }],
+      ['waiting-alive', { state: 'waiting', since: 5678 }],
+    ]));
   });
 
   it('drops a session whose pid was recycled by another process', () => {
@@ -182,12 +190,13 @@ describe('claudeCode.liveSessions', () => {
 
   it('falls back to a plain liveness check when ps is unusable', () => {
     fs.rmSync(path.join(sessions, '7.json'));
+    fs.rmSync(path.join(sessions, '9.json'));
     write('8.json', { pid: process.pid, sessionId: 'no-ps', status: 'busy', statusUpdatedAt: 7 });
     const noPath = { ...process.env, PATH: path.join(tmp, 'empty-bin') };
     const prev = process.env.PATH;
     process.env.PATH = noPath.PATH;
     try {
-      expect(live.liveSessions!()).toEqual(new Map([['no-ps', 7]]));
+      expect(live.liveSessions!()).toEqual(new Map([['no-ps', { state: 'busy', since: 7 }]]));
     } finally {
       process.env.PATH = prev;
     }

@@ -109,11 +109,13 @@ t=19s  11 lines      +4KB in one write
 - **Blocks, not tokens.** Nothing is written mid-block. Token-level streaming
   from the transcript is impossible; `--include-partial-messages` exists only
   for `-p` (the responder path already uses it).
-- **But each block is its own line, written when that block completes** — not
+- ~~**But each block is its own line, written when that block completes** — not
   batched at turn end. Real gaps within one `requestId`:
   `thinking 17:29:41 (31KB) → text 17:31:03 (5.8KB)`, 82s apart;
-  another 85s apart. Line-by-line ingest already delivers this for free, so
-  thinking reaches the viewer a minute-plus before the final answer.
+  another 85s apart.~~ **WRONG — corrected by the 2026-08-26 addendum below.**
+  Each block is its own *line*, but those gaps are the timestamps the lines
+  carry (generation time), which say nothing about when they were written.
+  Writes are batched per assistant message.
 - The only genuinely live source is the TUI's own stdout via a PTY. Rejected:
   it is full-screen ANSI redraw (needs a headless terminal emulator, breaks on
   every CC rendering change), it puts a layer between the user and their agent
@@ -124,3 +126,43 @@ Two fields in `~/.claude/sessions/<pid>.json` were not being used and now are:
 `procStart` (UTC wall clock, no zone marker — `ps -o lstart=` prints the same
 instant in local time) and `statusUpdatedAt` (turn start, epoch ms). See
 DECISIONS.md 2026-08-25.
+
+## Addendum 2026-08-26 — writes are batched per assistant message; `status: waiting`
+
+Triggered by a dogfood report: an answer ending in an AskUserQuestion did not
+appear in the viewer until the question was answered. Watched a live
+transcript's byte size at 300ms while parking the CLI on a question:
+
+```
++0.0s    START
++327.8s  +15543B  assistant:thinking | assistant:text(1157ch) |
+                  assistant:tool_use[AskUserQuestion] | user:tool_result | attachment
+```
+
+- **The write unit is one assistant message plus its tool result**, flushed
+  when the tool returns — not one write per block. 327s of nothing, then five
+  lines in a single 15KB write at the moment the user answered.
+- Confirmed by the complementary case in the same log: text sharing a message
+  with a *non-blocking* tool (`text(137ch) | tool_use[Bash] | tool_result`)
+  landed immediately, because Bash returns in milliseconds. So prose is held
+  exactly as long as the tool it shares a message with.
+- **Consequence**: the transcript can never show a blocking tool
+  (AskUserQuestion / ExitPlanMode) while it is actually pending — `tool_use`
+  and `tool_result` always arrive in the same write. Any "waiting for you"
+  state derived from the transcript is structurally unreachable.
+- **`status` has more values than `busy`/`idle`.** Watching
+  `~/.claude/sessions/<pid>.json` across the same window (CC 2.1.235):
+
+```
++0.0s    busy      transcript=3676676
++21.3s   waiting   transcript=3676676   ← question on screen, transcript frozen
++413.4s  shell     transcript=3680938   ← user interrupts and types
++532.1s  busy      transcript=3683984
+```
+
+  `waiting` is the CLI's own parked-on-the-user signal and is live — note the
+  frozen transcript beside it. This is the only usable source for "the CLI
+  needs you"; `liveSessions()` now reports it (DECISIONS.md 2026-08-26).
+  Unverified: whether `waiting` also covers permission prompts (harmless
+  either way — both mean the CLI needs the user), and what `shell` marks
+  exactly (treated as not-live).

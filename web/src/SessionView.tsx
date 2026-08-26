@@ -355,9 +355,11 @@ export function SessionView({ id, targetMessageId = null }:
           {/* busySince is the agent's own turn-start clock; lastMsgTs is a
               fallback and is wrong when the loaded window ends mid-history
               (search jump), so prefer busySince whenever the CLI reports it.
-              Parked on a question/plan, "generating… 40m" would be a lie —
-              the CLI is waiting for the user, and the pending card says so. */}
-          {pendingEventId
+              `waiting` is the CLI's own parked-on-the-user status: the only
+              live source for it, since a blocking tool's tool_use line lands
+              only once it has a result (SPIKE_NOTES 2026-08-26). The
+              transcript-derived pendingEventId stays as the fallback. */}
+          {session.waiting || pendingEventId
             ? <div className="awaiting">✋ waiting for your input in the CLI</div>
             : session.live && <Generating since={session.busySince || lastMsgTs} />}
           {queued.map((text, i) => (
