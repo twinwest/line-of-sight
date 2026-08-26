@@ -8,9 +8,12 @@ import type { AgentAdapter } from './types.js';
 // Line types that carry no conversational content (see SPIKE_NOTES.md);
 // dropped from the event stream. Truly unknown types still fall through
 // to the `unknown` fallback, so future schema additions stay visible.
+// `queue-operation` is NOT here (it was until 2026-08-26): its enqueue/remove
+// ops carry the text the user typed while the agent worked — the viewer
+// derives the "queued, not yet read" strip from them (web/src/queue.ts).
 const DROP_TYPES = new Set([
   'mode', 'permission-mode', 'last-prompt', 'bridge-session',
-  'queue-operation', 'file-history-snapshot', 'file-history-delta',
+  'file-history-snapshot', 'file-history-delta',
   'atis-latch', 'agent-name',
 ]);
 
@@ -75,7 +78,7 @@ function contentToBlocks(content: unknown): RenderBlock[] {
         return { type: 'thinking', text: str(blk.thinking) ?? '' };
       case 'tool_use': {
         const name = str(blk.name) ?? 'tool';
-        return { type: 'tool_use', toolName: name, summary: toolSummary(name, blk.input), input: blk.input };
+        return { type: 'tool_use', id: str(blk.id), toolName: name, summary: toolSummary(name, blk.input), input: blk.input };
       }
       case 'tool_result': {
         const output = flattenToolResult(blk.content);
@@ -238,6 +241,12 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
 
       if (type && DROP_TYPES.has(type)) return [];
 
+      // enqueue/dequeue/remove of the CLI's input queue; the viewer folds
+      // these into derived queue state, they never render as rows
+      if (type === 'queue-operation') {
+        return [{ kind: 'meta', id, ts, label: 'queue-operation', raw: line }];
+      }
+
       if (type === 'user' || type === 'assistant') {
         const message = line.message as Json | null | undefined;
         const content = message?.content;
@@ -259,6 +268,17 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       }
 
       if (type === 'system' || type === 'attachment') {
+        // queued_command: input the user typed while the agent worked,
+        // delivered mid-turn as an attachment — no plain user line ever
+        // carries this text, so this IS the user speaking. Promote it to a
+        // user message; non-human origins and drifted shapes stay meta.
+        if (type === 'attachment') {
+          const att = (line.attachment ?? {}) as Json;
+          const origin = (att.origin ?? {}) as Json;
+          if (att.type === 'queued_command' && origin.kind === 'human' && typeof att.prompt === 'string') {
+            return [{ kind: 'message', id, ts, role: 'user', blocks: [{ type: 'text', markdown: att.prompt }] }];
+          }
+        }
         const subtype = type === 'system'
           ? str(line.subtype)
           : str((line.attachment as Json | undefined)?.type as unknown);

@@ -75,4 +75,16 @@ describe('buildTurns (step folding: prose always visible)', () => {
     const events = [meta('m1'), meta('m2'), prompt('p1'), narration('c1')];
     expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['fold(m1,m2)', 'p1', 'c1']);
   });
+
+  it('blocking tools (AskUserQuestion / ExitPlanMode) never fold', () => {
+    const ask = (id: string, toolName: string): StoredEvent => ({
+      id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
+      body: [{ type: 'tool_use', toolName, summary: toolName, input: {} }],
+    });
+    const events = [prompt('p1'), tool('t1'), toolResult('r1'),
+      ask('a1', 'AskUserQuestion'), toolResult('r2'), ask('x1', 'ExitPlanMode'), narration('c1')];
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+      'p1', 'fold(t1,r1)', 'a1', 'r2', 'x1', 'c1',
+    ]);
+  });
 });

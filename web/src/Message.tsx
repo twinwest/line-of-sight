@@ -1,10 +1,23 @@
-import { memo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { RenderBlock, StoredEvent } from './api';
+import {
+  askQuestions, chosenAnswer, planMarkdown,
+  type AskQuestion, type ToolOutcome,
+} from './asks';
 import { diffLines } from './diff';
 import { parsePlumbing } from './plumbing';
+
+/** tool_use id → result pairing plus "which event is the CLI parked on",
+ *  built once per merge in SessionView. A context, not a prop: only the
+ *  blocking-tool cards subscribe, so every other memoized EventRow skips
+ *  re-rendering when the map changes on each SSE append. */
+export const OutcomesCtx = createContext<{
+  outcomes: Map<string, ToolOutcome>;
+  pendingEventId: string | null;
+}>({ outcomes: new Map(), pendingEventId: null });
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -73,7 +86,83 @@ function editDiff(toolName: string, input: unknown): React.ReactNode | null {
   return null;
 }
 
-function Block({ block }: { block: RenderBlock }) {
+type ToolUseBlock = Extract<RenderBlock, { type: 'tool_use' }>;
+
+/** AskUserQuestion, read-only mirror of the CLI's question UI: same structure
+ *  (header chip, options with descriptions, previews), chosen option marked
+ *  once the answer lands. A free-text ("Other") answer shows as its own row. */
+function AskCard({ block, questions, eventId }: {
+  block: ToolUseBlock; questions: AskQuestion[]; eventId: string;
+}) {
+  const { outcomes, pendingEventId } = useContext(OutcomesCtx);
+  const outcome = block.id ? outcomes.get(block.id) : undefined;
+  const waiting = !outcome && eventId === pendingEventId;
+  return (
+    <div className={`ask-card ${waiting ? 'pending' : ''}`}>
+      <div className="card-status">
+        {waiting ? '✋ waiting for your answer in the CLI'
+          : outcome ? (outcome.isError ? 'question · dismissed' : 'question · answered')
+          : 'question'}
+      </div>
+      {questions.map((q, qi) => {
+        const answer = outcome && !outcome.isError ? chosenAnswer(outcome.output, q.question) : null;
+        const picked = (label: string) => answer !== null
+          && (answer === label || (q.multiSelect && answer.split(', ').includes(label)));
+        return (
+          <div className="ask-q" key={qi}>
+            <div>
+              {q.header && <span className="ask-header">{q.header}</span>}
+              <span className="ask-question">{q.question}</span>
+            </div>
+            {q.options.map((opt, oi) => (
+              <div key={oi} className={`ask-option ${picked(opt.label) ? 'picked' : ''}`}>
+                <div>{picked(opt.label) && '✓ '}{opt.label}</div>
+                {opt.description && <div className="ask-desc">{opt.description}</div>}
+                {opt.preview !== undefined && (
+                  <details className="fold">
+                    <summary>⏵ preview</summary>
+                    <pre className="fold-body scrolly pre-wrap">{opt.preview}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+            {answer !== null && !q.options.some((o) => picked(o.label)) && (
+              <div className="ask-option picked"><div>✓ {answer}</div></div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** ExitPlanMode: the plan is a document the user must read to decide, so it
+ *  renders in full — pending and after — with the approval state on top. */
+function PlanCard({ block, eventId }: { block: ToolUseBlock; eventId: string }) {
+  const { outcomes, pendingEventId } = useContext(OutcomesCtx);
+  const outcome = block.id ? outcomes.get(block.id) : undefined;
+  const plan = planMarkdown(block.input, outcome?.output ?? null);
+  const waiting = !outcome && eventId === pendingEventId;
+  return (
+    <div className={`plan-card ${waiting ? 'pending' : ''} ${outcome?.isError ? 'rejected' : ''}`}>
+      <div className="card-status">
+        {waiting ? '✋ plan awaiting your approval in the CLI'
+          : outcome ? (outcome.isError ? 'plan · rejected' : 'plan · approved')
+          : 'plan'}
+        {plan !== null && <CopyButton text={() => plan} label="Copy Markdown" />}
+      </div>
+      {plan !== null
+        ? <div className="md">
+            <Markdown remarkPlugins={MD_REMARK} rehypePlugins={MD_REHYPE} components={MD_COMPONENTS}>
+              {plan}
+            </Markdown>
+          </div>
+        : <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
+    </div>
+  );
+}
+
+function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
   switch (block.type) {
     case 'text':
       return (
@@ -90,7 +179,15 @@ function Block({ block }: { block: RenderBlock }) {
           <div className="fold-body pre-wrap">{block.text}</div>
         </details>
       );
-    case 'tool_use':
+    case 'tool_use': {
+      // blocking tools render as cards, not folds; shape drift → generic fold
+      if (block.toolName === 'AskUserQuestion') {
+        const questions = askQuestions(block.input);
+        if (questions) return <AskCard block={block} questions={questions} eventId={eventId} />;
+      }
+      if (block.toolName === 'ExitPlanMode') {
+        return <PlanCard block={block} eventId={eventId} />;
+      }
       return (
         <details className="fold tool">
           <summary>⏵ {block.summary}</summary>
@@ -98,6 +195,7 @@ function Block({ block }: { block: RenderBlock }) {
             ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
         </details>
       );
+    }
     case 'tool_result':
       return (
         <details className={`fold tool ${block.isError ? 'is-error' : ''}`}>
@@ -207,7 +305,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
           </span>
         </div>
       )}
-      {blocks.map((b, i) => <Block key={i} block={b} />)}
+      {blocks.map((b, i) => <Block key={i} block={b} eventId={event.id} />)}
     </div>
   );
 });

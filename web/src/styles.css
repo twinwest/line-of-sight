@@ -233,6 +233,53 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .thinking > summary { font-style: italic; }
 .thinking .fold-body { color: var(--fg-dim); font-style: italic; }
 
+/* ---- blocking-tool cards (AskUserQuestion / ExitPlanMode) ----
+   The two moments the agent stops and waits for the user: first-class
+   content, never folded (turns.ts exempts them). Read-only mirror of the
+   CLI's UI — answering/approving happens in the CLI. The card itself stays
+   calm (no pulse — zero push); only the tail line animates, like
+   .generating. */
+.ask-card, .plan-card {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.6rem 0.9rem 0.75rem; margin: 0.5rem 0;
+}
+.ask-card.pending, .plan-card.pending { border-color: var(--accent); }
+.plan-card.rejected { border-color: var(--error); }
+.card-status {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg-dim); display: flex; align-items: baseline; gap: 0.6rem;
+  margin-bottom: 0.3rem;
+}
+.pending > .card-status { color: var(--accent); }
+.plan-card.rejected > .card-status { color: var(--error); }
+.card-status .copy-btn { margin-left: auto; text-transform: none; letter-spacing: normal; }
+.ask-q { margin-top: 0.5rem; }
+.ask-header {
+  font-size: 0.7rem; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 0 0.5rem; margin-right: 0.5rem; white-space: nowrap;
+}
+.ask-question { font-weight: 600; }
+.ask-option {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.3rem 0.6rem; margin-top: 0.35rem; font-size: 0.9rem;
+}
+.ask-option.picked { border-color: var(--accent); background: var(--user-bg); }
+.ask-desc { color: var(--fg-dim); font-size: 0.8rem; }
+
+/* the transcript tail while the CLI is parked on a question/plan */
+.awaiting {
+  color: var(--accent); font-size: 0.85rem; padding: 0.4rem 0.3rem;
+  animation: generating-pulse 1.6s ease-in-out infinite;
+}
+
+/* input the user typed but the agent hasn't read yet — mirrors the CLI's
+   queued strip under its spinner; derived state (web/src/queue.ts), no row */
+.event.user.queued { opacity: 0.65; white-space: pre-wrap; }
+.queued-tag {
+  font-size: 0.72rem; color: var(--fg-dim); text-transform: uppercase;
+  letter-spacing: 0.05em; margin-right: 0.6rem;
+}
+
 /* markdown content */
 .md { overflow-wrap: break-word; }
 /* The UA default 1em left the paragraph gap barely above the 1.65em line gap.

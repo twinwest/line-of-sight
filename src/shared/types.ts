@@ -56,7 +56,9 @@ export interface SideChat {
 export type RenderBlock =
   | { type: 'text'; markdown: string }
   | { type: 'thinking'; text: string }
-  | { type: 'tool_use'; toolName: string; summary: string; input: unknown }
+  /** id: the transcript's tool_use id — lets the viewer pair a use with its
+   *  tool_result (absent on rows ingested before it was recorded). */
+  | { type: 'tool_use'; id?: string | null; toolName: string; summary: string; input: unknown }
   | { type: 'tool_result'; toolUseId: string | null; summary: string;
       output: string; isError: boolean }
   | { type: 'raw'; json: unknown };   // anything unrecognized inside a message

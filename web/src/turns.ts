@@ -1,4 +1,5 @@
 import type { RenderBlock, StoredEvent } from './api';
+import { isBlockingUse } from './asks';
 
 // Step folding (SPEC C2, DECISIONS 2026-08-25): sight is a readable re-layout
 // of the CLI — every piece of prose the CLI shows stays visible; what folds
@@ -15,11 +16,13 @@ function blocks(e: StoredEvent): RenderBlock[] {
   return e.kind === 'message' && Array.isArray(e.body) ? (e.body as RenderBlock[]) : [];
 }
 
-/** Prose the reader must always see: real user prompts and assistant text. */
+/** Prose the reader must always see: real user prompts, assistant text, and
+ *  blocking tools (AskUserQuestion / ExitPlanMode) — the CLI stops on those,
+ *  so they are dialogue with the user, not machine plumbing. */
 function isVisible(e: StoredEvent): boolean {
   if (e.kind !== 'message') return false;
   const bs = blocks(e);
-  if (e.role === 'assistant') return bs.some((b) => b.type === 'text');
+  if (e.role === 'assistant') return bs.some((b) => b.type === 'text' || isBlockingUse(b));
   // user: a real prompt, not a tool_result carrier, not CLI plumbing
   // (<command-name>, <task-notification>, … — same '<' heuristic as titles)
   if (bs.length === 0 || bs.every((b) => b.type === 'tool_result' || b.type === 'raw')) return false;

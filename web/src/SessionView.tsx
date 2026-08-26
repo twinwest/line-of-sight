@@ -4,7 +4,9 @@ import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
-import { EventRow, hasEventHead } from './Message';
+import { pendingBlockId, toolOutcomes } from './asks';
+import { EventRow, hasEventHead, OutcomesCtx } from './Message';
+import { isQueueOp, queuedInputs } from './queue';
 import { SidePanel } from './SidePanel';
 import { buildTurns } from './turns';
 
@@ -182,9 +184,24 @@ export function SessionView({ id, targetMessageId = null }:
   const running = session?.live || Date.now() - lastActivity < RUNNING_MS;
 
   // trailing tool run: expanded while running (live-follow), folds once the
-  // session goes idle
-  const items = useMemo(() => buildTurns(events, { foldTail: !running }),
+  // session goes idle. Queue bookkeeping rows feed the queued strip below
+  // instead of rendering (or padding the fold counts).
+  const items = useMemo(() => buildTurns(events.filter((e) => !isQueueOp(e)), { foldTail: !running }),
     [events, running]);
+
+  // input typed while the agent works, not yet read by it — the CLI shows
+  // this under its spinner; gate on `running` so a session killed with a
+  // stale queue doesn't dangle it forever
+  const queued = useMemo(() => running ? queuedInputs(events) : [], [events, running]);
+
+  // blocking tools (AskUserQuestion / ExitPlanMode): pair each use with its
+  // result so the cards can mark chosen/approved, and detect "the CLI is
+  // parked on a question at the tail". Gated on `running`: a session killed
+  // mid-question must not claim "waiting for you" forever.
+  const outcomes = useMemo(() => toolOutcomes(events), [events]);
+  const pendingEventId = useMemo(() => running ? pendingBlockId(events, outcomes) : null,
+    [events, outcomes, running]);
+  const outcomesCtx = useMemo(() => ({ outcomes, pendingEventId }), [outcomes, pendingEventId]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
@@ -222,6 +239,7 @@ export function SessionView({ id, targetMessageId = null }:
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
       </div>
+      <OutcomesCtx.Provider value={outcomesCtx}>
       <div className="view-split">
         <div className="transcript" ref={scrollRef} onScroll={onScroll} onMouseUp={onMouseUp}>
           {(events[0]?.seq ?? 1) > 1 && (
@@ -265,8 +283,17 @@ export function SessionView({ id, targetMessageId = null }:
           })()}
           {/* busySince is the agent's own turn-start clock; lastMsgTs is a
               fallback and is wrong when the loaded window ends mid-history
-              (search jump), so prefer busySince whenever the CLI reports it */}
-          {session.live && <Generating since={session.busySince || lastMsgTs} />}
+              (search jump), so prefer busySince whenever the CLI reports it.
+              Parked on a question/plan, "generating… 40m" would be a lie —
+              the CLI is waiting for the user, and the pending card says so. */}
+          {pendingEventId
+            ? <div className="awaiting">✋ waiting for your input in the CLI</div>
+            : session.live && <Generating since={session.busySince || lastMsgTs} />}
+          {queued.map((text, i) => (
+            <div key={`q${i}`} className="event user queued">
+              <span className="queued-tag">⏳ queued</span>{text}
+            </div>
+          ))}
         </div>
         {openChat && (
           <SidePanel
@@ -279,6 +306,7 @@ export function SessionView({ id, targetMessageId = null }:
           />
         )}
       </div>
+      </OutcomesCtx.Provider>
       {targetMessageId && (
         <button className="jump-latest" onClick={() => nav(`/s/${id}`)}>↓ Latest</button>
       )}

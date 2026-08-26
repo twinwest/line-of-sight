@@ -31,6 +31,10 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     for (const t of ['text', 'thinking', 'tool_use', 'tool_result']) {
       expect(blockTypes, `missing block type ${t}`).toContain(t);
     }
+    // tool_use keeps the transcript's id — the viewer pairs it with tool_result
+    const uses = messages.flatMap((m) => m.kind === 'message' ? m.blocks : [])
+      .filter((b) => b.type === 'tool_use');
+    expect(uses.some((u) => u.type === 'tool_use' && typeof u.id === 'string' && u.id.length > 0)).toBe(true);
   });
 
   it('string user content becomes a text block and a title patch', () => {
