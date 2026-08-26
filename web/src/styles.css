@@ -355,10 +355,14 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .panel-input {
   display: flex; gap: 0.4rem; padding: 0.6rem 0.75rem;
   border-top: 1px solid var(--border);
+  align-items: flex-end;   /* keeps Ask beside the last line as the box grows */
 }
-.panel-input input {
+.panel-input textarea {
   flex: 1; background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 8px; padding: 0.4rem 0.6rem; font: inherit; font-size: 0.85rem;
+  /* Height is driven from JS; max-height is the ceiling it grows into. Tighter
+     leading than the body's 1.65 — this is a compose box, not a reading surface. */
+  line-height: 1.5; resize: none; overflow-y: auto; max-height: 8rem;
 }
 .panel-input button {
   background: var(--accent); color: #fff; border: none; border-radius: 8px;

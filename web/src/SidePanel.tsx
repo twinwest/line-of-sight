@@ -46,12 +46,25 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   const [anchorExpanded, setAnchorExpanded] = useState(false);
   const [width, setWidth] = useState(400);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { setTurns(chat.turns); setError(''); setStreaming(null); }, [chat.id]);
   useEffect(() => { void fetchResponderStatus().then(setStatus); }, []);
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns, streaming]);
+
+  /** Grow the question box with its content (CSS max-height caps it and takes
+   *  over with a scrollbar). Collapsing to `auto` first is what lets it shrink
+   *  again — on deletion, and back to one row after a question is sent. */
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    // box-sizing is border-box, so scrollHeight leaves out the border; without
+    // adding it back the box lands short and shows a permanent scrollbar.
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [input]);
 
   const busy = streaming !== null;
 
@@ -181,7 +194,18 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
         </div>
       )}
       <form className="panel-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)}
+        <textarea ref={inputRef} rows={1} value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter breaks the line. isComposing means an IME
+            // has candidates open and this Enter is picking one — sending there
+            // would cut every CJK sentence short. The old <input> got that for
+            // free (browsers suppress form submit mid-composition); an explicit
+            // keydown handler has to check for it.
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            ask(input);
+          }}
           placeholder="Ask about the selection…" disabled={busy} />
         <button type="submit" disabled={busy || !input.trim()}>Ask</button>
       </form>
