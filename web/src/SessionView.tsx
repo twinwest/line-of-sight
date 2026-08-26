@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { nav } from './App';
 import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
@@ -51,20 +52,37 @@ function ReplyDraft({ sessionId }: { sessionId: string }) {
   // focus only on click-to-open — an autoFocus'd card restored at page load
   // would silently steal the keyboard from the transcript
   const clicked = useRef(false);
+
+  // card ⇄ toggle swaps morph via the View Transitions API (both elements
+  // share a view-transition-name in styles.css). flushSync so the DOM change
+  // lands inside the transition callback; browsers without the API swap
+  // instantly. Clearing is the user's move — emptying the textarea.
+  const swap = (next: boolean) => {
+    const apply = () => flushSync(() => setOpen(next));
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (doc.startViewTransition) doc.startViewTransition(apply); else apply();
+  };
+
   if (!open) {
+    const firstLine = text.trim().split('\n')[0] ?? '';
     return (
-      <button className="draft-toggle"
-        onClick={() => { clicked.current = true; setOpen(true); }}>✎ Draft reply</button>
+      <button className="draft-toggle" onClick={() => { clicked.current = true; swap(true); }}>
+        ✎ {firstLine || 'Draft reply'}
+      </button>
     );
   }
   return (
     <div className="draft-card">
       <div className="draft-head">
         <span>Draft — copy into your terminal to send</span>
-        <CopyButton text={() => text} label="Copy for CLI" />
+        <button className="copy-btn" title="Minimize — draft kept (Esc)"
+          onClick={() => swap(false)}>−</button>
+        <CopyButton text={() => text} label="Copy for CLI"
+          onCopied={() => setTimeout(() => swap(false), 1000)} />
       </div>
       <textarea rows={3} value={text} placeholder="Write your reply here…"
         ref={(el) => { if (clicked.current) { el?.focus(); clicked.current = false; } }}
+        onKeyDown={(e) => { if (e.key === 'Escape' && !e.nativeEvent.isComposing) swap(false); }}
         onChange={(e) => { setText(e.target.value); localStorage.setItem(key, e.target.value); }} />
     </div>
   );

@@ -287,17 +287,22 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   display: block; background: none; border: none; cursor: pointer;
   color: var(--fg-dim); font: inherit; font-size: 0.8rem;
   padding: 0.2rem 0.6rem; border-radius: 5px; margin-top: 0.75rem;
+  /* a kept draft shows its first line here — truncated, never wrapping */
+  max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .draft-toggle:hover { background: var(--bg2); color: var(--fg); }
 .draft-card {
   border: 1px dashed var(--border); border-radius: 10px; background: var(--bg2);
   padding: 0.5rem 0.75rem; margin-top: 0.75rem;
 }
+/* card ⇄ toggle morph (View Transitions API; only one of the two exists at a
+   time). Browsers without support just swap instantly. */
+.draft-card, .draft-toggle { view-transition-name: draft; }
 .draft-head {
   display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem;
   color: var(--fg-dim); font-size: 0.75rem;
 }
-.draft-head .copy-btn { margin-left: auto; }
+.draft-head span { margin-right: auto; }
 .draft-card textarea {
   width: 100%; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem;
