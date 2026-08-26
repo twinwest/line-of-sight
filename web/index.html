@@ -5,13 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Line of Sight</title>
     <script>
-      // Runs before first paint. ThemeToggle in App.tsx sets the same attribute,
-      // but React mounts after the first frame, so without this a dark-mode
-      // reader gets a white flash on every load. Keep the key/attribute in sync.
+      // Runs before first paint. ThemeToggle/TypeControls in App.tsx set the
+      // same attribute/properties, but React mounts after the first frame, so
+      // without this a dark-mode reader gets a white flash — and a resized one
+      // a layout jump — on every load. Keys, ranges and property names must
+      // stay in sync with App.tsx. Out-of-range values are skipped, not
+      // clamped: the CSS defaults take over, and TypeControls clamps on mount.
       try {
+        var d = document.documentElement;
         var t = localStorage.getItem('sight:theme');
-        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-      } catch (e) { /* private mode / storage disabled — fall back to the OS */ }
+        if (t === 'light' || t === 'dark') d.dataset.theme = t;
+        var s = parseFloat(localStorage.getItem('sight:font-scale'));
+        if (s >= 0.85 && s <= 1.3) d.style.setProperty('--font-scale', String(s));
+        var m = parseFloat(localStorage.getItem('sight:measure'));
+        if (m >= 30 && m <= 60) d.style.setProperty('--measure', m + 'rem');
+      } catch (e) { /* private mode / storage disabled — fall back to defaults */ }
     </script>
   </head>
   <body>
