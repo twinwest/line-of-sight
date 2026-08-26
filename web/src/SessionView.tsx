@@ -8,6 +8,7 @@ import {
 import { pendingBlockId, toolOutcomes } from './asks';
 import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { isQueueOp, queuedInputs } from './queue';
+import { markSeen } from './seen';
 import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
 
@@ -126,6 +127,10 @@ export function SessionView({ id, targetMessageId = null }:
     const t = setInterval(() => { void fetchSessionMeta(id).then(setSession, () => {}); }, 10_000);
     return () => clearInterval(t);
   }, [id]);
+
+  // anything arriving while the view is open counts as seen — clears the
+  // list's "just finished" state; later activity re-arms it
+  useEffect(() => { if (session) markSeen(id); }, [id, session, events]);
 
   const refreshChats = useCallback(() => {
     void fetchSideChats(id).then(setSideChats, () => {});

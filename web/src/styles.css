@@ -146,6 +146,9 @@ body {
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
 .dot.live { background: var(--live); }
+.dot.busy { background: var(--live); animation: generating-pulse 1.6s ease-in-out infinite; }
+.dot.waiting { background: var(--accent); animation: generating-pulse 1.6s ease-in-out infinite; }
+.dot.done { background: var(--live); }
 
 /* ---- session view ---- */
 .session-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -415,13 +418,11 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   background: var(--user-bg); border-radius: 8px; padding: 0.4rem 0.7rem;
   font-weight: 500;
 }
+/* flow-root contains the answer markdown's paragraph margins, which would
+   otherwise collapse out of the turn and fight .turn's own margin. (It also
+   used to contain a floated per-answer Copy button — removed 2026-08-26, see
+   DECISIONS: code blocks carry their own Copy, prose is selection-copied.) */
 .turn.assistant { padding: 0 0.1rem; display: flow-root; }
-/* Copy floats in the flow, so the first line wraps before it. An absolute
-   overlay here sat on top of the prose (and .copy-btn has no background, so
-   the text showed through the button). Same idiom as .event-head: reserve the
-   space, fade the button in on hover — no layout shift, no collision. */
-.turn-copy { float: right; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s; }
-.turn.assistant:hover .turn-copy { opacity: 1; }
 .typing { color: var(--fg-dim); font-style: italic; }
 .cancel { margin-top: 0.4rem; }
 

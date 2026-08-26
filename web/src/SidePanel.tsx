@@ -5,28 +5,12 @@ import {
   askStream, cancelAsk, deleteSideChat, fetchResponderStatus, putResponderConfig,
   type ResponderStatus, type SideChat,
 } from './api';
+import { MD_COMPONENTS } from './Message';
 
 const MODELS = ['', 'claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 const PRESETS = ['What is this?', "What's the evidence for this?", 'What alternatives were ruled out?'];
-
-/** Answer links always open in a new tab — never navigate the viewer away. */
-const MD_COMPONENTS = {
-  a: ({ node: _node, ...props }: React.ComponentPropsWithoutRef<'a'> & { node?: unknown }) =>
-    <a {...props} target="_blank" rel="noreferrer" />,
-};
-
-function CopyBtn({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button className="copy-btn" onClick={() => {
-      void navigator.clipboard.writeText(text);
-      setDone(true);
-      setTimeout(() => setDone(false), 1200);
-    }}>{done ? '✓' : 'Copy'}</button>
-  );
-}
 
 export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   chat: SideChat;
@@ -140,7 +124,6 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
         )}
         {turns.map((t, i) => (
           <div key={i} className={`turn ${t.role}`}>
-            {t.role === 'assistant' && <span className="turn-copy"><CopyBtn text={t.text} /></span>}
             {t.role === 'assistant'
               ? <div className="md"><Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{t.text}</Markdown></div>
               : <div>{t.text}</div>}

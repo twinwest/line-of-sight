@@ -52,7 +52,9 @@ function ExtLink({ node: _node, ...props }: React.ComponentPropsWithoutRef<'a'> 
   return <a {...props} target="_blank" rel="noreferrer" />;
 }
 
-const MD_COMPONENTS = { pre: CodePre, a: ExtLink };
+/** Shared with the side panel: answers are markdown too, and SPEC §5.3 wants a
+ *  Copy button on every code block wherever it renders. */
+export const MD_COMPONENTS = { pre: CodePre, a: ExtLink };
 const MD_REMARK = [remarkGfm];
 const MD_REHYPE = [rehypeHighlight];
 
