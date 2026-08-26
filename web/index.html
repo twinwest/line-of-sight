@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Line of Sight</title>
+    <script>
+      // Runs before first paint. ThemeToggle in App.tsx sets the same attribute,
+      // but React mounts after the first frame, so without this a dark-mode
+      // reader gets a white flash on every load. Keep the key/attribute in sync.
+      try {
+        var t = localStorage.getItem('sight:theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) { /* private mode / storage disabled — fall back to the OS */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

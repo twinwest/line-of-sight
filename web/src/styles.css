@@ -3,20 +3,31 @@
    held at ~5.9:1 (not the ~4.8:1 that pairs "naturally" with this bg) because
    it colours .thinking, which is also italic — italic already spends the
    readability budget once, the colour shouldn't spend it again. */
+/* One palette for both themes: light-dark() resolves against the *used*
+   color-scheme, so the theme picker is nothing but a color-scheme override —
+   no duplicated dark block, no media query to keep in sync. Setting
+   color-scheme also gets scrollbars and form controls themed for free. */
 :root {
-  --bg: #fbfaf8; --bg2: #f3f2ef; --fg: #2e3338; --fg-dim: #5a6270;
-  --border: #e6e3dd; --accent: #4f6ef7; --user-bg: #eef1fd;
-  --code-bg: #f2f1ed; --live: #2fb344; --error: #d92d20;
-  --hl-kw: #cf222e; --hl-str: #0a3069; --hl-fn: #8250df; --hl-cm: #6e7781; --hl-num: #0550ae;
+  color-scheme: light dark;
+  --bg:      light-dark(#fbfaf8, #16181c);
+  --bg2:     light-dark(#f3f2ef, #1c1f24);
+  --fg:      light-dark(#2e3338, #d6dae0);
+  --fg-dim:  light-dark(#5a6270, #949cab);
+  --border:  light-dark(#e6e3dd, #2b3038);
+  --accent:  light-dark(#4f6ef7, #7c93ff);
+  --user-bg: light-dark(#eef1fd, #1b2030);
+  --code-bg: light-dark(#f2f1ed, #1e2128);
+  --live:    light-dark(#2fb344, #3fd158);
+  --error:   light-dark(#d92d20, #f97066);
+  --hl-kw:   light-dark(#cf222e, #ff7b72);
+  --hl-str:  light-dark(#0a3069, #a5d6ff);
+  --hl-fn:   light-dark(#8250df, #d2a8ff);
+  --hl-cm:   light-dark(#6e7781, #8b949e);
+  --hl-num:  light-dark(#0550ae, #79c0ff);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181c; --bg2: #1c1f24; --fg: #d6dae0; --fg-dim: #949cab;
-    --border: #2b3038; --accent: #7c93ff; --user-bg: #1b2030;
-    --code-bg: #1e2128; --live: #3fd158; --error: #f97066;
-    --hl-kw: #ff7b72; --hl-str: #a5d6ff; --hl-fn: #d2a8ff; --hl-cm: #8b949e; --hl-num: #79c0ff;
-  }
-}
+/* An explicit pick beats the OS setting; "system" just removes the attribute. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -211,6 +222,11 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .diff-line.add { background: rgba(47, 179, 68, 0.12); color: var(--live); }
 .diff-line.skip { color: var(--fg-dim); font-style: italic; }
 .pre-wrap { white-space: pre-wrap; }
+/* Thinking is skimmed, not read closely — italic marks it as a different
+   register from the assistant's actual prose. The summary needs it too: the
+   fold is closed by default, so styling only the body leaves the row you
+   actually see in the transcript looking like every other fold. */
+.thinking > summary { font-style: italic; }
 .thinking .fold-body { color: var(--fg-dim); font-style: italic; }
 
 /* markdown content */
@@ -276,6 +292,8 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 }
 .panel-actions { margin-left: auto; display: flex; gap: 0.4rem; }
 .chat-chips { display: flex; gap: 0.25rem; }
+/* reuses .chip / .chip.active from below; margin-left pins it to the topbar's end */
+.theme-toggle { display: flex; gap: 0.25rem; margin-left: auto; flex: none; }
 .chip {
   border: 1px solid var(--border); background: none; color: var(--fg-dim);
   border-radius: 5px; font-size: 0.75rem; padding: 0 0.45rem; cursor: pointer;

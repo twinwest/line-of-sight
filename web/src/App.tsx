@@ -8,6 +8,43 @@ export function nav(path: string): void {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
+type Theme = 'light' | 'dark' | 'system';
+const THEME_KEY = 'sight:theme';
+const THEMES: { id: Theme; icon: string; label: string }[] = [
+  { id: 'light', icon: '☀', label: 'Light' },
+  { id: 'dark', icon: '☾', label: 'Dark' },
+  { id: 'system', icon: '◐', label: 'Follow system' },
+];
+
+/** Anything unrecognised (or absent) means "follow the OS". */
+function storedTheme(): Theme {
+  const t = localStorage.getItem(THEME_KEY);
+  return t === 'light' || t === 'dark' ? t : 'system';
+}
+
+/** Sets `data-theme` on <html>; styles.css turns that into a color-scheme
+ *  override and light-dark() does the rest. The pre-paint script in
+ *  index.html duplicates this — React mounts too late to avoid a flash of the
+ *  wrong palette — so keep THEME_KEY and the attribute in sync with it. */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(storedTheme);
+  useEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+  return (
+    <span className="theme-toggle">
+      {THEMES.map((t) => (
+        <button key={t.id} className={`chip ${t.id === theme ? 'active' : ''}`}
+          title={t.label} aria-pressed={t.id === theme} onClick={() => setTheme(t.id)}>
+          {t.icon}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function App() {
   const [loc, setLoc] = useState(location.pathname + location.search);
   useEffect(() => {
@@ -26,6 +63,7 @@ export function App() {
           Line of Sight
         </a>
         <SearchBox />
+        <ThemeToggle />
       </header>
       {sessionId
         ? <SessionView key={`${sessionId}:${target ?? ''}`} id={sessionId} targetMessageId={target} />
