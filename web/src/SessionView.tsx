@@ -5,7 +5,7 @@ import {
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
 import { pendingBlockId, toolOutcomes } from './asks';
-import { EventRow, hasEventHead, OutcomesCtx } from './Message';
+import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { isQueueOp, queuedInputs } from './queue';
 import { SidePanel } from './SidePanel';
 import { buildTurns } from './turns';
@@ -37,6 +37,37 @@ function Generating({ since }: { since: number }) {
   const s = Math.max(0, Math.floor((now - since) / 1000));
   const elapsed = since === 0 ? '' : s < 60 ? ` ${s}s` : ` ${Math.floor(s / 60)}m ${s % 60}s`;
   return <div className="generating">✦ generating…{elapsed}</div>;
+}
+
+/** Compose the next prompt next to what it replies to; the only action is
+ *  Copy — the user pastes into their own CLI (SPEC §6: injection stays cut).
+ *  Deliberately not chat-shaped: collapsed behind a button, dashed "draft"
+ *  card, no submit, Enter is a newline. localStorage so navigation can't eat
+ *  a long draft. */
+function ReplyDraft({ sessionId }: { sessionId: string }) {
+  const key = `sight:draft:${sessionId}`;
+  const [text, setText] = useState(() => localStorage.getItem(key) ?? '');
+  const [open, setOpen] = useState(text !== '');
+  // focus only on click-to-open — an autoFocus'd card restored at page load
+  // would silently steal the keyboard from the transcript
+  const clicked = useRef(false);
+  if (!open) {
+    return (
+      <button className="draft-toggle"
+        onClick={() => { clicked.current = true; setOpen(true); }}>✎ Draft reply</button>
+    );
+  }
+  return (
+    <div className="draft-card">
+      <div className="draft-head">
+        <span>Draft — copy into your terminal to send</span>
+        <CopyButton text={() => text} label="Copy for CLI" />
+      </div>
+      <textarea rows={3} value={text} placeholder="Write your reply here…"
+        ref={(el) => { if (clicked.current) { el?.focus(); clicked.current = false; } }}
+        onChange={(e) => { setText(e.target.value); localStorage.setItem(key, e.target.value); }} />
+    </div>
+  );
 }
 
 export function SessionView({ id, targetMessageId = null }:
@@ -294,6 +325,7 @@ export function SessionView({ id, targetMessageId = null }:
               <span className="queued-tag">⏳ queued</span>{text}
             </div>
           ))}
+          <ReplyDraft key={id} sessionId={id} />
         </div>
         {openChat && (
           <SidePanel

@@ -280,6 +280,30 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   letter-spacing: 0.05em; margin-right: 0.6rem;
 }
 
+/* reply draft at the transcript tail: compose the next prompt beside what it
+   replies to; Copy is the only action (SPEC §6 — no injection). Dashed border
+   = draft, not a message — must never read as a chat input. */
+.draft-toggle {
+  display: block; background: none; border: none; cursor: pointer;
+  color: var(--fg-dim); font: inherit; font-size: 0.8rem;
+  padding: 0.2rem 0.6rem; border-radius: 5px; margin-top: 0.75rem;
+}
+.draft-toggle:hover { background: var(--bg2); color: var(--fg); }
+.draft-card {
+  border: 1px dashed var(--border); border-radius: 10px; background: var(--bg2);
+  padding: 0.5rem 0.75rem; margin-top: 0.75rem;
+}
+.draft-head {
+  display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem;
+  color: var(--fg-dim); font-size: 0.75rem;
+}
+.draft-head .copy-btn { margin-left: auto; }
+.draft-card textarea {
+  width: 100%; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.6rem;
+  font: inherit; font-size: 0.85rem; line-height: 1.5; resize: vertical;
+}
+
 /* markdown content */
 .md { overflow-wrap: break-word; }
 /* The UA default 1em left the paragraph gap barely above the 1.65em line gap.

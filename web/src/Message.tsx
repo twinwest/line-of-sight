@@ -23,7 +23,7 @@ function copy(text: string): void {
   void navigator.clipboard.writeText(text);
 }
 
-function CopyButton({ text, label = 'Copy' }: { text: () => string; label?: string }) {
+export function CopyButton({ text, label = 'Copy' }: { text: () => string; label?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button className="copy-btn" onClick={() => {
