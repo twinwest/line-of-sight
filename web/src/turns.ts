@@ -21,10 +21,16 @@ function blocks(e: StoredEvent): RenderBlock[] {
  *  so they are dialogue with the user, not machine plumbing. */
 function isVisible(e: StoredEvent): boolean {
   if (e.kind !== 'message') return false;
+  if (e.role === 'assistant') return blocks(e).some((b) => b.type === 'text' || isBlockingUse(b));
+  return isUserPrompt(e);
+}
+
+/** A real user prompt: not a tool_result carrier, not CLI plumbing
+ *  (<command-name>, <task-notification>, … — same '<' heuristic as titles).
+ *  Also the draft card's "the conversation moved on" signal. */
+export function isUserPrompt(e: StoredEvent): boolean {
+  if (e.kind !== 'message' || e.role !== 'user') return false;
   const bs = blocks(e);
-  if (e.role === 'assistant') return bs.some((b) => b.type === 'text' || isBlockingUse(b));
-  // user: a real prompt, not a tool_result carrier, not CLI plumbing
-  // (<command-name>, <task-notification>, … — same '<' heuristic as titles)
   if (bs.length === 0 || bs.every((b) => b.type === 'tool_result' || b.type === 'raw')) return false;
   const firstText = bs.find((b) => b.type === 'text');
   return firstText?.type === 'text' && !firstText.markdown.trimStart().startsWith('<');

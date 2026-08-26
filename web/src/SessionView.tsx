@@ -9,7 +9,7 @@ import { pendingBlockId, toolOutcomes } from './asks';
 import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { isQueueOp, queuedInputs } from './queue';
 import { SidePanel } from './SidePanel';
-import { buildTurns } from './turns';
+import { buildTurns, isUserPrompt } from './turns';
 
 const RUNNING_MS = 60_000;
 
@@ -45,13 +45,28 @@ function Generating({ since }: { since: number }) {
  *  Deliberately not chat-shaped: collapsed behind a button, dashed "draft"
  *  card, no submit, Enter is a newline. localStorage so navigation can't eat
  *  a long draft. */
-function ReplyDraft({ sessionId }: { sessionId: string }) {
+function ReplyDraft({ sessionId, events }: { sessionId: string; events: StoredEvent[] }) {
   const key = `sight:draft:${sessionId}`;
+  const copiedKey = `sight:draft-copied:${sessionId}`;
   const [text, setText] = useState(() => localStorage.getItem(key) ?? '');
   const [open, setOpen] = useState(text !== '');
   // focus only on click-to-open — an autoFocus'd card restored at page load
   // would silently steal the keyboard from the transcript
   const clicked = useRef(false);
+
+  // A copied draft clears once ANY newer user prompt arrives — the
+  // conversation moved on, so the draft was sent or superseded (owner's
+  // call: simpler than text-matching the delivered message). Editing after
+  // Copy removes the stamp below, so writing that was never copied in its
+  // current form is never auto-cleared.
+  useEffect(() => {
+    const copiedAt = Number(localStorage.getItem(copiedKey) ?? 0);
+    if (!copiedAt || !events.some((e) => e.ts > copiedAt && isUserPrompt(e))) return;
+    localStorage.removeItem(key);
+    localStorage.removeItem(copiedKey);
+    setText('');
+    setOpen(false);
+  }, [events, key, copiedKey]);
 
   // card ⇄ toggle swaps morph via the View Transitions API (both elements
   // share a view-transition-name in styles.css). flushSync so the DOM change
@@ -78,12 +93,19 @@ function ReplyDraft({ sessionId }: { sessionId: string }) {
         <button className="copy-btn" title="Minimize — draft kept (Esc)"
           onClick={() => swap(false)}>−</button>
         <CopyButton text={() => text} label="Copy for CLI"
-          onCopied={() => setTimeout(() => swap(false), 1000)} />
+          onCopied={() => {
+            localStorage.setItem(copiedKey, String(Date.now()));
+            setTimeout(() => swap(false), 1000);
+          }} />
       </div>
       <textarea rows={3} value={text} placeholder="Write your reply here…"
         ref={(el) => { if (clicked.current) { el?.focus(); clicked.current = false; } }}
         onKeyDown={(e) => { if (e.key === 'Escape' && !e.nativeEvent.isComposing) swap(false); }}
-        onChange={(e) => { setText(e.target.value); localStorage.setItem(key, e.target.value); }} />
+        onChange={(e) => {
+          setText(e.target.value);
+          localStorage.setItem(key, e.target.value);
+          localStorage.removeItem(copiedKey);   // edited since copy → re-armed as uncopied
+        }} />
     </div>
   );
 }
@@ -343,7 +365,7 @@ export function SessionView({ id, targetMessageId = null }:
               <span className="queued-tag">⏳ queued</span>{text}
             </div>
           ))}
-          <ReplyDraft key={id} sessionId={id} />
+          <ReplyDraft key={id} sessionId={id} events={events} />
         </div>
         {openChat && (
           <SidePanel
