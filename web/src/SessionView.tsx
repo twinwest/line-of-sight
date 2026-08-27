@@ -5,9 +5,9 @@ import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
+import { dialectFor, genericDialect, type Dialect } from '../../src/shared/dialects';
 import { pendingBlockId, toolOutcomes, toolUseIds } from './asks';
-import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
-import { isQueueOp, queuedInputs } from './queue';
+import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
 import { DOT_TITLE, RUNNING_MS, sessionStatus } from './status';
 import { SidePanel } from './SidePanel';
@@ -45,7 +45,8 @@ function Generating({ since }: { since: number }) {
  *  Deliberately not chat-shaped: collapsed behind a button, dashed "draft"
  *  card, no submit, Enter is a newline. localStorage so navigation can't eat
  *  a long draft. */
-function ReplyDraft({ sessionId, events }: { sessionId: string; events: StoredEvent[] }) {
+function ReplyDraft({ sessionId, events, dialect }:
+    { sessionId: string; events: StoredEvent[]; dialect: Dialect }) {
   const key = `sight:draft:${sessionId}`;
   const copiedKey = `sight:draft-copied:${sessionId}`;
   const [text, setText] = useState(() => localStorage.getItem(key) ?? '');
@@ -61,12 +62,12 @@ function ReplyDraft({ sessionId, events }: { sessionId: string; events: StoredEv
   // current form is never auto-cleared.
   useEffect(() => {
     const copiedAt = Number(localStorage.getItem(copiedKey) ?? 0);
-    if (!copiedAt || !events.some((e) => e.ts > copiedAt && isUserPrompt(e))) return;
+    if (!copiedAt || !events.some((e) => e.ts > copiedAt && isUserPrompt(e, dialect))) return;
     localStorage.removeItem(key);
     localStorage.removeItem(copiedKey);
     setText('');
     setOpen(false);
-  }, [events, key, copiedKey]);
+  }, [events, key, copiedKey, dialect]);
 
   // card ⇄ toggle swaps morph via the View Transitions API (both elements
   // share a view-transition-name in styles.css). flushSync so the DOM change
@@ -265,25 +266,32 @@ export function SessionView({ id, targetMessageId = null }:
   // the timestamp heuristic covers agents/versions that don't expose one
   const running = session?.live || Date.now() - lastActivity < RUNNING_MS;
 
+  // the viewed session's presentation policy — stable per adapter, so the
+  // memoized rows below don't reconcile on every meta poll
+  const dialect = useMemo(() => (session ? dialectFor(session.adapter) : genericDialect),
+    [session?.adapter]);
+
   // trailing tool run: expanded while running (live-follow), folds once the
   // session goes idle. Queue bookkeeping rows feed the queued strip below
   // instead of rendering (or padding the fold counts).
-  const items = useMemo(() => buildTurns(events.filter((e) => !isQueueOp(e)), { foldTail: !running }),
-    [events, running]);
+  const items = useMemo(
+    () => buildTurns(events.filter((e) => !dialect.isQueueOp(e)), dialect, { foldTail: !running }),
+    [events, running, dialect]);
 
   // input typed while the agent works, not yet read by it — the CLI shows
   // this under its spinner; gate on `running` so a session killed with a
   // stale queue doesn't dangle it forever
-  const queued = useMemo(() => running ? queuedInputs(events) : [], [events, running]);
+  const queued = useMemo(() => running ? dialect.queuedInputs(events) : [],
+    [events, running, dialect]);
 
-  // blocking tools (AskUserQuestion / ExitPlanMode): pair each use with its
+  // blocking tools (the dialect's isBlockingUse): pair each use with its
   // result so the cards can mark chosen/approved, and detect "the CLI is
   // parked on a question at the tail". Gated on `running`: a session killed
   // mid-question must not claim "waiting for you" forever.
   const outcomes = useMemo(() => toolOutcomes(events), [events]);
   const useIds = useMemo(() => toolUseIds(events), [events]);
-  const pendingEventId = useMemo(() => running ? pendingBlockId(events, outcomes) : null,
-    [events, outcomes, running]);
+  const pendingEventId = useMemo(() => running ? pendingBlockId(events, outcomes, dialect) : null,
+    [events, outcomes, running, dialect]);
   // Task tool_use id → the subagent session it spawned, so the Task row can
   // open it. A child whose meta.json was missing has no toolUseId and simply
   // never gets a row link (it is still reachable from the header count).
@@ -310,7 +318,7 @@ export function SessionView({ id, targetMessageId = null }:
   const renderRun = (evs: StoredEvent[]) => {
     let prevRole: string | null = null;
     return evs.map((e) => {
-      const headed = hasEventHead(e);
+      const headed = hasEventHead(e, dialect);
       const showRole = headed && e.role !== prevRole;
       if (headed) prevRole = e.role;
       return renderEvent(e, showRole);
@@ -330,8 +338,7 @@ export function SessionView({ id, targetMessageId = null }:
              onClick={(e) => { e.preventDefault(); nav(`/s/${session.parentId!}`); }}>↑ parent</a>
         )}
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
-        <span className="badge">{session.parentId ? 'subagent'
-          : session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
+        <span className="badge">{session.parentId ? 'subagent' : dialect.displayName}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
         {/* also the only way into a subagent whose Task row is outside the
@@ -378,6 +385,7 @@ export function SessionView({ id, targetMessageId = null }:
             ))}
         </div>
       </div>
+      <DialectCtx.Provider value={dialect}>
       <OutcomesCtx.Provider value={outcomesCtx}>
       <div className="view-split">
         <div className="transcript" ref={scrollRef} onScroll={onScroll} onMouseUp={onMouseUp}>
@@ -435,7 +443,7 @@ export function SessionView({ id, targetMessageId = null }:
               <span className="queued-tag">⏳ queued</span>{text}
             </div>
           ))}
-          <ReplyDraft key={id} sessionId={id} events={events} />
+          <ReplyDraft key={id} sessionId={id} events={events} dialect={dialect} />
         </div>
         {openChat && (
           <SidePanel
@@ -449,6 +457,7 @@ export function SessionView({ id, targetMessageId = null }:
         )}
       </div>
       </OutcomesCtx.Provider>
+      </DialectCtx.Provider>
       {targetMessageId && (
         <button className="jump-latest" onClick={() => nav(`/s/${id}`)}>↓ Latest</button>
       )}

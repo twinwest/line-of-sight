@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { claudeCodeDialect } from '../src/shared/dialects/index.js';
 import { buildTurns } from '../web/src/turns.js';
 import type { StoredEvent } from '../src/shared/types.js';
 
@@ -42,32 +43,32 @@ describe('buildTurns (step folding: prose always visible)', () => {
       narration('n2'), tool('t3'), toolResult('r3'),
       narration('c1'),
     ];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual([
       'p1', 'n1', 'fold(t1,r1,th1,t2,r2)', 'n2', 'fold(t3,r3)', 'c1',
     ]);
   });
 
   it('plumbing user messages and meta fold with the run', () => {
     const events = [prompt('p1'), tool('t1'), plumbing('x1'), meta('m1'), narration('c1')];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual([
       'p1', 'fold(t1,x1,m1)', 'c1',
     ]);
   });
 
   it('a single non-prose event stays inline', () => {
     const events = [prompt('p1'), tool('t1'), narration('c1')];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['p1', 't1', 'c1']);
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual(['p1', 't1', 'c1']);
   });
 
   it('trailing run stays expanded while running, folds when idle', () => {
     const events = [prompt('p1'), narration('n1'), tool('t1'), toolResult('r1'), tool('t2')];
-    expect(shape(buildTurns(events))).toEqual(['p1', 'n1', 't1', 'r1', 't2']);
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['p1', 'n1', 'fold(t1,r1,t2)']);
+    expect(shape(buildTurns(events, claudeCodeDialect))).toEqual(['p1', 'n1', 't1', 'r1', 't2']);
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual(['p1', 'n1', 'fold(t1,r1,t2)']);
   });
 
   it('counts tool calls per fold', () => {
     const events = [prompt('p1'), tool('t1'), tool('t2'), toolResult('r1'), narration('c1')];
-    const fold = buildTurns(events, { foldTail: true }).find((i) => i.type === 'fold')!;
+    const fold = buildTurns(events, claudeCodeDialect, { foldTail: true }).find((i) => i.type === 'fold')!;
     expect(fold.type === 'fold' && fold.toolCalls).toBe(2);
   });
 
@@ -76,13 +77,13 @@ describe('buildTurns (step folding: prose always visible)', () => {
     const events = [prompt('p1'),
       tool('t1'), toolResult('r1'), thinking('th1'), tool('t2'), toolResult('r2'),
       plumbing('x1'), meta('m1'), narration('c1')];
-    const fold = buildTurns(events, { foldTail: true }).find((i) => i.type === 'fold')!;
+    const fold = buildTurns(events, claudeCodeDialect, { foldTail: true }).find((i) => i.type === 'fold')!;
     expect(fold.type === 'fold' && fold.steps).toBe(5);
   });
 
   it('session preamble (meta before first prompt) folds', () => {
     const events = [meta('m1'), meta('m2'), prompt('p1'), narration('c1')];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['fold(m1,m2)', 'p1', 'c1']);
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual(['fold(m1,m2)', 'p1', 'c1']);
   });
 
   it('blocking tools (AskUserQuestion / ExitPlanMode) never fold', () => {
@@ -92,7 +93,7 @@ describe('buildTurns (step folding: prose always visible)', () => {
     });
     const events = [prompt('p1'), tool('t1'), toolResult('r1'),
       ask('a1', 'AskUserQuestion'), toolResult('r2'), ask('x1', 'ExitPlanMode'), narration('c1')];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual([
       'p1', 'fold(t1,r1)', 'a1', 'r2', 'x1', 'c1',
     ]);
   });
@@ -107,7 +108,7 @@ describe('buildTurns (step folding: prose always visible)', () => {
       write('w2', { file_path: '/repo/README.md', content: '# Readme' }),
       write('w3', { file_path: '/home/u/.claude/plans/plan-mode-x.md' }), // no content → drift
       narration('c1')];
-    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual([
       'p1', 'w1', 'fold(w2,w3)', 'c1',
     ]);
   });

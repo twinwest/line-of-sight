@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { claudeCodeDialect } from '../src/shared/dialects/index.js';
 import type { RenderBlock, StoredEvent } from '../src/shared/types.js';
-import {
-  askQuestions, chosenAnswer, pendingBlockId, planMarkdown, toolOutcomes,
-} from '../web/src/asks.js';
+import { pendingBlockId, toolOutcomes } from '../web/src/asks.js';
+
+const { chosenAnswer, planMarkdown } = claudeCodeDialect;
+// the dialect method takes the block; the raw-input shape assertions predate it
+const askQuestions = (input: unknown) => claudeCodeDialect.askQuestions(
+  { type: 'tool_use', id: null, toolName: 'AskUserQuestion', summary: '', input });
 
 // Shapes below are lifted from real Claude Code transcripts (2026-08), not
 // invented — the parsing is substring-based on purpose, and these pin the
@@ -70,16 +74,16 @@ describe('toolOutcomes + pendingBlockId', () => {
 
   it('an unanswered blocking use at the tail is pending; answered is not', () => {
     const waiting = [ask('a1', 't1')];
-    expect(pendingBlockId(waiting, toolOutcomes(waiting))).toBe('a1');
+    expect(pendingBlockId(waiting, toolOutcomes(waiting), claudeCodeDialect)).toBe('a1');
     const answered = [ask('a1', 't1'), result('r1', 't1')];
-    expect(pendingBlockId(answered, toolOutcomes(answered))).toBeNull();
+    expect(pendingBlockId(answered, toolOutcomes(answered), claudeCodeDialect)).toBeNull();
   });
 
   it('pre-id rows and ordinary tail messages never read as pending', () => {
     const oldData = [ask('a1', null)];
-    expect(pendingBlockId(oldData, toolOutcomes(oldData))).toBeNull();
+    expect(pendingBlockId(oldData, toolOutcomes(oldData), claudeCodeDialect)).toBeNull();
     const prose = [ask('a1', 't1'), result('r1', 't1'),
       msg('m1', 'assistant', [{ type: 'text', markdown: 'ok' }])];
-    expect(pendingBlockId(prose, toolOutcomes(prose))).toBeNull();
+    expect(pendingBlockId(prose, toolOutcomes(prose), claudeCodeDialect)).toBeNull();
   });
 });

@@ -2,14 +2,13 @@ import { createContext, memo, useContext, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import {
+  genericDialect, type AskQuestion, type Dialect, type Plumbing,
+} from '../../src/shared/dialects';
 import { nav } from './App';
 import type { RenderBlock, SessionMeta, StoredEvent } from './api';
-import {
-  askQuestions, chosenAnswer, isPlanFileWrite, planMarkdown,
-  type AskQuestion, type ToolOutcome,
-} from './asks';
+import { type ToolOutcome } from './asks';
 import { diffLines } from './diff';
-import { parsePlumbing } from './plumbing';
 
 /** tool_use id → result pairing plus "which event is the CLI parked on",
  *  built once per merge in SessionView. A context, not a prop, so the
@@ -23,6 +22,11 @@ export const OutcomesCtx = createContext<{
   /** tool_use id → the subagent session that call spawned (Task rows). */
   subagents: Map<string, SessionMeta>;
 }>({ outcomes: new Map(), useIds: new Set(), pendingEventId: null, subagents: new Map() });
+
+/** The viewed session's presentation policy (see src/shared/dialects/).
+ *  Default = generic: an unprovided tree renders every tool as a plain fold —
+ *  fail-open, never a crash. */
+export const DialectCtx = createContext<Dialect>(genericDialect);
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -74,36 +78,16 @@ function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
   );
 }
 
-/** Semantic render for file-editing tools; null → fall back to raw JSON. */
-function editDiff(toolName: string, input: unknown): React.ReactNode | null {
-  const i = (input ?? {}) as Record<string, unknown>;
-  if (toolName === 'Edit' && typeof i.old_string === 'string' && typeof i.new_string === 'string') {
-    return <DiffView oldText={i.old_string} newText={i.new_string} />;
-  }
-  if (toolName === 'Write' && typeof i.content === 'string') {
-    return <DiffView oldText="" newText={i.content} />;
-  }
-  if (toolName === 'MultiEdit' && Array.isArray(i.edits)) {
-    const edits = i.edits.filter((e): e is { old_string: string; new_string: string } => {
-      const ed = e as Record<string, unknown>;
-      return typeof ed.old_string === 'string' && typeof ed.new_string === 'string';
-    });
-    if (!edits.length) return null;
-    return <>{edits.map((e, idx) =>
-      <DiffView key={idx} oldText={e.old_string} newText={e.new_string} />)}</>;
-  }
-  return null;
-}
-
 type ToolUseBlock = Extract<RenderBlock, { type: 'tool_use' }>;
 
-/** AskUserQuestion, read-only mirror of the CLI's question UI: same structure
+/** Question card (claude: AskUserQuestion) — read-only mirror of the CLI's question UI: same structure
  *  (header chip, options with descriptions, previews), chosen option marked
  *  once the answer lands. A free-text ("Other") answer shows as its own row. */
 function AskCard({ block, questions, eventId }: {
   block: ToolUseBlock; questions: AskQuestion[]; eventId: string;
 }) {
   const { outcomes, pendingEventId } = useContext(OutcomesCtx);
+  const dialect = useContext(DialectCtx);
   const outcome = block.id ? outcomes.get(block.id) : undefined;
   const waiting = !outcome && eventId === pendingEventId;
   return (
@@ -114,7 +98,7 @@ function AskCard({ block, questions, eventId }: {
           : 'question'}
       </div>
       {questions.map((q, qi) => {
-        const answer = outcome && !outcome.isError ? chosenAnswer(outcome.output, q.question) : null;
+        const answer = outcome && !outcome.isError ? dialect.chosenAnswer(outcome.output, q.question) : null;
         const picked = (label: string) => answer !== null
           && (answer === label || (q.multiSelect && answer.split(', ').includes(label)));
         return (
@@ -145,12 +129,13 @@ function AskCard({ block, questions, eventId }: {
   );
 }
 
-/** ExitPlanMode: the plan is a document the user must read to decide, so it
+/** Plan card (claude: ExitPlanMode): the plan is a document the user must read to decide, so it
  *  renders in full — pending and after — with the approval state on top. */
 function PlanCard({ block, eventId }: { block: ToolUseBlock; eventId: string }) {
   const { outcomes, pendingEventId } = useContext(OutcomesCtx);
+  const dialect = useContext(DialectCtx);
   const outcome = block.id ? outcomes.get(block.id) : undefined;
-  const plan = planMarkdown(block.input, outcome?.output ?? null);
+  const plan = dialect.planMarkdown(block.input, outcome?.output ?? null);
   const waiting = !outcome && eventId === pendingEventId;
   return (
     <div className={`plan-card ${waiting ? 'pending' : ''} ${outcome?.isError ? 'rejected' : ''}`}>
@@ -171,13 +156,10 @@ function PlanCard({ block, eventId }: { block: ToolUseBlock; eventId: string }) 
   );
 }
 
-/** A Write into ~/.claude/plans/ — the plan being drafted, visible before
- *  the (batch-flushed) ExitPlanMode can land. No outcome/pending logic:
- *  Write returns in milliseconds, there is no waiting state. */
-function PlanDraftCard({ block }: { block: ToolUseBlock }) {
-  // ponytail: Write only — Edits to the plan file are deltas that can't
-  // reconstruct the full text, so they stay folded as ordinary steps
-  const content = (block.input as { content: string }).content;
+/** A plan-draft write (dialect.planDraft) — the plan being drafted, visible
+ *  before the (batch-flushed) blocking plan use can land. No outcome/pending
+ *  logic: the write returns in milliseconds, there is no waiting state. */
+function PlanDraftCard({ content }: { content: string }) {
   return (
     <div className="plan-card">
       <div className="card-status">
@@ -208,6 +190,7 @@ function SubagentLink({ child }: { child: SessionMeta }) {
 
 function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
   const { outcomes, useIds, subagents } = useContext(OutcomesCtx);
+  const dialect = useContext(DialectCtx);
   switch (block.type) {
     case 'text':
       return (
@@ -228,16 +211,16 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       );
     }
     case 'tool_use': {
-      // blocking tools render as cards, not folds; shape drift → generic fold
-      if (block.toolName === 'AskUserQuestion') {
-        const questions = askQuestions(block.input);
-        if (questions) return <AskCard block={block} questions={questions} eventId={eventId} />;
-      }
-      if (block.toolName === 'ExitPlanMode') {
+      // agent-specific cards (questions, plans, drafts) come from the
+      // dialect; shape drift → generic fold
+      const questions = dialect.askQuestions(block);
+      if (questions) return <AskCard block={block} questions={questions} eventId={eventId} />;
+      if (dialect.isPlanUse(block)) {
         return <PlanCard block={block} eventId={eventId} />;
       }
-      if (isPlanFileWrite(block)) {
-        return <PlanDraftCard block={block} />;
+      const draft = dialect.planDraft(block);
+      if (draft !== null) {
+        return <PlanDraftCard content={draft} />;
       }
       // one action = one row: the fold owns its result (SPEC C2 "click to
       // expand full input/output"); summary is "Name arg" (adapter's
@@ -258,7 +241,8 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
             </span>
             {child && <SubagentLink child={child} />}
           </summary>
-          {editDiff(block.toolName, block.input)
+          {dialect.editDiff(block)?.map((p, idx) =>
+            <DiffView key={idx} oldText={p.oldText} newText={p.newText} />)
             ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
           {result && <pre className="fold-body scrolly">{result.output}</pre>}
         </details>
@@ -307,25 +291,26 @@ export function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean 
 }
 
 /** CLI-plumbing user message (task notifications, command wrappers, …). */
-function plumbingOf(event: StoredEvent): ReturnType<typeof parsePlumbing> {
+function plumbingOf(event: StoredEvent, dialect: Dialect): Plumbing | null {
   if (event.kind !== 'message' || event.role !== 'user' || !Array.isArray(event.body)) return null;
   const first = (event.body as RenderBlock[]).find((b) => b.type === 'text');
-  return first?.type === 'text' ? parsePlumbing(first.markdown) : null;
+  return first?.type === 'text' ? dialect.plumbing(first.markdown) : null;
 }
 
 /** Only prose messages get a head (role label, Copy Markdown, timestamp):
  *  tool_use/thinking-only rows have nothing to copy — a hover head there is
  *  a lie (and an empty spacer line). Plumbing is not the user speaking. */
-export function hasEventHead(event: StoredEvent): boolean {
+export function hasEventHead(event: StoredEvent, dialect: Dialect): boolean {
   if (event.kind !== 'message' || !Array.isArray(event.body)) return false;
   const blocks = event.body as RenderBlock[];
   return !isToolFlow(event.role, blocks)
     && blocks.some((b) => b.type === 'text')
-    && !plumbingOf(event);
+    && !plumbingOf(event, dialect);
 }
 
 export const EventRow = memo(function EventRow({ event, showRole = true }:
     { event: StoredEvent; showRole?: boolean }) {
+  const dialect = useContext(DialectCtx);
   if (event.kind !== 'message') {
     const body = event.body as { label?: string; raw?: unknown } | null;
     const label = event.kind === 'meta' ? (body?.label ?? 'meta') : 'unknown entry';
@@ -343,7 +328,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
   const blocks = event.body as RenderBlock[];
 
   // plumbing user lines render as a fold, never as user speech
-  const plumbing = plumbingOf(event);
+  const plumbing = plumbingOf(event, dialect);
   if (plumbing) {
     const label = plumbing.label.length > 100 ? plumbing.label.slice(0, 99) + '…' : plumbing.label;
     const rawText = blocks.find((b) => b.type === 'text');
@@ -370,7 +355,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
   const md = () => messageMarkdown(blocks);
   return (
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
-      {hasEventHead(event) && (
+      {hasEventHead(event, dialect) && (
         <div className="event-head">
           <span className="role">{showRole ? event.role : ''}</span>
           <span className="event-actions">

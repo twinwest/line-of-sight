@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { dialectFor } from '../../src/shared/dialects';
 import { nav } from './App';
 import { fetchSessions, type SessionMeta } from './api';
 import { loadSeen } from './seen';
@@ -77,7 +78,7 @@ export function SessionList() {
              onClick={(e) => { e.preventDefault(); nav(`/s/${s.id}`); }}>
             <span className={`dot ${st}`} title={DOT_TITLE[st]} />
             <span className="row-title">{s.title || '(untitled)'}</span>
-            <span className="badge">{s.adapter === 'claude-code' ? 'claude' : s.adapter}</span>
+            <span className="badge">{dialectFor(s.adapter).displayName}</span>
             <span className="row-dir">{shortDir(s.projectDir)}</span>
             <span className="row-count">{s.messageCount}</span>
             <span className="row-time">{fmtTime(s.updatedAt, now)}</span>

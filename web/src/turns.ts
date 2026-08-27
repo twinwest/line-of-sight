@@ -1,5 +1,5 @@
+import type { Dialect } from '../../src/shared/dialects';
 import type { RenderBlock, StoredEvent } from './api';
-import { isBlockingUse, isPlanFileWrite } from './asks';
 
 // Step folding (SPEC C2, DECISIONS 2026-08-25): sight is a readable re-layout
 // of the CLI — every piece of prose the CLI shows stays visible; what folds
@@ -17,24 +17,27 @@ function blocks(e: StoredEvent): RenderBlock[] {
 }
 
 /** Prose the reader must always see: real user prompts, assistant text,
- *  blocking tools (AskUserQuestion / ExitPlanMode) — the CLI stops on those,
- *  so they are dialogue with the user, not machine plumbing — and plan-file
- *  Writes, the only pre-approval sighting of a pending plan. */
-function isVisible(e: StoredEvent): boolean {
+ *  blocking tools (the dialect's isBlockingUse — the CLI stops on those, so
+ *  they are dialogue with the user, not machine plumbing) and plan drafts,
+ *  the only pre-approval sighting of a pending plan. */
+function isVisible(e: StoredEvent, dialect: Dialect): boolean {
   if (e.kind !== 'message') return false;
-  if (e.role === 'assistant') return blocks(e).some((b) => b.type === 'text' || isBlockingUse(b) || isPlanFileWrite(b));
-  return isUserPrompt(e);
+  if (e.role === 'assistant') {
+    return blocks(e).some((b) => b.type === 'text' || dialect.isBlockingUse(b)
+      || dialect.planDraft(b) !== null);
+  }
+  return isUserPrompt(e, dialect);
 }
 
 /** A real user prompt: not a tool_result carrier, not CLI plumbing
- *  (<command-name>, <task-notification>, … — same '<' heuristic as titles).
+ *  (<command-name>, <task-notification>, … — the dialect knows the shapes).
  *  Also the draft card's "the conversation moved on" signal. */
-export function isUserPrompt(e: StoredEvent): boolean {
+export function isUserPrompt(e: StoredEvent, dialect: Dialect): boolean {
   if (e.kind !== 'message' || e.role !== 'user') return false;
   const bs = blocks(e);
   if (bs.length === 0 || bs.every((b) => b.type === 'tool_result' || b.type === 'raw')) return false;
   const firstText = bs.find((b) => b.type === 'text');
-  return firstText?.type === 'text' && !firstText.markdown.trimStart().startsWith('<');
+  return firstText?.type === 'text' && dialect.plumbing(firstText.markdown) === null;
 }
 
 function countToolCalls(events: StoredEvent[]): number {
@@ -58,7 +61,8 @@ function countSteps(events: StoredEvent[]): number {
 
 /** foldTail: also fold the trailing run — on once the session goes idle
  *  (the 60s/busy running heuristic is the only end-of-session signal). */
-export function buildTurns(events: StoredEvent[], opts: { foldTail?: boolean } = {}): TurnItem[] {
+export function buildTurns(events: StoredEvent[], dialect: Dialect,
+    opts: { foldTail?: boolean } = {}): TurnItem[] {
   const items: TurnItem[] = [];
   let run: StoredEvent[] = [];
 
@@ -72,7 +76,7 @@ export function buildTurns(events: StoredEvent[], opts: { foldTail?: boolean } =
   };
 
   for (const e of events) {
-    if (isVisible(e)) {
+    if (isVisible(e, dialect)) {
       flush(true);
       items.push({ type: 'event', event: e });
     } else {

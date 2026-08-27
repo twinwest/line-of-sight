@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../src/adapters/claudeCode.js';
+import { claudeCodeDialect } from '../src/shared/dialects/index.js';
 import type { StoredEvent } from '../src/shared/types.js';
-import { isQueueOp, queuedInputs } from '../web/src/queue.js';
+
+const { isQueueOp, queuedInputs } = claudeCodeDialect;
 
 // Line shapes lifted from real 2026-08 transcripts (see DECISIONS 2026-08-26).
 

@@ -73,6 +73,7 @@ line-of-sight/
     store/          # sqlite schema, queries, FTS
     responders/     # Responder interface + claudeCli.ts, codexCli.ts, api.ts
     shared/         # types shared with frontend (SessionMeta, RenderBlock, ...)
+      dialects/     # per-agent presentation policy (pure functions; see §9)
   web/              # vite react app (built to web/dist, served by daemon)
   test/
   docs/
@@ -382,6 +383,22 @@ Daemon lifecycle: pidfile `~/.sight/daemon.pid`; `sight stop` sends
 SIGTERM; stale pidfiles are detected via `/api/health` probe.
 
 ## 9. Frontend structure (guidance, not pixel spec)
+
+### Per-agent presentation: dialects (src/shared/dialects/)
+
+The adapter parses transcripts into RenderBlocks; how an agent's tools
+*present* — which tool_use is a question card or a plan, how file edits
+diff, what counts as CLI plumbing, the input-queue strip — is per-agent
+presentation policy. That lives in a `Dialect`: pure
+`RenderBlock/StoredEvent → data` functions (no React, no node APIs — the
+directory is daemon-importable on purpose), dispatched by
+`dialectFor(session.adapter)` with a generic fallback whose every method
+returns null/false/[] — an agent without a dialect renders at the defensive
+floor (plain folds, no cards). Deliberately NOT adapter-side semantic
+normalization: presentation semantics churn fast and stored semantics would
+tax every iteration with a re-ingest; promote a semantic into shared types
+only once it recurs in ≥2 agents with the same shape (see DECISIONS
+2026-08-27).
 
 - Layout: left = content (list or transcript), right = collapsible side-chat
   panel. Global header: app name, reading controls, and — on the list page —

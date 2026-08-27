@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parsePlumbing } from '../web/src/plumbing.js';
+import { claudeCodeDialect } from '../src/shared/dialects/index.js';
+
+const parsePlumbing = claudeCodeDialect.plumbing;
 
 describe('parsePlumbing', () => {
   it('human prompts pass through as null', () => {

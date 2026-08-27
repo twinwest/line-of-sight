@@ -7,6 +7,9 @@ import {
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
+// Tracks the RESPONDER engine, not the viewed session's agent — so this is
+// not a dialect concern. Upgrade path: engine-provided options via
+// GET /api/responder/status once a non-Anthropic engine ships.
 const MODELS = ['', 'claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
