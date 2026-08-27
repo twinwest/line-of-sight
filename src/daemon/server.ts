@@ -31,6 +31,17 @@ export class SseHub {
 
 const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
 
+/** How long a `busy` claim is trusted with nothing moving behind it.
+ *  The CLI writes `status: busy` once at turn start and never refreshes it, so
+ *  a process that stops without writing `idle` — hung, suspended, crashed
+ *  mid-turn — would otherwise pin its session "running" for as long as the pid
+ *  lives (and abandoned `claude` processes survive for weeks). The longest
+ *  silence measured inside a genuinely running turn is ~5.5 min
+ *  (SPIKE_NOTES 2026-08-26: writes batch per assistant message), so this
+ *  leaves ample margin; overshooting only greys a dot that re-lights on the
+ *  next byte written, while undershooting is the forever-green bug. */
+const STALE_BUSY_MS = 15 * 60_000;
+
 export function buildServer(store: Store, hub: SseHub,
     liveSessions: () => Map<string, { state: 'busy' | 'waiting'; since: number }>
       = () => new Map()): FastifyInstance {
@@ -53,15 +64,21 @@ export function buildServer(store: Store, hub: SseHub,
     return base;
   });
 
-  /** Mark sessions whose agent process is active (see AgentAdapter.liveSessions). */
-  const withLive = <T extends { id: string }>(metas: T[]): T[] => {
+  /** Mark sessions whose agent process is active (see AgentAdapter.liveSessions).
+   *  A `busy` claim also has to be corroborated by something still moving —
+   *  its own status stamp or the transcript (see STALE_BUSY_MS). `waiting` is
+   *  exempt: parked on the user is legitimately open-ended, and "waiting for
+   *  you" is the signal the whole indicator exists to deliver. */
+  const withLive = <T extends { id: string; updatedAt: number }>(metas: T[]): T[] => {
     const live = liveSessions();
     if (!live.size) return metas;
+    const now = Date.now();
     return metas.map((m) => {
       const s = live.get(m.id);
-      return s
-        ? { ...m, live: true, waiting: s.state === 'waiting', busySince: s.since }
-        : m;
+      if (!s) return m;
+      const lastSign = Math.max(s.since, m.updatedAt);
+      if (s.state === 'busy' && now - lastSign > STALE_BUSY_MS) return m;
+      return { ...m, live: true, waiting: s.state === 'waiting', busySince: s.since };
     });
   };
 
