@@ -1,7 +1,11 @@
 import type { RenderBlock, StoredEvent } from '../types.js';
 
 export interface AskOption { label: string; description: string; preview?: string }
-export interface AskQuestion { question: string; header: string; multiSelect: boolean; options: AskOption[] }
+export interface AskQuestion {
+  question: string; header: string; multiSelect: boolean; options: AskOption[];
+  /** Answer-lookup key when the agent keys answers by id (codex). */
+  id?: string;
+}
 
 /** A machine-authored "user" line (task notifications, command wrappers, …). */
 export interface Plumbing {
@@ -30,8 +34,9 @@ export interface Dialect {
   /** Question-card data; null → not a question card (or shape drift). */
   askQuestions(b: RenderBlock): AskQuestion[] | null;
   /** The answer to one question, lifted from the result text; null → the
-   *  card shows no mark. */
-  chosenAnswer(output: string, question: string): string | null;
+   *  card shows no mark. Takes the whole AskQuestion — agents key answers
+   *  differently (claude: question text; codex: question id). */
+  chosenAnswer(output: string, question: AskQuestion): string | null;
   /** tool_use that proposes a plan for approval. */
   isPlanUse(b: RenderBlock): boolean;
   /** Plan markdown from a plan use's input, result echo as fallback. */

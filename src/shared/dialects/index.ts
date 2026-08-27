@@ -1,9 +1,11 @@
 import type { SessionMeta } from '../types.js';
 import { claudeCodeDialect } from './claudeCode.js';
+import { codexDialect } from './codex.js';
 import type { Dialect } from './types.js';
 
 export type { AskOption, AskQuestion, Dialect, EditPair, Plumbing } from './types.js';
 export { claudeCodeDialect } from './claudeCode.js';
+export { codexDialect } from './codex.js';
 
 /** The defensive floor an unknown agent gets: no cards, no queue strip, no
  *  plumbing detection — every tool is a generic fold, every user text line
@@ -25,6 +27,7 @@ export const genericDialect: Dialect = {
 /** Closed dispatch — extend per agent alongside the adapter union, no
  *  registry magic. */
 export function dialectFor(adapter: SessionMeta['adapter']): Dialect {
-  return adapter === 'claude-code' ? claudeCodeDialect
-    : { ...genericDialect, displayName: adapter };
+  if (adapter === 'claude-code') return claudeCodeDialect;
+  if (adapter === 'codex') return codexDialect;
+  return { ...genericDialect, displayName: adapter };
 }

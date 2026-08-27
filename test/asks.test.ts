@@ -3,10 +3,12 @@ import { claudeCodeDialect } from '../src/shared/dialects/index.js';
 import type { RenderBlock, StoredEvent } from '../src/shared/types.js';
 import { pendingBlockId, toolOutcomes } from '../web/src/asks.js';
 
-const { chosenAnswer, planMarkdown } = claudeCodeDialect;
-// the dialect method takes the block; the raw-input shape assertions predate it
+const { planMarkdown } = claudeCodeDialect;
+// the dialect methods take blocks/AskQuestions; the raw-shape assertions predate that
 const askQuestions = (input: unknown) => claudeCodeDialect.askQuestions(
   { type: 'tool_use', id: null, toolName: 'AskUserQuestion', summary: '', input });
+const chosenAnswer = (output: string, question: string) => claudeCodeDialect.chosenAnswer(
+  output, { question, header: '', multiSelect: false, options: [] });
 
 // Shapes below are lifted from real Claude Code transcripts (2026-08), not
 // invented — the parsing is substring-based on purpose, and these pin the

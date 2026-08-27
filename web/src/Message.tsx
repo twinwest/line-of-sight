@@ -98,7 +98,7 @@ function AskCard({ block, questions, eventId }: {
           : 'question'}
       </div>
       {questions.map((q, qi) => {
-        const answer = outcome && !outcome.isError ? dialect.chosenAnswer(outcome.output, q.question) : null;
+        const answer = outcome && !outcome.isError ? dialect.chosenAnswer(outcome.output, q) : null;
         const picked = (label: string) => answer !== null
           && (answer === label || (q.multiSelect && answer.split(', ').includes(label)));
         return (

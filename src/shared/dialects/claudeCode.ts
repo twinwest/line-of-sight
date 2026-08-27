@@ -62,10 +62,10 @@ function askQuestions(b: RenderBlock): AskQuestion[] | null {
 /** The answer to one question, lifted from the result text — the CLI writes
  *  `Your questions have been answered: "<question>"="<answer>" …`. Substring
  *  search, not a grammar: format drift returns null (card shows no mark). */
-function chosenAnswer(output: string, question: string): string | null {
-  const at = output.indexOf(`"${question}"="`);
+function chosenAnswer(output: string, q: AskQuestion): string | null {
+  const at = output.indexOf(`"${q.question}"="`);
   if (at < 0) return null;
-  const rest = output.slice(at + question.length + 4);
+  const rest = output.slice(at + q.question.length + 4);
   const end = rest.indexOf('"');
   return end > 0 ? rest.slice(0, end) : null;
 }
