@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT DEFAULT '', title_source TEXT,
   started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
   byte_offset INTEGER DEFAULT 0,
-  parent_id TEXT, tool_use_id TEXT
+  parent_id TEXT, tool_use_id TEXT,
+  turn_open INTEGER, turn_started_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
@@ -51,6 +52,7 @@ interface SessionRow {
   title: string; title_source: TitleSource | null;
   started_at: number; updated_at: number; message_count: number; byte_offset: number;
   parent_id: string | null; tool_use_id: string | null;
+  turn_open: number | null; turn_started_at: number | null;
 }
 
 function toMeta(r: SessionRow): SessionMeta {
@@ -59,6 +61,8 @@ function toMeta(r: SessionRow): SessionMeta {
     projectDir: r.project_dir, title: r.title,
     startedAt: r.started_at, updatedAt: r.updated_at, messageCount: r.message_count,
     parentId: r.parent_id, toolUseId: r.tool_use_id,
+    turnOpen: r.turn_open == null ? null : r.turn_open === 1,
+    turnStartedAt: r.turn_started_at,
   };
 }
 
@@ -86,7 +90,8 @@ export class Store {
     // columns added after the tables shipped — CREATE TABLE IF NOT EXISTS
     // leaves an existing db untouched, so add them here (throws once they are
     // already there, which is the fresh-db case)
-    for (const col of ['parent_id TEXT', 'tool_use_id TEXT']) {
+    for (const col of ['parent_id TEXT', 'tool_use_id TEXT',
+      'turn_open INTEGER', 'turn_started_at INTEGER']) {
       try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
     }
   }
@@ -177,6 +182,12 @@ export class Store {
   });
 
   private applyPatch(sessionId: string, patch: SessionPatch): void {
+    if (patch.turnOpen !== undefined) {
+      // last-wins: patches arrive in transcript order
+      this.db.prepare(`UPDATE sessions SET turn_open = ?,
+        turn_started_at = COALESCE(?, turn_started_at) WHERE id = ?`)
+        .run(patch.turnOpen ? 1 : 0, patch.turnStartedAt ?? null, sessionId);
+    }
     if (patch.projectDir) {
       this.db.prepare('UPDATE sessions SET project_dir = ? WHERE id = ? AND project_dir IS NULL')
         .run(patch.projectDir, sessionId);

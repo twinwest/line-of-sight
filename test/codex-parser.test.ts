@@ -47,12 +47,23 @@ describe('codexAdapter.parseLine', () => {
       sessionPatch: { projectDir: '/repo' } });
   });
 
-  it('bookkeeping drops: world_state, turn_context, task/token event_msgs', () => {
+  it('bookkeeping drops: world_state, turn_context, token/settings event_msgs', () => {
     expect(adapter.parseLine(line('world_state', {}), ctx)).toEqual([]);
     expect(adapter.parseLine(line('turn_context', { cwd: '/x' }), ctx)).toEqual([]);
-    for (const sub of ['task_started', 'task_complete', 'token_count', 'thread_settings_applied']) {
+    for (const sub of ['token_count', 'thread_settings_applied']) {
       expect(adapter.parseLine(line('event_msg', { type: sub }), ctx)).toEqual([]);
     }
+  });
+
+  it('turn markers are patch-only carriers: started opens, complete closes', () => {
+    const [started] = adapter.parseLine(line('event_msg', { type: 'task_started' }), ctx);
+    expect(started).toMatchObject({ kind: 'meta', raw: null,
+      sessionPatch: { turnOpen: true, turnStartedAt: Date.parse('2026-08-27T22:00:00.000Z') } });
+    const [done] = adapter.parseLine(line('event_msg', { type: 'task_complete' }), ctx);
+    expect(done).toMatchObject({ kind: 'meta', raw: null, sessionPatch: { turnOpen: false } });
+    // unobserved task_* subtypes (the likely Esc/abort path) close defensively
+    const [aborted] = adapter.parseLine(line('event_msg', { type: 'task_aborted' }), ctx);
+    expect(aborted).toMatchObject({ kind: 'meta', raw: null, sessionPatch: { turnOpen: false } });
   });
 
   it('UserMessage → user text + title patch; AgentMessage → assistant text', () => {

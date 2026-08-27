@@ -23,9 +23,11 @@ const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.js
 
 // Bookkeeping with no conversational content (SPIKE_NOTES): dropped, like
 // the claude adapter's DROP_TYPES. Unknown envelope types render as unknown.
+// task_started/task_complete are NOT here: they are turn-boundary markers,
+// ingested as patch-only carriers (see parseLine) so liveness can tell a
+// generating session from an open-but-idle TUI.
 const DROP_TYPES = new Set(['world_state', 'turn_context']);
-const DROP_EVENTS = new Set(['task_started', 'task_complete', 'token_count',
-  'thread_settings_applied']);
+const DROP_EVENTS = new Set(['token_count', 'thread_settings_applied']);
 // response_item types fully echoed by their item_completed projection
 // (verified over every local session: reasoning 33/33, messages/commands
 // covered with richer fields on the item side).
@@ -194,6 +196,16 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       if (type === 'event_msg') {
         const sub = str(payload.type);
         if (sub && DROP_EVENTS.has(sub)) return [];
+        // turn boundaries → patch-only carriers (no display row). Unobserved
+        // task_* subtypes (a future task_aborted, say — the likely Esc path)
+        // defensively CLOSE the turn: a stuck-open turn pins the busy dot,
+        // a wrongly-closed one just greys it until the next task_started.
+        if (sub?.startsWith('task_')) {
+          const patch: SessionPatch = sub === 'task_started'
+            ? { turnOpen: true, turnStartedAt: ts }
+            : { turnOpen: false };
+          return [{ kind: 'meta', id: fallbackId, ts, label: sub, raw: null, sessionPatch: patch }];
+        }
         if (sub === 'item_completed') {
           const item = payload.item;
           if (item && typeof item === 'object' && !Array.isArray(item)) {

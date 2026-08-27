@@ -12,6 +12,11 @@ export interface SessionMeta {
   live?: boolean;          // API-only: agent process is active (never stored)
   waiting?: boolean;       // API-only: live, but parked on the user (see liveSessions)
   busySince?: number;      // API-only: when that state began (0 if unknown)
+  /** Transcript-derived turn state (agents with turn markers, e.g. codex
+   *  task_started/task_complete). Corroborates process-alive-only live
+   *  signals: false = the turn ended, an open TUI is just idle. */
+  turnOpen?: boolean | null;
+  turnStartedAt?: number | null;
 }
 
 export type TitleSource = 'custom' | 'ai' | 'prompt';
@@ -21,6 +26,9 @@ export interface SessionPatch {
   projectDir?: string;
   title?: string;
   titleSource?: TitleSource;
+  /** Turn boundary markers (last-wins): true at turn start, false at end. */
+  turnOpen?: boolean;
+  turnStartedAt?: number;
 }
 
 export type NormalizedEvent =

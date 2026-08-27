@@ -6,8 +6,10 @@ type LiveMap = Map<string, { state: 'busy' | 'waiting'; since: number }>;
 
 const MIN = 60_000;
 
-/** One session whose transcript last moved `quietFor` ms ago. */
-function serverWith(quietFor: number, live: LiveMap) {
+/** One session whose transcript last moved `quietFor` ms ago; `turn` applies
+ *  a turn-marker patch (codex task_started/task_complete carriers). */
+function serverWith(quietFor: number, live: LiveMap,
+    turn?: { turnOpen: boolean; turnStartedAt?: number }) {
   const store = new Store(':memory:');
   const ts = Date.now() - quietFor;
   store.upsertSession({
@@ -16,13 +18,14 @@ function serverWith(quietFor: number, live: LiveMap) {
   });
   store.appendEvents('s1', [
     { kind: 'message', id: 'm1', role: 'user', ts, blocks: [{ type: 'text', markdown: 'hi' }] },
+    ...(turn ? [{ kind: 'meta' as const, id: 't1', ts, label: 'task', raw: null, sessionPatch: turn }] : []),
   ], 100);
   return buildServer(store, new SseHub(), () => live);
 }
 
 async function sessionRow(app: ReturnType<typeof buildServer>) {
   const res = await app.inject({ method: 'GET', url: '/api/sessions' });
-  return (res.json() as { id: string; live?: boolean; waiting?: boolean }[])[0]!;
+  return (res.json() as { id: string; live?: boolean; waiting?: boolean; busySince?: number }[])[0]!;
 }
 
 describe('live flag: a busy claim needs corroboration', () => {
@@ -52,5 +55,25 @@ describe('live flag: a busy claim needs corroboration', () => {
     const app = serverWith(3 * 60 * MIN,
       new Map([['s1', { state: 'waiting', since: Date.now() - 3 * 60 * MIN }]]));
     expect(await sessionRow(app)).toMatchObject({ live: true, waiting: true });
+  });
+});
+
+describe('turn markers corroborate process-alive-only claims (codex flock)', () => {
+  const bare: LiveMap = new Map([['s1', { state: 'busy', since: 0 }]]);
+
+  it('turn ended → an open-but-idle TUI greys immediately, fresh writes or not', async () => {
+    const app = serverWith(0.5 * MIN, bare, { turnOpen: false });
+    expect((await sessionRow(app)).live).toBeUndefined();
+  });
+
+  it('turn open → busy survives a long silent item, timer from turn start', async () => {
+    const started = Date.now() - 5 * MIN;
+    const app = serverWith(5 * MIN, bare, { turnOpen: true, turnStartedAt: started });
+    expect(await sessionRow(app)).toMatchObject({ live: true, busySince: started });
+  });
+
+  it('no turn info (agent without markers, pre-marker rows) → staleness rule as before', async () => {
+    expect((await sessionRow(serverWith(0.5 * MIN, bare))).live).toBe(true);
+    expect((await sessionRow(serverWith(60 * MIN, bare))).live).toBeUndefined();
   });
 });

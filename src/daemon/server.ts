@@ -71,16 +71,24 @@ export function buildServer(store: Store, hub: SseHub,
    *  its own status stamp or the transcript (see STALE_BUSY_MS). `waiting` is
    *  exempt: parked on the user is legitimately open-ended, and "waiting for
    *  you" is the signal the whole indicator exists to deliver. */
-  const withLive = <T extends { id: string; updatedAt: number }>(metas: T[]): T[] => {
+  const withLive = <T extends { id: string; updatedAt: number;
+      turnOpen?: boolean | null; turnStartedAt?: number | null }>(metas: T[]): T[] => {
     const live = liveSessions();
     if (!live.size) return metas;
     const now = Date.now();
     return metas.map((m) => {
       const s = live.get(m.id);
       if (!s) return m;
-      const lastSign = Math.max(s.since, m.updatedAt);
+      // a process-alive-only claim (since 0, no state vocabulary — codex's
+      // flock) is corroborated by the transcript's turn markers: turn ended
+      // ⇒ the open TUI is just idle, grey immediately. Agents without turn
+      // markers leave turnOpen null and fall through to the staleness rule.
+      const bare = s.state === 'busy' && s.since === 0;
+      if (bare && m.turnOpen === false) return m;
+      const since = bare ? (m.turnStartedAt ?? 0) : s.since;
+      const lastSign = Math.max(since, m.updatedAt);
       if (s.state === 'busy' && now - lastSign > STALE_BUSY_MS) return m;
-      return { ...m, live: true, waiting: s.state === 'waiting', busySince: s.since };
+      return { ...m, live: true, waiting: s.state === 'waiting', busySince: since };
     });
   };
 
