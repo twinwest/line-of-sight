@@ -312,14 +312,20 @@ skip them but breaks OAuth auth).
   `--allowedTools` blocks writes (file not created); latency seconds-scale
   (~8s trivial, ~24s transcript-reading question).
 
-### codex-cli responder **[M0: codex not installed on dev machine — ships v1.5]**
+### codex-cli responder **[SHIPPED 2026-08-27 — verified on codex-cli 0.150.1]**
 
 ```
-codex exec --sandbox read-only "<composed prompt>"
+codex exec --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
 ```
-Same prompt template. M0: 10-minute smoke test only (exists, runs, is
-read-only); full support may land with the Codex adapter in v1.5, but the
-Responder implementation is cheap enough to include in v1 if the spike passes.
+
+Same prompt template, spawned with stdin IGNORED (a piped stdin makes
+`codex exec` wait for EOF to append it to the prompt). `--ephemeral` is the
+`--no-session-persistence` analog — without it each ask writes a rollout
+into `~/.codex/sessions`. `--json` has no token deltas: completed
+`agent_message` items are the answer (item-sized chunks); `item.started`
+command executions feed the progress line. `responderModel`/
+`responderEffort` are NOT applied — they are claude-cli/api settings; codex
+runs on the user's own config.toml model. Details: DECISIONS 2026-08-27.
 
 ### api responder (BYOK fallback)
 
