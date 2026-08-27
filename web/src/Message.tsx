@@ -179,7 +179,7 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
     case 'thinking':
       return (
         <details className="fold thinking">
-          <summary>Thinking…</summary>
+          <summary>⏵ Thinking…</summary>
           <div className="fold-body pre-wrap">{block.text}</div>
         </details>
       );
@@ -210,7 +210,7 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
     case 'raw':
       return (
         <details className="fold raw">
-          <summary>raw block</summary>
+          <summary>⏵ raw block</summary>
           <pre className="fold-body scrolly">{JSON.stringify(block.json, null, 2)}</pre>
         </details>
       );
@@ -261,7 +261,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
     return (
       <div className="event meta-event" data-mid={event.id}>
         <details className="fold raw">
-          <summary>{label}</summary>
+          <summary>⏵ {label}</summary>
           <pre className="fold-body scrolly">{JSON.stringify(payload, null, 2)}</pre>
         </details>
       </div>

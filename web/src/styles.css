@@ -100,6 +100,11 @@ body {
 .turn-fold[open] {
   border-left: 2px solid var(--border); padding-left: 0.6rem;
 }
+/* the indent belongs to the steps, not to their title: without this the whole
+   block (summary included) shifts right on expand, and the rows land a hair
+   LEFT of the title they hang under. Pulling the summary back out of the
+   block's own border+padding keeps it put and nests the rows under it. */
+.turn-fold[open] > summary { margin-left: calc(-0.6rem - 2px); }
 .margin-marker.in-summary { position: static; display: inline-block; }
 
 /* agent is mid-turn but the transcript is quiet (blocks land only when complete) */
