@@ -4,12 +4,12 @@ import { fetchSessions, type SessionMeta } from './api';
 import { loadSeen } from './seen';
 import { DOT_TITLE, RANK, sessionStatus } from './status';
 
-function shortDir(dir: string | null): string {
+export function shortDir(dir: string | null): string {
   if (!dir) return '';
   return dir.replace(/^\/Users\/[^/]+/, '~');
 }
 
-function fmtTime(ts: number, now: number): string {
+export function fmtTime(ts: number, now: number): string {
   if (!ts) return '';
   const age = now - ts;
   if (age < 60_000) return 'now';
@@ -20,15 +20,17 @@ function fmtTime(ts: number, now: number): string {
     : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function SessionList() {
+/** Poll every session's meta. Only the first failure surfaces — a later blip
+ *  would flap the page between error and list. Shared with the topbar's
+ *  sessions popover; there is no all-sessions SSE, so both poll. */
+export function useSessions(): [SessionMeta[], string] {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [error, setError] = useState('');
-  const [project, setProject] = useState('');
-  const [filter, setFilter] = useState('');
-
   useEffect(() => {
-    fetchSessions().then(setSessions, (e: unknown) => setError(String(e)));
-    const poll = () => fetchSessions().then(setSessions, () => {});
+    const poll = (first = false) => fetchSessions().then(setSessions, (e: unknown) => {
+      if (first) setError(String(e));
+    });
+    void poll(true);
     const t = setInterval(poll, 10_000);
     // background tabs get their timers throttled/frozen — resync on return
     const onVisible = () => { if (!document.hidden) void poll(); };
@@ -38,6 +40,13 @@ export function SessionList() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
+  return [sessions, error];
+}
+
+export function SessionList() {
+  const [sessions, error] = useSessions();
+  const [project, setProject] = useState('');
+  const [filter, setFilter] = useState('');
 
   const projects = useMemo(
     () => [...new Set(sessions.map((s) => s.projectDir).filter((p): p is string => !!p))].sort(),

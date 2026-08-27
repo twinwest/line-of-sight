@@ -13,6 +13,19 @@ export const DOT_TITLE: Record<Status, string> = {
   waiting: 'waiting for you', done: 'just finished', busy: 'running', idle: 'idle',
 };
 
+/** The other sessions worth switching to from inside `current`: everything
+ *  still in play, most actionable first. Idle ones are dropped — browsing them
+ *  is the list page's job, not the switcher's. */
+export function otherSessions(
+  sessions: SessionMeta[], current: string, seen: Record<string, number>, now: number,
+): { s: SessionMeta; st: Status }[] {
+  return sessions
+    .filter((s) => s.id !== current)
+    .map((s) => ({ s, st: sessionStatus(s, seen, now) }))
+    .filter((r) => r.st !== 'idle')
+    .sort((a, b) => RANK[a.st] - RANK[b.st] || b.s.updatedAt - a.s.updatedAt);
+}
+
 export function sessionStatus(s: SessionMeta, seen: Record<string, number>, now: number): Status {
   if (s.waiting) return 'waiting';
   if (s.live) return 'busy';

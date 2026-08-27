@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SearchBox } from './SearchBox';
 import { SessionList } from './SessionList';
+import { SessionsPopover } from './SessionsPopover';
 import { SessionView } from './SessionView';
 
 export function nav(path: string): void {
@@ -113,10 +114,13 @@ export function App() {
         <a href="/" className="brand" onClick={(e) => { e.preventDefault(); nav('/'); }}>
           Line of Sight
         </a>
-        <SearchBox />
+        {/* search is a list-page tool: inside a session you're reading one
+            transcript, and the switcher is what you actually reach for */}
+        {!sessionId && <SearchBox />}
         <span className="topbar-tools">
           <ThemeToggle />
           <TypeControls />
+          {sessionId && <SessionsPopover current={sessionId} />}
         </span>
       </header>
       {sessionId

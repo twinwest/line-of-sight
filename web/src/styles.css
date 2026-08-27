@@ -445,6 +445,12 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .asks-item .asks-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
 .asks-meta { font-size: 0.72rem; color: var(--fg-dim); }
 
+/* Sessions switcher — an .asks-list hung off the topbar instead of the session
+   header, so it shares .type-controls' offset (both chips sit in .topbar-tools). */
+.asks-list.sessions-list { top: 2.9rem; }
+.asks-item .dot { display: inline-block; margin-right: 0.35rem; }
+.asks-all { border-top: 1px solid var(--border); border-radius: 0; }
+
 .anchor {
   margin: 0.6rem 0.75rem; padding: 0.4rem 0.6rem; font-size: 0.82rem;
   border-left: 3px solid var(--accent); background: var(--user-bg);

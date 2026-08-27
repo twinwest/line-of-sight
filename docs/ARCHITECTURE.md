@@ -377,7 +377,9 @@ SIGTERM; stale pidfiles are detected via `/api/health` probe.
 ## 9. Frontend structure (guidance, not pixel spec)
 
 - Layout: left = content (list or transcript), right = collapsible side-chat
-  panel. Global header: app name, search box, project filter (on list page).
+  panel. Global header: app name, reading controls, and — on the list page —
+  the search box and project filter; on a session page the search box gives way
+  to the "Sessions · N" switcher popover (SPEC §5.6).
 - Transcript message rendering per RenderBlock type; tool_use/tool_result and
   thinking are `<details>`-style collapsed rows; `unknown`/`raw` are collapsed
   JSON `<pre>`.
