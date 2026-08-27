@@ -31,12 +31,22 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   const [width, setWidth] = useState(400);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const atBottom = useRef(true);
 
-  useEffect(() => { setTurns(chat.turns); setError(''); setStreaming(null); }, [chat.id]);
-  useEffect(() => { void fetchResponderStatus().then(setStatus); }, []);
   useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
+    setTurns(chat.turns); setError(''); setStreaming(null); atBottom.current = true;
+  }, [chat.id]);
+  useEffect(() => { void fetchResponderStatus().then(setStatus); }, []);
+  // sticky auto-scroll: follow the streaming answer only if already at the
+  // bottom, so scrolling up to re-read isn't yanked back by every chunk
+  useEffect(() => {
+    if (atBottom.current) bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [turns, streaming]);
+
+  const onScroll = () => {
+    const el = bodyRef.current;
+    if (el) atBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 60;
+  };
 
   /** Grow the question box with its content (CSS max-height caps it and takes
    *  over with a scrollbar). Collapsing to `auto` first is what lets it shrink
@@ -56,6 +66,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
     if (busy || !question.trim()) return;
     setError('');
     setLastQuestion(question);
+    atBottom.current = true;   // asking re-arms the follow
     setTurns((t) => [...t, { role: 'user', text: question, ts: Date.now() }]);
     setStreaming('');
     setProgress('');
@@ -114,7 +125,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
         title={anchorLong ? 'click to expand' : undefined}>
         {anchorShown}
       </blockquote>
-      <div className="panel-body" ref={bodyRef}>
+      <div className="panel-body" ref={bodyRef} onScroll={onScroll}>
         {status?.engine === null && (
           <div className="setup-hint">
             No answer engine found. Install the <code>claude</code> CLI, or put an API key in{' '}
