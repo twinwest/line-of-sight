@@ -14,11 +14,17 @@ const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 const log = (msg: string) => logStream.write(`${new Date().toISOString()} ${msg}\n`);
 
 const store = new Store(DB_FILE);
-const adapter = claudeCodeAdapter();
-const ingester = new Ingester(store, [adapter], log);
+const adapters = [claudeCodeAdapter()];
+const ingester = new Ingester(store, adapters, log);
 const hub = new SseHub();
 ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
-const app = buildServer(store, hub, () => adapter.liveSessions?.() ?? new Map());
+// session ids are globally unique across adapters (see AgentAdapter), so the
+// flat merge cannot collide
+const app = buildServer(store, hub, () => {
+  const merged = new Map<string, { state: 'busy' | 'waiting'; since: number }>();
+  for (const a of adapters) for (const [id, s] of a.liveSessions?.() ?? []) merged.set(id, s);
+  return merged;
+});
 
 try {
   await app.listen({ port: PORT, host: '127.0.0.1' });

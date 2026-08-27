@@ -179,6 +179,8 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
   return {
     id: 'claude-code',
     roots: () => [root],
+    // 3 = deep enough for <project>/<uuid>/subagents/agent-*.jsonl
+    watchDepth: 3,
 
     // <project>/<uuid>.jsonl (a session) and <project>/<uuid>/subagents/
     // agent-*.jsonl (a subagent run, ingested as that session's child).

@@ -100,6 +100,9 @@ export class Store {
   }
 
   upsertSession(meta: SessionMeta): void {
+    // ON CONFLICT(id) DO NOTHING would silently drop a cross-adapter id
+    // collision; the AgentAdapter contract (globally-unique, uuid-derived ids)
+    // is the guard. Revisit loudness only if an adapter can't promise uuids.
     this.db.prepare(`
       INSERT INTO sessions (id, adapter, file_path, project_dir, title, title_source,
         started_at, updated_at, message_count, parent_id, tool_use_id)

@@ -86,17 +86,24 @@ export interface AgentAdapter {
   id: 'claude-code' | 'codex';           // extend by union, no registry magic
   /** Absolute dirs to scan/watch for transcripts. */
   roots(): string[];
+  /** chokidar depth under each root; omit = unlimited. */
+  watchDepth?: number;
   /** Cheap check: is this file a session transcript this adapter owns? */
   matches(filePath: string): boolean;
   /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
   parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */
   sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
-  /** sessionId → when the turn started (ms, 0 if unknown), for sessions whose
-   *  agent process is mid-turn right now, if the agent exposes such a signal.
+  /** sessionId → what the agent process is doing right now ('busy' mid-turn,
+   *  'waiting' parked on the user; since = when that state began, 0 if
+   *  unknown), if the agent exposes such a signal.
    *  MUST NOT throw; empty map when unavailable. */
-  liveSessions?(): Map<string, number>;
+  liveSessions?(): Map<string, { state: 'busy' | 'waiting'; since: number }>;
 }
+
+Session ids must be globally unique across adapters (all adapters share one
+sessions table and one merged live map) — derive them from the transcript's
+own uuid.
 ```
 
 ### Normalized model (shared/types.ts)
@@ -130,7 +137,7 @@ export interface SessionPatch {
 export type RenderBlock =
   | { type: 'text'; markdown: string }
   | { type: 'thinking'; text: string }
-  | { type: 'tool_use'; toolName: string; summary: string; input: unknown }
+  | { type: 'tool_use'; id?: string | null; toolName: string; summary: string; input: unknown }
   | { type: 'tool_result'; toolUseId: string | null; summary: string;
       output: string; isError: boolean }
   | { type: 'raw'; json: unknown };   // anything unrecognized inside a message

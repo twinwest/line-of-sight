@@ -39,7 +39,9 @@ const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
  *  silence measured inside a genuinely running turn is ~5.5 min
  *  (SPIKE_NOTES 2026-08-26: writes batch per assistant message), so this
  *  leaves ample margin; overshooting only greys a dot that re-lights on the
- *  next byte written, while undershooting is the forever-green bug. */
+ *  next byte written, while undershooting is the forever-green bug.
+ *  Calibrated on Claude Code's write batching; make it per-adapter only if
+ *  the Codex spike finds a live signal with different silence behavior. */
 const STALE_BUSY_MS = 15 * 60_000;
 
 export function buildServer(store: Store, hub: SseHub,

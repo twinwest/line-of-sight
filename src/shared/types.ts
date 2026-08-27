@@ -1,5 +1,5 @@
 export interface SessionMeta {
-  id: string;              // adapter-scoped stable id (claude: session uuid from filename)
+  id: string;              // globally unique across adapters (claude: session uuid from filename)
   adapter: 'claude-code' | 'codex';
   filePath: string;
   projectDir: string | null;

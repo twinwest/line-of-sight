@@ -33,8 +33,7 @@ export class Ingester {
           const filePath = path.join(entry.parentPath, entry.name);
           if (adapter.matches(filePath)) this.ingestFile(adapter, filePath);
         }
-        // 3 = deep enough for <project>/<uuid>/subagents/agent-*.jsonl
-        const watcher = chokidar.watch(root, { ignoreInitial: true, depth: 3 });
+        const watcher = chokidar.watch(root, { ignoreInitial: true, depth: adapter.watchDepth });
         const onFile = (p: string) => {
           if (adapter.matches(p)) this.enqueue(() => this.ingestFile(adapter, p));
         };
