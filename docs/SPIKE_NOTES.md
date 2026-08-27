@@ -215,3 +215,92 @@ Surveyed all 25 `subagents/agent-*.jsonl` on this machine (7 parent sessions).
   get no in-transcript entry point.
 - **No liveness signal.** Subagents get no `~/.claude/sessions/<pid>.json`
   (that file is per CLI process), so `liveSessions()` can never mark one.
+
+## Addendum 2026-08-27 — Codex spike (codex-cli 0.150.1; supersedes S3's "not installed")
+
+Measured on 4 real sessions (1 interactive from the owner, 3 generated via
+`codex exec` in a scratchpad — multi-turn coding, file edits, a mid-turn
+SIGKILL, an `exec resume`). Fixtures: `test/fixtures/codex/entries.jsonl`
+(14 representative redacted lines, one per type/subtype/role).
+
+**Layout & identity**
+- `~/.codex/sessions/YYYY/MM/DD/rollout-<ISO-ts>-<uuid>.jsonl`. Session id =
+  filename uuid = `session_meta.payload.id` (verified equal) — uuid form, so
+  the global-id contract from ARCHITECTURE §4 is satisfied as-is.
+- Line envelope `{timestamp, ordinal, type, payload}`; `ordinal` strictly
+  increasing across the whole file (survives resume).
+- Rollout file is created ~0.4s after spawn and **appended incrementally
+  while the turn runs** (writes observed every ~1s) — no Claude-style
+  batch-at-message-end. SIGKILL mid-turn leaves a clean file: complete
+  lines, trailing newline, zero malformed JSON, just no `task_complete`.
+- `codex exec resume --last` **appends to the same rollout file**: still one
+  `session_meta`, one new `turn_context` per turn. Append-only checkpoint
+  ingestion works unchanged.
+- The `~/.codex/*.sqlite` files (`thread_history_1` etc.) are a pagination
+  INDEX over the rollout (`rollout_byte_offset` columns) — the jsonl remains
+  the source of truth. `codex migrate-rollouts` exists ("migrate legacy
+  local sessions to paginated thread history"): watch future versions for
+  the jsonl being demoted.
+- `session_meta.payload` carries `cwd` (projectDir source; also on every
+  `turn_context`), plus provenance: `source: 'cli'|'exec'`, `originator:
+  'codex-tui'|'codex_exec'` — sessions self-identify, which the adapter can
+  use to badge or filter exec runs.
+- Title: `~/.codex/session_index.jsonl` holds `{id, thread_name,
+  updated_at}` — the ai-title analog, multiple entries per session,
+  last-wins. Exec sessions get no entry → fall back to first user prompt.
+
+**Line census** (233 lines across the 4 files)
+- `session_meta`(4) · `event_msg`(116: item_completed 74, token_count 29,
+  task_started 6, task_complete 5, thread_settings_applied 2) ·
+  `response_item`(103: message 29, reasoning 26, custom_tool_call 24,
+  custom_tool_call_output 24) · `world_state`(4) · `turn_context`(6).
+- `response_item/message`: `role` user|assistant|developer; `content` is an
+  array of `{type: 'input_text'|'output_text', text}`. User lines include
+  `<environment_context>`/`<user_instructions>` pseudo-XML plumbing —
+  '<'-prefixed, coincidentally the same convention Claude uses.
+- `reasoning` is **encrypted** (`encrypted_content`; `summary` usually
+  empty) — codex thinking is not renderable. Render a marker, or the
+  summary when non-empty.
+- `custom_tool_call`: `name` is always `exec` (the input is a JS-ish script
+  calling `tools.exec_command(...)`, with apply_patch embedded as
+  `*** Begin Patch` text inside it); paired with
+  `custom_tool_call_output` by `call_id` — maps 1:1 onto the existing
+  tool_use/tool_result RenderBlocks.
+- `event_msg/item_completed` echoes response_items — 41/74 matched a
+  `response_item.id` in-file; **33 did not**. Before the adapter blind-drops
+  event_msg as redundant, check what the unmatched ones carry.
+
+**Liveness**
+- `~/.codex/thread-writer-locks/<uuid>.lock` is **flock-held by the live
+  codex process** (verified with lsof during a live turn; the rollout fd is
+  held open too). The file persists after exit, so existence ≠ live — the
+  *hold* is the signal. `liveSessions()` can try a non-blocking flock per
+  lock file; kernel releases flocks on process death, so unlike Claude's
+  `status: busy` file this can never go stale — no STALE_BUSY_MS needed for
+  codex. No busy/waiting distinction observed (see open questions).
+
+**Interaction analogs**
+- Plan mode exists: `turn_context.collaboration_mode.mode:
+  'default'|'Plan'`, and a `request_user_input` tool (per-turn
+  availability) is the AskUserQuestion analog. Transcript shapes unmeasured
+  — needs a real interactive session driving them.
+- `codex queue --thread <uuid> --message <text>` is the input-queue analog;
+  it presumably rides `queue_1.sqlite`, not the rollout — unmeasured.
+
+**Responder (S3 completed)**
+- `codex exec --sandbox read-only --ephemeral "<prompt>"` verified: asked to
+  create a file → replied BLOCKED, file not created; reads worked;
+  **`--ephemeral` wrote no rollout** — it is the `--no-session-persistence`
+  analog, and without it `codex exec` DOES pollute `~/.codex/sessions` (the
+  M5 dogfood lesson repeats). Also available: `--json` (JSONL events on
+  stdout — streaming, shape unverified), `-C <dir>` (workdir),
+  `--skip-git-repo-check`, `--ignore-user-config` (the `--setting-sources
+  ""` analog), `-o <file>` (last message). Caveat observed: exec runs
+  auto-append a `[projects."<cwd>"] trust_level = "trusted"` entry to the
+  user's config.toml.
+
+**Open questions for the adapter/dialect task**
+- What the 33 unmatched `item_completed` payloads carry.
+- `request_user_input` / Plan-mode transcript shapes (drive a TUI session).
+- Queue delivery path; typing-while-busy behavior in the TUI.
+- `--json` stream event shapes for the responder.
