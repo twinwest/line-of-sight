@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
 import type { AgentAdapter } from './types.js';
+import { parseTs, str, truncate } from './util.js';
 
 // Line types that carry no conversational content (see SPIKE_NOTES.md);
 // dropped from the event stream. Truly unknown types still fall through
@@ -34,19 +35,6 @@ const UUID_JSONL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const AGENT_JSONL = /^agent-[0-9a-z]+\.jsonl$/i;
 
 type Json = Record<string, unknown>;
-
-function str(v: unknown): string | null {
-  return typeof v === 'string' ? v : null;
-}
-
-function parseTs(v: unknown): number {
-  const t = typeof v === 'string' ? Date.parse(v) : NaN;
-  return Number.isNaN(t) ? 0 : t;
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
-}
 
 /** One-line human summary for a tool call, e.g. "Read src/foo.ts". */
 function toolSummary(name: string, input: unknown): string {

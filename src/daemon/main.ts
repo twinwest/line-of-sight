@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { claudeCodeAdapter } from '../adapters/claudeCode.js';
+import { codexAdapter } from '../adapters/codex.js';
 import { SIGHT_DIR, PID_FILE, DB_FILE, LOG_FILE, PORT } from '../shared/paths.js';
 import { Store } from '../store/store.js';
 import { Ingester } from './ingest.js';
@@ -14,7 +15,7 @@ const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 const log = (msg: string) => logStream.write(`${new Date().toISOString()} ${msg}\n`);
 
 const store = new Store(DB_FILE);
-const adapters = [claudeCodeAdapter()];
+const adapters = [claudeCodeAdapter(), codexAdapter()];
 const ingester = new Ingester(store, adapters, log);
 const hub = new SseHub();
 ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
