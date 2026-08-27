@@ -304,3 +304,35 @@ SIGKILL, an `exec resume`). Fixtures: `test/fixtures/codex/entries.jsonl`
 - `request_user_input` / Plan-mode transcript shapes (drive a TUI session).
 - Queue delivery path; typing-while-busy behavior in the TUI.
 - `--json` stream event shapes for the responder.
+
+## Addendum 2026-08-27 (later) — interactive TUI session: request_user_input + plan mode measured
+
+The owner drove a real codex-tui session (resuming the morning thread) and
+parked it on a question; observed live. Two of the four open questions above
+are now answered:
+
+- **`request_user_input` is a `function_call`** (not custom_tool_call),
+  paired by `call_id` with a `function_call_output`. `arguments` is a JSON
+  **string**: `{questions: [{header, id, question, options: [{label,
+  description}]}]}` — strikingly close to Claude's AskUserQuestion (same
+  header/question/options/label/description vocabulary!) but with a per-
+  question `id`, and no `multiSelect`/`preview`. The answer is structured,
+  not prose: `output` = `{"answers": {"<question-id>": {"answers":
+  ["<label>"]}}}` (list-valued → multi-select capable). A codex dialect can
+  render the same AskCard data shape; only the two parsers differ.
+- **Pending questions ARE visible in the transcript**: the `function_call`
+  line flushed to disk while the session sat parked on it (verified live —
+  the file ended on a call with no output line). Codex does NOT have
+  Claude's write-batching limitation, so a pendingBlockId-style "waiting
+  for you" derivation genuinely works for codex — no liveness-file
+  dependency needed for that state.
+- Plan mode in practice: `turn_context.collaboration_mode.mode: 'plan'`,
+  then ordinary assistant messages + request_user_input dialogs + read-only
+  exec calls. No dedicated plan-document artifact type observed so far (no
+  ExitPlanMode analog in the data yet); the plan conversation is plain
+  messages.
+- Liveness re-verified on the TUI: flock on the lock file held by the live
+  `codex` process (pid observed via lsof), exactly as with exec.
+
+Still open: the 33 unmatched item_completed payloads; queue delivery path;
+`--json` stream shapes.
