@@ -317,12 +317,26 @@ export function SessionView({ id, targetMessageId = null }:
         <span className="badge">{session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
-        {sideChats.length > 0 && (
-          <button className="chip" title="reopen side chats"
-            onClick={() => setOpenChat(sideChats.at(-1)!)}>
-            💬 {sideChats.length}
-          </button>
-        )}
+        <button className="chip" popoverTarget="asks-list" title="side chats in this session">
+          Asks · {sideChats.length}
+        </button>
+        <div id="asks-list" className="asks-list" popover="auto">
+          {sideChats.length === 0
+            ? <div className="asks-hint">Select any text in the transcript to ask about it.</div>
+            : sideChats.map((c) => (
+              <button key={c.id} className="asks-item" onClick={(e) => {
+                e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
+                setOpenChat(c);
+              }}>
+                <span className="asks-q">
+                  {c.turns.find((t) => t.role === 'user')?.text ?? '(no question yet)'}
+                </span>
+                <span className="asks-meta">
+                  “{c.anchorText}” · {new Date(c.createdAt).toLocaleString()}
+                </span>
+              </button>
+            ))}
+        </div>
       </div>
       <OutcomesCtx.Provider value={outcomesCtx}>
       <div className="view-split">
