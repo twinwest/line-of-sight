@@ -176,13 +176,16 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
           </Markdown>
         </div>
       );
-    case 'thinking':
+    case 'thinking': {
+      // first line as information scent; CSS ellipsis handles the length
+      const preview = block.text.trimStart().split('\n', 1)[0] ?? '';
       return (
         <details className="fold thinking">
-          <summary>⏵ Thinking…</summary>
+          <summary>✻ Thinking{preview ? ` — ${preview}` : '…'}</summary>
           <div className="fold-body pre-wrap">{block.text}</div>
         </details>
       );
+    }
     case 'tool_use': {
       // blocking tools render as cards, not folds; shape drift → generic fold
       if (block.toolName === 'AskUserQuestion') {
@@ -192,9 +195,16 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       if (block.toolName === 'ExitPlanMode') {
         return <PlanCard block={block} eventId={eventId} />;
       }
+      // summary is "Name arg" (adapter's toolSummary) — split so the name can
+      // sit in its own register
+      const arg = block.summary.startsWith(block.toolName)
+        ? block.summary.slice(block.toolName.length).trim() : block.summary;
       return (
         <details className="fold tool">
-          <summary>⏵ {block.summary}</summary>
+          <summary>
+            ⏵ <span className="tool-name">{block.toolName}</span>
+            {arg && <span className="tool-arg"> {arg}</span>}
+          </summary>
           {editDiff(block.toolName, block.input)
             ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
         </details>
@@ -203,7 +213,7 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
     case 'tool_result':
       return (
         <details className={`fold tool ${block.isError ? 'is-error' : ''}`}>
-          <summary>⏵ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</summary>
+          <summary>→ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</summary>
           <pre className="fold-body scrolly">{block.output}</pre>
         </details>
       );

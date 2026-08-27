@@ -150,7 +150,6 @@ body {
   border-radius: 999px; padding: 0 0.5rem; flex: none;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
-.dot.live { background: var(--live); }
 .dot.busy { background: var(--live); animation: generating-pulse 1.6s ease-in-out infinite; }
 .dot.waiting { background: var(--accent); animation: generating-pulse 1.6s ease-in-out infinite; }
 .dot.done { background: var(--live); }
@@ -240,6 +239,13 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
    actually see in the transcript looking like every other fold. */
 .thinking > summary { font-style: italic; }
 .thinking .fold-body { color: var(--fg-dim); font-style: italic; }
+/* Tool titles are code, thinking is prose — the register (mono vs italic)
+   carries the distinction, not color. The name takes the weight so it pops
+   from the arg. 0.95em because mono runs visually large at equal size. */
+.tool > summary .tool-name, .tool > summary .tool-arg {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.95em;
+}
+.tool > summary .tool-name { font-weight: 600; }
 
 /* ---- blocking-tool cards (AskUserQuestion / ExitPlanMode) ----
    The two moments the agent stops and waits for the user: first-class

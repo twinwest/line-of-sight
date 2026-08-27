@@ -9,10 +9,9 @@ import { pendingBlockId, toolOutcomes } from './asks';
 import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { isQueueOp, queuedInputs } from './queue';
 import { markSeen } from './seen';
+import { DOT_TITLE, RUNNING_MS, sessionStatus } from './status';
 import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
-
-const RUNNING_MS = 60_000;
 
 /** Merge new events into the list, replacing by id (re-ingested lines) and keeping seq order. */
 function merge(prev: StoredEvent[], incoming: StoredEvent[]): StoredEvent[] {
@@ -306,10 +305,12 @@ export function SessionView({ id, targetMessageId = null }:
 
   if (error) return <div className="page error">{error}</div>;
   if (!session) return <div className="page">Loading…</div>;
+  // same derivation as the list's dot; viewing = seen, so 'done' can't occur here
+  const dotStatus = sessionStatus(session, { [session.id]: Date.now() }, Date.now());
   return (
     <div className="session-view">
       <div className="session-header">
-        <span className={`dot ${running ? 'live' : ''}`} title={running ? 'running' : 'idle'} />
+        <span className={`dot ${dotStatus}`} title={DOT_TITLE[dotStatus]} />
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
         <span className="badge">{session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
