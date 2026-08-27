@@ -9,20 +9,26 @@ export async function fetchSessions(): Promise<SessionMeta[]> {
   return res.json() as Promise<SessionMeta[]>;
 }
 
+export interface SessionPayload {
+  session: SessionMeta;
+  events: StoredEvent[];
+  children: SessionMeta[];   // subagent runs spawned by this session
+}
+
 export async function fetchSession(id: string, beforeSeq?: number, targetMessageId?: string | null):
-    Promise<{ session: SessionMeta; events: StoredEvent[] }> {
+    Promise<SessionPayload> {
   const qs = beforeSeq !== undefined ? `?before_seq=${beforeSeq}`
     : targetMessageId ? `?m=${encodeURIComponent(targetMessageId)}` : '';
   const res = await fetch(`/api/sessions/${id}${qs}`);
   if (!res.ok) throw new Error(`session: ${res.status}`);
-  return res.json() as Promise<{ session: SessionMeta; events: StoredEvent[] }>;
+  return res.json() as Promise<SessionPayload>;
 }
 
-/** Session metadata only (limit=0) — cheap enough to poll for the `live` flag. */
-export async function fetchSessionMeta(id: string): Promise<SessionMeta> {
+/** Metadata only (limit=0) — cheap enough to poll for `live` and new subagents. */
+export async function fetchSessionMeta(id: string): Promise<SessionPayload> {
   const res = await fetch(`/api/sessions/${id}?limit=0`);
   if (!res.ok) throw new Error(`session: ${res.status}`);
-  return (await res.json() as { session: SessionMeta }).session;
+  return res.json() as Promise<SessionPayload>;
 }
 
 export function postStat(event: 'viewer_open' | 'question_asked'): void {

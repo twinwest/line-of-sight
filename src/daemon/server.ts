@@ -82,7 +82,8 @@ export function buildServer(store: Store, hub: SseHub,
         beforeSeq,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
-      return { session: withLive([session])[0], events };
+      // children = subagent runs; the viewer hangs them off their Task row
+      return { session: withLive([session])[0], events, children: store.listChildren(session.id) };
     });
 
   app.get<{ Params: { id: string } }>('/api/sessions/:id/stream', (req, reply) => {

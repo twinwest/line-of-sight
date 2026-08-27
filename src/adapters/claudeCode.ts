@@ -11,10 +11,13 @@ import type { AgentAdapter } from './types.js';
 // `queue-operation` is NOT here (it was until 2026-08-26): its enqueue/remove
 // ops carry the text the user typed while the agent worked — the viewer
 // derives the "queued, not yet read" strip from them (web/src/queue.ts).
+// `fork-context-ref` opens the transcript of a subagent forked from its
+// parent's context — a pointer ({parentSessionId, parentLastUuid,
+// contextLength}), not content; the parent link comes from the path anyway.
 const DROP_TYPES = new Set([
   'mode', 'permission-mode', 'last-prompt', 'bridge-session',
   'file-history-snapshot', 'file-history-delta',
-  'atis-latch', 'agent-name',
+  'atis-latch', 'agent-name', 'fork-context-ref',
 ]);
 
 // Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES +
@@ -28,6 +31,7 @@ const ATTACHMENT_DROP = new Set([
 ]);
 
 const UUID_JSONL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/;
+const AGENT_JSONL = /^agent-[0-9a-z]+\.jsonl$/i;
 
 type Json = Record<string, unknown>;
 
@@ -142,6 +146,28 @@ function startsMatch(procStart: string | null, psStart: string): boolean {
   return Date.parse(`${procStart} UTC`) === actual || Date.parse(procStart) === actual;
 }
 
+/** Subagent transcript (`<session-uuid>/subagents/agent-*.jsonl`) → its child
+ *  metadata; null for an ordinary top-level transcript. The parent comes from
+ *  the path, so it is always known; the sibling `.meta.json` adds the Task
+ *  tool_use the run belongs to and a human title. That file is written at spawn
+ *  time, before the transcript — but it is undocumented, so a missing or
+ *  drifted one just costs the Task-row link, never the ingest. */
+function subagentMeta(filePath: string):
+    { parentId: string; toolUseId: string | null; title: string } | null {
+  const dir = path.dirname(filePath);
+  if (path.basename(dir) !== 'subagents') return null;
+  let m: Json = {};
+  try {
+    m = JSON.parse(fs.readFileSync(filePath.replace(/\.jsonl$/, '.meta.json'), 'utf8')) as Json;
+  } catch { /* not written yet, unreadable, or gone */ }
+  const title = [str(m.agentType), str(m.description)].filter(Boolean).join(' · ');
+  return {
+    parentId: path.basename(path.dirname(dir)),
+    toolUseId: str(m.toolUseId),
+    title: truncate(title, 120),
+  };
+}
+
 /** First user prompt lines that are CLI plumbing, not a real prompt. */
 function isRealPrompt(line: Json, text: string): boolean {
   if (line.isMeta === true) return false;
@@ -154,11 +180,16 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     id: 'claude-code',
     roots: () => [root],
 
-    // Only top-level <uuid>.jsonl directly inside a project dir — siblings
-    // include <uuid>/subagents/*.jsonl and memory/*.md (see SPIKE_NOTES.md).
+    // <project>/<uuid>.jsonl (a session) and <project>/<uuid>/subagents/
+    // agent-*.jsonl (a subagent run, ingested as that session's child).
+    // Everything else alongside them — memory/*.md, the *.meta.json — is not
+    // a transcript (see SPIKE_NOTES.md).
     matches(filePath) {
-      return UUID_JSONL.test(path.basename(filePath))
-        && path.dirname(path.dirname(filePath)) === root;
+      const dir = path.dirname(filePath);
+      if (UUID_JSONL.test(path.basename(filePath))) return path.dirname(dir) === root;
+      return AGENT_JSONL.test(path.basename(filePath))
+        && path.basename(dir) === 'subagents'
+        && path.dirname(path.dirname(path.dirname(dir))) === root;
     },
 
     // ~/.claude/sessions/<pid>.json is written by the CLI itself and carries
@@ -304,15 +335,22 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     sessionMeta(filePath, firstEvents) {
       const first = firstEvents[0];
       const ts = first?.ts ?? 0;
+      // subagent ids are the filename's `agent-<hex>`, so they can't collide
+      // with the uuid ids of top-level sessions
+      const sub = subagentMeta(filePath);
       return {
         id: path.basename(filePath, '.jsonl'),
         adapter: 'claude-code',
         filePath,
         projectDir: null,   // filled from cwd patches (dir name munging is lossy)
-        title: '',
+        // a subagent's first user line is its whole spawn prompt — a terrible
+        // title, so meta.json's description wins when there is one
+        title: sub?.title ?? '',
         startedAt: ts,
         updatedAt: ts,
         messageCount: 0,
+        parentId: sub?.parentId ?? null,
+        toolUseId: sub?.toolUseId ?? null,
       };
     },
   };

@@ -148,9 +148,10 @@ Notes:
 - Transcript root: `~/.claude/projects/`. One subdirectory per project cwd
   (path munged **lossily**: `/` and `_` both → `-`; derive projectDir from
   the `cwd` field on message lines, never from the dir name), containing
-  `<session-uuid>.jsonl` files. `matches()` accepts only top-level
-  `<uuid>.jsonl` — sibling dirs hold subagent transcripts
-  (`<uuid>/subagents/agent-*.jsonl`, ignored in v1) and `memory/*.md`.
+  `<session-uuid>.jsonl` files. `matches()` accepts those plus subagent
+  transcripts at `<uuid>/subagents/agent-*.jsonl`, ingested as child sessions
+  of the surrounding `<uuid>` (see "Subagent sessions" below); `memory/*.md`
+  and the `.meta.json` sidecars are not transcripts.
 - Line schema (observed on CLI 2.1.202–2.1.241; treat as unstable): JSON
   objects with `type` — observed: `user`, `assistant`, `system`, `attachment`,
   `mode`, `permission-mode`, `last-prompt`, `ai-title`, `custom-title`,
@@ -167,6 +168,28 @@ Notes:
 - Top-level lines never had `isSidechain: true` (subagents live in the
   subagents dir); keep the defensive `meta` rendering if one ever appears.
 - Fixtures from real (redacted) lines: `test/fixtures/claude-code/`.
+
+### Subagent sessions
+
+A subagent run is an ordinary session with two extra columns: `parent_id` (the
+surrounding `<uuid>` dir — derived from the path, so always known) and
+`tool_use_id` (from the sibling `agent-*.meta.json`, which also supplies the
+title `agentType · description`; best-effort, the file is undocumented). Line
+schema is identical to a top-level transcript, so `parseLine` is unchanged;
+only `fork-context-ref` is new (dropped as bookkeeping).
+
+`listSessions()` returns `parent_id IS NULL` only — children are reached from
+their parent, never from the session list. `/api/sessions/:id` carries
+`children`, and the viewer keys them by `tool_use_id` to put a "transcript ↗"
+link on the Task row. Two link sites, because the CLI writes Task calls two
+ways: on the `tool_use` fold when the use reached the transcript, and on the
+orphan `tool_result` when it did not (parallel Task batches write only
+results). A child with no `meta.json` has no `tool_use_id` and gets no row
+link — the header's "Subagents · N" popover is the fallback route.
+
+No live status: subagents have no `~/.claude/sessions/<pid>.json`, so
+`liveSessions()` never matches one; the transcript-timestamp heuristic still
+marks a growing child as running.
 
 ### Ingestion pipeline
 

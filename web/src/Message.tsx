@@ -2,7 +2,8 @@ import { createContext, memo, useContext, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import type { RenderBlock, StoredEvent } from './api';
+import { nav } from './App';
+import type { RenderBlock, SessionMeta, StoredEvent } from './api';
 import {
   askQuestions, chosenAnswer, isPlanFileWrite, planMarkdown,
   type AskQuestion, type ToolOutcome,
@@ -19,7 +20,9 @@ export const OutcomesCtx = createContext<{
   outcomes: Map<string, ToolOutcome>;
   useIds: Set<string>;
   pendingEventId: string | null;
-}>({ outcomes: new Map(), useIds: new Set(), pendingEventId: null });
+  /** tool_use id → the subagent session that call spawned (Task rows). */
+  subagents: Map<string, SessionMeta>;
+}>({ outcomes: new Map(), useIds: new Set(), pendingEventId: null, subagents: new Map() });
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -190,8 +193,21 @@ function PlanDraftCard({ block }: { block: ToolUseBlock }) {
   );
 }
 
+/** Opens the transcript of the subagent a Task call spawned. Sits on the
+ *  tool_use fold — or, when a batch of parallel Tasks wrote only their results
+ *  and no use ever reached the transcript, on the orphan tool_result instead. */
+function SubagentLink({ child }: { child: SessionMeta }) {
+  return (
+    <a className="subagent-link" href={`/s/${child.id}`}
+       title={`open the subagent transcript (${child.messageCount} messages)`}
+       onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(`/s/${child.id}`); }}>
+      transcript ↗
+    </a>
+  );
+}
+
 function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
-  const { outcomes, useIds } = useContext(OutcomesCtx);
+  const { outcomes, useIds, subagents } = useContext(OutcomesCtx);
   switch (block.type) {
     case 'text':
       return (
@@ -229,12 +245,18 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       const arg = block.summary.startsWith(block.toolName)
         ? block.summary.slice(block.toolName.length).trim() : block.summary;
       const result = block.id ? outcomes.get(block.id) : undefined;
+      // a Task call has its own transcript — the fold shows the report it
+      // handed back, the link opens the run that produced it
+      const child = block.id ? subagents.get(block.id) : undefined;
       return (
         <details className={`fold tool ${result?.isError ? 'is-error' : ''}`}>
           <summary>
-            ⏵ <span className="tool-name">{block.toolName}</span>
-            {arg && <span className="tool-arg"> {arg}</span>}
-            {result?.isError && ' ✗'}
+            <span className="fold-label">
+              ⏵ <span className="tool-name">{block.toolName}</span>
+              {arg && <span className="tool-arg"> {arg}</span>}
+              {result?.isError && ' ✗'}
+            </span>
+            {child && <SubagentLink child={child} />}
           </summary>
           {editDiff(block.toolName, block.input)
             ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
@@ -246,9 +268,14 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       // normally absorbed into its use's fold above; orphans (use outside the
       // loaded window, pre-id ingests, drift) still render — never drop content
       if (block.toolUseId && useIds.has(block.toolUseId)) return null;
+      // an orphan whose id names a subagent run IS that Task's only row here
+      const orphanChild = block.toolUseId ? subagents.get(block.toolUseId) : undefined;
       return (
         <details className={`fold tool ${block.isError ? 'is-error' : ''}`}>
-          <summary>⏵ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</summary>
+          <summary>
+            <span className="fold-label">⏵ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</span>
+            {orphanChild && <SubagentLink child={orphanChild} />}
+          </summary>
           <pre className="fold-body scrolly">{block.output}</pre>
         </details>
       );

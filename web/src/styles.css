@@ -246,6 +246,17 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.95em;
 }
 .tool > summary .tool-name { font-weight: 600; }
+/* Task rows: the one place a fold summary carries a link out of the session.
+   Accent-colored so it reads as navigation, not as more of the tool's name.
+   The summary's own ellipsis would eat the link, so those rows lay out as a
+   flex line and the label does the truncating instead. */
+.fold > summary:has(.subagent-link) { display: flex; align-items: baseline; }
+.fold > summary .fold-label { overflow: hidden; text-overflow: ellipsis; }
+.subagent-link {
+  flex: none; margin-left: 0.5rem; color: var(--accent);
+  text-decoration: none; font-size: 0.8em;
+}
+.subagent-link:hover { text-decoration: underline; }
 
 /* ---- blocking-tool cards (AskUserQuestion / ExitPlanMode) ----
    The two moments the agent stops and waits for the user: first-class

@@ -93,14 +93,43 @@ describe('incremental ingest', () => {
       .toBe(Date.parse('2026-08-24T00:00:00.000Z'));
   });
 
-  it('start() scans existing files and skips subagent/memory files', () => {
+  it('start() scans existing files, ingesting subagents as child sessions', () => {
     fs.writeFileSync(file, line('u1', 'scanned'));
     const subDir = path.join(root, '-tmp-proj', SESSION, 'subagents');
     fs.mkdirSync(subDir, { recursive: true });
     fs.writeFileSync(path.join(subDir, 'agent-x.jsonl'), line('sub1', 'subagent'));
+    fs.writeFileSync(path.join(subDir, 'agent-x.meta.json'), JSON.stringify({
+      agentType: 'Explore', description: 'find the thing', toolUseId: 'toolu_1',
+    }));
     ingester.start();
     expect(store.getEvents(SESSION)).toHaveLength(1);
+    // the list stays top-level only; the child hangs off its parent
     expect(store.listSessions()).toHaveLength(1);
+    expect(store.listChildren(SESSION)).toMatchObject([
+      { id: 'agent-x', title: 'Explore · find the thing', toolUseId: 'toolu_1' },
+    ]);
+    expect(store.getEvents('agent-x')).toHaveLength(1);
     return ingester.stop();
+  });
+
+  it('a subagent with no meta.json still lands under its parent', () => {
+    const subDir = path.join(root, '-tmp-proj', SESSION, 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    const sub = path.join(subDir, 'agent-y.jsonl');
+    fs.writeFileSync(sub, line('sub1', 'orphan run'));
+    ingester.ingestFile(adapter(), sub);
+    // parent comes from the path, so only the Task-row link is lost
+    expect(store.listChildren(SESSION)).toMatchObject([
+      { id: 'agent-y', parentId: SESSION, toolUseId: null, title: 'orphan run' },
+    ]);
+  });
+
+  it('sibling files that are not transcripts stay out', () => {
+    const a = adapter();
+    const dir = path.join(root, '-tmp-proj', SESSION, 'subagents');
+    expect(a.matches(path.join(dir, 'agent-x.meta.json'))).toBe(false);
+    expect(a.matches(path.join(root, '-tmp-proj', SESSION, 'memory', 'notes.md'))).toBe(false);
+    // right filename, wrong depth
+    expect(a.matches(path.join(root, '-tmp-proj', 'subagents', 'agent-x.jsonl'))).toBe(false);
   });
 });

@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, adapter TEXT, file_path TEXT UNIQUE, project_dir TEXT,
   title TEXT DEFAULT '', title_source TEXT,
   started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
-  byte_offset INTEGER DEFAULT 0
+  byte_offset INTEGER DEFAULT 0,
+  parent_id TEXT, tool_use_id TEXT
 );
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
@@ -49,6 +50,7 @@ interface SessionRow {
   id: string; adapter: string; file_path: string; project_dir: string | null;
   title: string; title_source: TitleSource | null;
   started_at: number; updated_at: number; message_count: number; byte_offset: number;
+  parent_id: string | null; tool_use_id: string | null;
 }
 
 function toMeta(r: SessionRow): SessionMeta {
@@ -56,6 +58,7 @@ function toMeta(r: SessionRow): SessionMeta {
     id: r.id, adapter: r.adapter as SessionMeta['adapter'], filePath: r.file_path,
     projectDir: r.project_dir, title: r.title,
     startedAt: r.started_at, updatedAt: r.updated_at, messageCount: r.message_count,
+    parentId: r.parent_id, toolUseId: r.tool_use_id,
   };
 }
 
@@ -80,6 +83,12 @@ export class Store {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(SCHEMA);
+    // columns added after the tables shipped — CREATE TABLE IF NOT EXISTS
+    // leaves an existing db untouched, so add them here (throws once they are
+    // already there, which is the fresh-db case)
+    for (const col of ['parent_id TEXT', 'tool_use_id TEXT']) {
+      try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
+    }
   }
 
   close(): void { this.db.close(); }
@@ -92,10 +101,21 @@ export class Store {
 
   upsertSession(meta: SessionMeta): void {
     this.db.prepare(`
-      INSERT INTO sessions (id, adapter, file_path, project_dir, title, started_at, updated_at, message_count)
-      VALUES (@id, @adapter, @filePath, @projectDir, @title, @startedAt, @updatedAt, @messageCount)
+      INSERT INTO sessions (id, adapter, file_path, project_dir, title, title_source,
+        started_at, updated_at, message_count, parent_id, tool_use_id)
+      VALUES (@id, @adapter, @filePath, @projectDir, @title, @titleSource,
+        @startedAt, @updatedAt, @messageCount, @parentId, @toolUseId)
       ON CONFLICT(id) DO NOTHING
-    `).run(meta);
+    `).run({
+      id: meta.id, adapter: meta.adapter, filePath: meta.filePath,
+      projectDir: meta.projectDir, title: meta.title,
+      // a title known at ingest time (a subagent's meta.json description) must
+      // outrank the prompt-derived one the first transcript line would apply
+      titleSource: meta.title ? 'custom' : null,
+      startedAt: meta.startedAt, updatedAt: meta.updatedAt,
+      messageCount: meta.messageCount,
+      parentId: meta.parentId ?? null, toolUseId: meta.toolUseId ?? null,
+    });
   }
 
   /** Wipe a session's events for a from-zero re-parse (file shrank). */
@@ -173,13 +193,23 @@ export class Store {
     }
   }
 
+  /** Top-level sessions only — subagent runs are reached from their parent. */
   listSessions(opts: { project?: string; q?: string } = {}): SessionMeta[] {
     const rows = this.db.prepare(`
       SELECT * FROM sessions
-      WHERE (@project IS NULL OR project_dir = @project)
+      WHERE parent_id IS NULL
+        AND (@project IS NULL OR project_dir = @project)
         AND (@q IS NULL OR title LIKE '%' || @q || '%')
       ORDER BY updated_at DESC
     `).all({ project: opts.project ?? null, q: opts.q ?? null }) as SessionRow[];
+    return rows.map(toMeta);
+  }
+
+  /** Subagent sessions this session spawned, in the order they started. */
+  listChildren(parentId: string): SessionMeta[] {
+    const rows = this.db.prepare(
+      'SELECT * FROM sessions WHERE parent_id = ? ORDER BY started_at',
+    ).all(parentId) as SessionRow[];
     return rows.map(toMeta);
   }
 

@@ -13,12 +13,12 @@ including one 4.5MB July session (CLI v2.1.202) and current sessions (v2.1.241).
   (`/Users/jane_doe/...` → `-Users-jane-doe-...`). ⇒ Do NOT derive projectDir
   from the dir name; use the `cwd` field present on message lines.
 - Session id = filename uuid — confirmed.
-- Non-transcript content lives alongside: `<session-uuid>/subagents/agent-*.jsonl`
-  (+ `.meta.json`) for subagent transcripts, and `memory/*.md` dirs.
-  `matches()` must accept only top-level `<uuid>.jsonl`. Top-level lines never
-  had `isSidechain: true` (only `false` or absent) — sidechains live in the
-  subagents dir instead. v1: ignore subagent files (their results appear in the
-  parent's tool_result blocks anyway).
+- Content lives alongside the transcript: `<session-uuid>/subagents/agent-*.jsonl`
+  (+ `.meta.json`) for subagent transcripts, and `memory/*.md` dirs. Top-level
+  lines never had `isSidechain: true` (only `false` or absent) — sidechains
+  live in the subagents dir instead.
+  v1 ignored them; **2026-08-26 they are ingested as child sessions** —
+  see the subagent addendum at the end of this file.
 - Append-only: consistent with observations (timestamps strictly increasing);
   keep the size-shrank ⇒ reparse-from-0 guard anyway.
 - Timestamps: ISO 8601 with ms, UTC `Z` (`2026-08-17T04:13:32.543Z`).
@@ -187,3 +187,31 @@ of its own ("it will read the plan from the file you wrote").
   `ExitPlanMode.input.plan`), and whether follow-up revisions use `Edit`
   (deltas — not promotable to a full-text card). Both degrade safely: no
   matching Write → no draft card, everything else unchanged.
+
+## Addendum 2026-08-26 — subagent transcripts (measured before implementing)
+
+Surveyed all 25 `subagents/agent-*.jsonl` on this machine (7 parent sessions).
+
+- **Layout is flat.** Every subagent file sits directly in
+  `<session-uuid>/subagents/`, including runs spawned by another subagent.
+  Every observed `meta.json` had `spawnDepth: 1`; no nested `subagents/` dir
+  exists. ⇒ `parent_id` from the path always names the *top-level* session,
+  never an intermediate agent.
+- **`meta.json` is written first** (at spawn), before the transcript's first
+  line — so reading it in `sessionMeta()` is safe. Shape:
+  `{agentType, description, toolUseId, spawnDepth}`.
+- **Line schema is the parent's.** Types observed across all 25 files:
+  `assistant`, `user`, `attachment`, and `fork-context-ref` (1 line, 1 file).
+  The last is the header of a context-forked subagent —
+  `{agentId, parentSessionId, parentLastUuid, contextLength}`, a pointer with
+  no content, so it joins `DROP_TYPES`. No other new type; `parseLine` needed
+  no change.
+- **`toolUseId` links to a Task row only 5 times in 25.** The other 20 are
+  parallel/async Task batches where the CLI wrote the `tool_result` but never
+  an `assistant` `tool_use` block with that id — the id appears *only* on the
+  result. (Checked sibling transcripts too: 0 matches there, so it is not a
+  nesting artifact.) ⇒ the viewer must anchor the link on the orphan
+  `tool_result` as well as on the `tool_use` fold, or 80% of real subagents
+  get no in-transcript entry point.
+- **No liveness signal.** Subagents get no `~/.claude/sessions/<pid>.json`
+  (that file is per CLI process), so `liveSessions()` can never mark one.

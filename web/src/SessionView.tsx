@@ -114,18 +114,25 @@ export function SessionView({ id, targetMessageId = null }:
     { id: string; targetMessageId?: string | null }) {
   const [session, setSession] = useState<SessionMeta | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
+  const [children, setChildren] = useState<SessionMeta[]>([]);
   const [error, setError] = useState('');
   const [sideChats, setSideChats] = useState<SideChat[]>([]);
   const [openChat, setOpenChat] = useState<SideChat | null>(null);
   const [askBtn, setAskBtn] = useState<AskButton | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-  // poll the meta so busy→idle flips (and the last turn folds) promptly: `live`
-  // and updatedAt change with no SSE event to announce them
+  // poll the meta so busy→idle flips (and the last turn folds) promptly: `live`,
+  // updatedAt and a freshly spawned subagent all change with no SSE event to
+  // announce them
+  const applyMeta = useCallback(({ session, children }:
+      { session: SessionMeta; children: SessionMeta[] }) => {
+    setSession(session);
+    setChildren(children);
+  }, []);
   useEffect(() => {
-    const t = setInterval(() => { void fetchSessionMeta(id).then(setSession, () => {}); }, 10_000);
+    const t = setInterval(() => { void fetchSessionMeta(id).then(applyMeta, () => {}); }, 10_000);
     return () => clearInterval(t);
-  }, [id]);
+  }, [id, applyMeta]);
 
   // anything arriving while the view is open counts as seen — clears the
   // list's "just finished" state; later activity re-arms it
@@ -136,8 +143,8 @@ export function SessionView({ id, targetMessageId = null }:
   }, [id]);
 
   useEffect(() => {
-    fetchSession(id, undefined, targetMessageId).then(({ session, events }) => {
-      setSession(session);
+    fetchSession(id, undefined, targetMessageId).then(({ session, events, children }) => {
+      applyMeta({ session, children });
       setEvents(events);
       requestAnimationFrame(() => {
         const el = scrollRef.current;
@@ -165,8 +172,8 @@ export function SessionView({ id, targetMessageId = null }:
     // events missed while the stream was down (or the tab was backgrounded and
     // throttled) never arrive on their own — re-pull the tail on reconnect/return
     const resync = () => {
-      void fetchSession(id).then(({ session: meta, events: tail }) => {
-        setSession(meta);
+      void fetchSession(id).then(({ session: meta, events: tail, children: kids }) => {
+        applyMeta({ session: meta, children: kids });
         setEvents((prev) => merge(prev, tail));
       }, () => {});
     };
@@ -179,7 +186,7 @@ export function SessionView({ id, targetMessageId = null }:
       es.close();
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [id, refreshChats]);
+  }, [id, refreshChats, applyMeta]);
 
   // sticky auto-scroll: follow the tail only if already at the bottom
   useEffect(() => {
@@ -277,8 +284,13 @@ export function SessionView({ id, targetMessageId = null }:
   const useIds = useMemo(() => toolUseIds(events), [events]);
   const pendingEventId = useMemo(() => running ? pendingBlockId(events, outcomes) : null,
     [events, outcomes, running]);
-  const outcomesCtx = useMemo(() => ({ outcomes, useIds, pendingEventId }),
-    [outcomes, useIds, pendingEventId]);
+  // Task tool_use id → the subagent session it spawned, so the Task row can
+  // open it. A child whose meta.json was missing has no toolUseId and simply
+  // never gets a row link (it is still reachable from the header count).
+  const subagents = useMemo(() => new Map(
+    children.filter((c) => c.toolUseId).map((c) => [c.toolUseId!, c] as const)), [children]);
+  const outcomesCtx = useMemo(() => ({ outcomes, useIds, pendingEventId, subagents }),
+    [outcomes, useIds, pendingEventId, subagents]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
@@ -313,10 +325,38 @@ export function SessionView({ id, targetMessageId = null }:
     <div className="session-view">
       <div className="session-header">
         <span className={`dot ${dotStatus}`} title={DOT_TITLE[dotStatus]} />
+        {session.parentId && (
+          <a className="chip" href={`/s/${session.parentId}`} title="back to the session that spawned this subagent"
+             onClick={(e) => { e.preventDefault(); nav(`/s/${session.parentId!}`); }}>↑ parent</a>
+        )}
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
-        <span className="badge">{session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
+        <span className="badge">{session.parentId ? 'subagent'
+          : session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
+        {/* also the only way into a subagent whose Task row is outside the
+            loaded window, or whose meta.json never linked it to one */}
+        {children.length > 0 && (
+          <>
+            <button className="chip" popoverTarget="subagents-list" title="subagents this session spawned">
+              Subagents · {children.length}
+            </button>
+            <div id="subagents-list" className="asks-list" popover="auto">
+              {children.map((c) => (
+                <button key={c.id} className="asks-item" onClick={(e) => {
+                  e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
+                  nav(`/s/${c.id}`);
+                }}>
+                  <span className="asks-q">{c.title || '(untitled)'}</span>
+                  <span className="asks-meta">
+                    {c.messageCount} message{c.messageCount === 1 ? '' : 's'}
+                    {c.startedAt ? ` · ${new Date(c.startedAt).toLocaleTimeString()}` : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <button className="chip" popoverTarget="asks-list" title="side chats in this session">
           Asks · {sideChats.length}
         </button>
