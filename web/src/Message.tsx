@@ -4,20 +4,22 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { RenderBlock, StoredEvent } from './api';
 import {
-  askQuestions, chosenAnswer, planMarkdown,
+  askQuestions, chosenAnswer, isPlanFileWrite, planMarkdown,
   type AskQuestion, type ToolOutcome,
 } from './asks';
 import { diffLines } from './diff';
 import { parsePlumbing } from './plumbing';
 
 /** tool_use id → result pairing plus "which event is the CLI parked on",
- *  built once per merge in SessionView. A context, not a prop: only the
- *  blocking-tool cards subscribe, so every other memoized EventRow skips
- *  re-rendering when the map changes on each SSE append. */
+ *  built once per merge in SessionView. A context, not a prop, so the
+ *  memoized EventRow shells skip reconciling on each SSE append; the Blocks
+ *  inside (tool folds, cards) subscribe — an action is one row, so a use
+ *  fold renders its own result and the result's carrier row renders empty. */
 export const OutcomesCtx = createContext<{
   outcomes: Map<string, ToolOutcome>;
+  useIds: Set<string>;
   pendingEventId: string | null;
-}>({ outcomes: new Map(), pendingEventId: null });
+}>({ outcomes: new Map(), useIds: new Set(), pendingEventId: null });
 
 function copy(text: string): void {
   void navigator.clipboard.writeText(text);
@@ -166,7 +168,30 @@ function PlanCard({ block, eventId }: { block: ToolUseBlock; eventId: string }) 
   );
 }
 
+/** A Write into ~/.claude/plans/ — the plan being drafted, visible before
+ *  the (batch-flushed) ExitPlanMode can land. No outcome/pending logic:
+ *  Write returns in milliseconds, there is no waiting state. */
+function PlanDraftCard({ block }: { block: ToolUseBlock }) {
+  // ponytail: Write only — Edits to the plan file are deltas that can't
+  // reconstruct the full text, so they stay folded as ordinary steps
+  const content = (block.input as { content: string }).content;
+  return (
+    <div className="plan-card">
+      <div className="card-status">
+        plan · draft
+        <CopyButton text={() => content} label="Copy Markdown" />
+      </div>
+      <div className="md">
+        <Markdown remarkPlugins={MD_REMARK} rehypePlugins={MD_REHYPE} components={MD_COMPONENTS}>
+          {content}
+        </Markdown>
+      </div>
+    </div>
+  );
+}
+
 function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
+  const { outcomes, useIds } = useContext(OutcomesCtx);
   switch (block.type) {
     case 'text':
       return (
@@ -181,7 +206,7 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       const preview = block.text.trimStart().split('\n', 1)[0] ?? '';
       return (
         <details className="fold thinking">
-          <summary>✻ Thinking{preview ? ` — ${preview}` : '…'}</summary>
+          <summary>✻ {preview || 'Thinking…'}</summary>
           <div className="fold-body pre-wrap">{block.text}</div>
         </details>
       );
@@ -195,25 +220,35 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       if (block.toolName === 'ExitPlanMode') {
         return <PlanCard block={block} eventId={eventId} />;
       }
-      // summary is "Name arg" (adapter's toolSummary) — split so the name can
-      // sit in its own register
+      if (isPlanFileWrite(block)) {
+        return <PlanDraftCard block={block} />;
+      }
+      // one action = one row: the fold owns its result (SPEC C2 "click to
+      // expand full input/output"); summary is "Name arg" (adapter's
+      // toolSummary) — split so the name can sit in its own register
       const arg = block.summary.startsWith(block.toolName)
         ? block.summary.slice(block.toolName.length).trim() : block.summary;
+      const result = block.id ? outcomes.get(block.id) : undefined;
       return (
-        <details className="fold tool">
+        <details className={`fold tool ${result?.isError ? 'is-error' : ''}`}>
           <summary>
             ⏵ <span className="tool-name">{block.toolName}</span>
             {arg && <span className="tool-arg"> {arg}</span>}
+            {result?.isError && ' ✗'}
           </summary>
           {editDiff(block.toolName, block.input)
             ?? <pre className="fold-body scrolly">{JSON.stringify(block.input, null, 2)}</pre>}
+          {result && <pre className="fold-body scrolly">{result.output}</pre>}
         </details>
       );
     }
     case 'tool_result':
+      // normally absorbed into its use's fold above; orphans (use outside the
+      // loaded window, pre-id ingests, drift) still render — never drop content
+      if (block.toolUseId && useIds.has(block.toolUseId)) return null;
       return (
         <details className={`fold tool ${block.isError ? 'is-error' : ''}`}>
-          <summary>→ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</summary>
+          <summary>⏵ {block.isError ? '✗ ' : ''}{block.summary || 'result'}</summary>
           <pre className="fold-body scrolly">{block.output}</pre>
         </details>
       );

@@ -166,3 +166,24 @@ transcript's byte size at 300ms while parking the CLI on a question:
   Unverified: whether `waiting` also covers permission prompts (harmless
   either way — both mean the CLI needs the user), and what `shell` marks
   exactly (treated as not-live).
+
+## Addendum 2026-08-26 — plan mode drafts the plan to disk before approval
+
+Newer CC plan modes instruct the model to build its plan incrementally in
+`~/.claude/plans/<slug>.md` (observed: `plan-mode-claude-bubbly-creek.md`)
+via the ordinary `Write` tool, then call `ExitPlanMode` with no plan payload
+of its own ("it will read the plan from the file you wrote").
+
+- `Write` is non-blocking → returns in milliseconds → per the batching rule
+  above, its transcript line **flushes immediately**, while the plan is still
+  pending. Verified in transcript `72a69875-….jsonl` (this project): the
+  `tool_use[Write]` carrying the full plan markdown in `input.content` was on
+  disk minutes before the `ExitPlanMode` use/result pair landed.
+- **Consequence**: the "pending plan is structurally unreachable" rule has a
+  side door — the plan *content* (not the approval state) is visible early by
+  recognizing Writes into `~/.claude/plans/`. The viewer promotes those to a
+  draft plan card (DECISIONS.md 2026-08-26).
+- Unverified: which CC versions do this (older ones pass the plan only in
+  `ExitPlanMode.input.plan`), and whether follow-up revisions use `Edit`
+  (deltas — not promotable to a full-text card). Both degrade safely: no
+  matching Write → no draft card, everything else unchanged.

@@ -5,7 +5,7 @@ import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
-import { pendingBlockId, toolOutcomes } from './asks';
+import { pendingBlockId, toolOutcomes, toolUseIds } from './asks';
 import { CopyButton, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { isQueueOp, queuedInputs } from './queue';
 import { markSeen } from './seen';
@@ -274,9 +274,11 @@ export function SessionView({ id, targetMessageId = null }:
   // parked on a question at the tail". Gated on `running`: a session killed
   // mid-question must not claim "waiting for you" forever.
   const outcomes = useMemo(() => toolOutcomes(events), [events]);
+  const useIds = useMemo(() => toolUseIds(events), [events]);
   const pendingEventId = useMemo(() => running ? pendingBlockId(events, outcomes) : null,
     [events, outcomes, running]);
-  const outcomesCtx = useMemo(() => ({ outcomes, pendingEventId }), [outcomes, pendingEventId]);
+  const outcomesCtx = useMemo(() => ({ outcomes, useIds, pendingEventId }),
+    [outcomes, useIds, pendingEventId]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
@@ -315,6 +317,12 @@ export function SessionView({ id, targetMessageId = null }:
         <span className="badge">{session.adapter === 'claude-code' ? 'claude' : session.adapter}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
+        {sideChats.length > 0 && (
+          <button className="chip" title="reopen side chats"
+            onClick={() => setOpenChat(sideChats.at(-1)!)}>
+            💬 {sideChats.length}
+          </button>
+        )}
       </div>
       <OutcomesCtx.Provider value={outcomesCtx}>
       <div className="view-split">
@@ -338,7 +346,7 @@ export function SessionView({ id, targetMessageId = null }:
                 <details className="turn-fold" key={`fold-${item.events[0]?.id ?? idx}`}
                   open={containsTarget || undefined}>
                   <summary>
-                    ⏵ {item.events.length} steps
+                    ⏵ {item.steps} step{item.steps === 1 ? '' : 's'}
                     {item.toolCalls > 0 && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
                     {anchored.length > 0 && (
                       <button

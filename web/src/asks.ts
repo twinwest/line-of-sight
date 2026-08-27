@@ -14,6 +14,19 @@ export function isBlockingUse(b: RenderBlock): b is Extract<RenderBlock, { type:
   return b.type === 'tool_use' && BLOCKING_TOOLS.has(b.toolName);
 }
 
+/** Newer CLI plan modes draft the plan into ~/.claude/plans/*.md via Write —
+ *  a non-blocking tool that flushes immediately, so the draft is in the
+ *  transcript long before ExitPlanMode lands (SPIKE_NOTES 2026-08-26: the
+ *  blocking use itself only flushes on approval). Promoting these Writes is
+ *  the only way to show the plan while it is actually pending. Shape drift
+ *  (missing content, other paths) → false, generic fold. */
+export function isPlanFileWrite(b: RenderBlock): boolean {
+  if (b.type !== 'tool_use' || b.toolName !== 'Write') return false;
+  const i = b.input as { file_path?: unknown; content?: unknown } | null;
+  return typeof i?.file_path === 'string' && /\/\.claude\/plans\/[^/]+\.md$/.test(i.file_path)
+    && typeof i?.content === 'string' && i.content.trim() !== '';
+}
+
 export interface AskOption { label: string; description: string; preview?: string }
 export interface AskQuestion { question: string; header: string; multiSelect: boolean; options: AskOption[] }
 
@@ -80,6 +93,20 @@ export function toolOutcomes(events: StoredEvent[]): Map<string, ToolOutcome> {
     }
   }
   return map;
+}
+
+/** Ids of tool_use blocks in the loaded window — a tool_result whose use is
+ *  here renders inside that use's fold; orphans (use outside the "Load
+ *  earlier" window, or drift) still render standalone. */
+export function toolUseIds(events: StoredEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of events) {
+    if (e.kind !== 'message' || !Array.isArray(e.body)) continue;
+    for (const b of e.body as RenderBlock[]) {
+      if (b.type === 'tool_use' && b.id) ids.add(b.id);
+    }
+  }
+  return ids;
 }
 
 /** Id of the last message event iff it holds an unanswered blocking use —

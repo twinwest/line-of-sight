@@ -71,6 +71,15 @@ describe('buildTurns (step folding: prose always visible)', () => {
     expect(fold.type === 'fold' && fold.toolCalls).toBe(2);
   });
 
+  it('counts steps as rendered rows: results absorbed, plumbing/meta one each', () => {
+    // 2 actions + 1 thought + 1 plumbing + 1 meta = 5; the results add nothing
+    const events = [prompt('p1'),
+      tool('t1'), toolResult('r1'), thinking('th1'), tool('t2'), toolResult('r2'),
+      plumbing('x1'), meta('m1'), narration('c1')];
+    const fold = buildTurns(events, { foldTail: true }).find((i) => i.type === 'fold')!;
+    expect(fold.type === 'fold' && fold.steps).toBe(5);
+  });
+
   it('session preamble (meta before first prompt) folds', () => {
     const events = [meta('m1'), meta('m2'), prompt('p1'), narration('c1')];
     expect(shape(buildTurns(events, { foldTail: true }))).toEqual(['fold(m1,m2)', 'p1', 'c1']);
@@ -85,6 +94,21 @@ describe('buildTurns (step folding: prose always visible)', () => {
       ask('a1', 'AskUserQuestion'), toolResult('r2'), ask('x1', 'ExitPlanMode'), narration('c1')];
     expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
       'p1', 'fold(t1,r1)', 'a1', 'r2', 'x1', 'c1',
+    ]);
+  });
+
+  it('plan-file Writes never fold; other Writes and drifted shapes do', () => {
+    const write = (id: string, input: unknown): StoredEvent => ({
+      id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
+      body: [{ type: 'tool_use', toolName: 'Write', summary: 'Write x', input }],
+    });
+    const events = [prompt('p1'),
+      write('w1', { file_path: '/home/u/.claude/plans/plan-mode-x.md', content: '# Plan' }),
+      write('w2', { file_path: '/repo/README.md', content: '# Readme' }),
+      write('w3', { file_path: '/home/u/.claude/plans/plan-mode-x.md' }), // no content → drift
+      narration('c1')];
+    expect(shape(buildTurns(events, { foldTail: true }))).toEqual([
+      'p1', 'w1', 'fold(w2,w3)', 'c1',
     ]);
   });
 });
