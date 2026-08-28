@@ -150,6 +150,8 @@ transcript's byte size at 300ms while parking the CLI on a question:
   (AskUserQuestion / ExitPlanMode) while it is actually pending — `tool_use`
   and `tool_result` always arrive in the same write. Any "waiting for you"
   state derived from the transcript is structurally unreachable.
+  *(Superseded for CLI ≥ 2.1.250 — see Addendum 2026-08-28: the pending
+  `tool_use` now flushes before its result.)*
 - **`status` has more values than `busy`/`idle`.** Watching
   `~/.claude/sessions/<pid>.json` across the same window (CC 2.1.235):
 
@@ -336,3 +338,57 @@ are now answered:
 
 Still open: the 33 unmatched item_completed payloads; queue delivery path;
 `--json` stream shapes.
+
+## Addendum 2026-08-28 — issue #5 verified: `sessions/<pid>.json` is alive on 2.1.250; the 2.1.247 probe was self-contaminated
+
+Re-ran the issue #5 experiment against a real interactive CLI (prompt typed
+keystroke-by-keystroke into the TUI via expect, no CLI-argument prompt).
+The CLI auto-updated 2.1.247 → 2.1.250 during the first run; all clean
+findings below are 2.1.250.
+
+**The original probe contaminated itself.** Launching `claude` from inside a
+Claude Code session (which is where the issue's expect probe ran — and where
+this one initially ran too) hands the child `CLAUDE_CODE_CHILD_SESSION=1`.
+On ≥ 2.1.247 the TUI then shows *"Transcript saving is off — inherited
+CLAUDE_CODE_CHILD_SESSION marker"* and writes **neither transcript nor
+`sessions/<pid>.json`**. That alone reproduces issue #5's findings 3/4
+(no `<pid>.json`, no transcript flush, nothing on SIGKILL). Probes must
+scrub `CLAUDE_CODE_CHILD_SESSION` (we also scrubbed `CLAUDECODE`,
+`CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_ENTRYPOINT`,
+`CLAUDE_CODE_EXECPATH`, `AI_AGENT`, `CLAUDE_EFFORT`).
+
+**Clean-environment findings (2.1.250, interactive, typed input):**
+
+- `~/.claude/sessions/<pid>.json` is written at startup, before any prompt,
+  and deleted on graceful exit. Schema grew (`kind: "interactive"`,
+  `peerProtocol`/`peerFeatures`, `messagingSocketPath`, `name`/`nameSource`,
+  `bridgeSessionId`) but every field `liveSessions()` reads — `sessionId`,
+  `pid`, `procStart`, `status`, `statusUpdatedAt` — is unchanged.
+  **No adapter change needed; the waiting banner is not threatened.**
+- `status` transitions observed live: idle → busy → **waiting** (parked on
+  an AskUserQuestion) → busy → idle. Same vocabulary as 2.1.235.
+- The transcript flushes per message in near-real-time, as before.
+- **Write batching changed since 2.1.235** (supersedes the 2026-08-26
+  addendum's "structurally unreachable" conclusion for ≥ 2.1.250): the
+  pending `AskUserQuestion` `tool_use` line hit the disk ~3s **before** its
+  `tool_result`, and was observed on disk in the same second as
+  `status: waiting`. There is now an on-disk pending-question side door —
+  the same tail-derivation that works for codex's `request_user_input`
+  (2026-08-27 addendum) would work for Claude Code too. Display work is
+  deliberately NOT built here; recorded on issues #3/#5.
+- New (to us) transcript line types seen: `bridge-session`, `atis-latch`,
+  `cost-state`, `ai-title`. All flow through the raw fallback; ingestion
+  unaffected.
+
+**Probe methodology gotchas (for the next person driving a TUI):**
+
+- An expect script must keep *reading* the pty. Sleep-based waits wedge the
+  CLI once the 16KB pty buffer fills: blank TUI, frozen event loop,
+  half-written session json — indistinguishable from a startup hang. Drain
+  with `expect -timeout N <never-match>` instead of `sleep N`.
+- Marker words must not appear whole in the typed prompt; the TUI echo
+  false-positives any `expect` match (use split halves, e.g. ZEB + RAFISH,
+  and match only the model-rendered concatenation).
+- SIGKILLed probes leave stale `sessions/<pid>.json`/`.key` and
+  `/tmp/cc-socks/*.sock` behind; `liveSessions()`'s pid + procStart
+  verification already filters these (observed doing its job).

@@ -187,9 +187,11 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     // that survives a long model turn, which writes no transcript lines at all.
     // Observed statuses: 'busy' (mid-turn), 'waiting' (parked on the user),
     // 'shell', 'idle'. `waiting` is the ONLY live source for "the CLI needs
-    // you": a blocking tool's tool_use line is written together with its
-    // result, i.e. only after the user answers (SPIKE_NOTES 2026-08-26), so
-    // the transcript cannot show a pending question while it is pending.
+    // you" on CLI ≤ 2.1.246: a blocking tool's tool_use line is written
+    // together with its result, i.e. only after the user answers
+    // (SPIKE_NOTES 2026-08-26). CLI ≥ 2.1.250 flushes the pending tool_use
+    // early (SPIKE_NOTES 2026-08-28), so a transcript-tail derivation is
+    // possible there too — not built yet.
     // Undocumented, so every step is best-effort: a missing dir or changed
     // shape just means no live sessions, and the timestamp heuristic stays in
     // charge.
