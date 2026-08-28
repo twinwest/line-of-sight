@@ -1,4 +1,4 @@
-import type { NormalizedEvent, SessionMeta } from '../shared/types.js';
+import type { LiveSession, NormalizedEvent, SessionMeta } from '../shared/types.js';
 
 /** One implementation per supported agent CLI. Session ids (SessionMeta.id)
  *  MUST be globally unique across adapters — every adapter feeds the same
@@ -18,9 +18,8 @@ export interface AgentAdapter {
   /** Derive session metadata from path + first events. */
   sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
   /** sessionId → what the agent process is doing right now, for sessions the
-   *  agent reports as active, if it exposes such a signal. `waiting` = parked
-   *  on the user (a question, a plan, a permission prompt); `since` is when
-   *  that state began (0 if unknown).
+   *  agent reports as active, if it exposes such a signal (see LiveSession
+   *  for the state vocabulary).
    *  MUST NOT throw; empty map when unavailable. */
-  liveSessions?(): Map<string, { state: 'busy' | 'waiting'; since: number }>;
+  liveSessions?(): Map<string, LiveSession>;
 }

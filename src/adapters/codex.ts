@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
+import type { LiveSession, NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
 import type { AgentAdapter } from './types.js';
 import { parseTs, str, truncate } from './util.js';
 
@@ -139,11 +139,12 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
     // with the process — so unlike claude's status file, a claim here can
     // never go stale (SPIKE_NOTES 2026-08-27). The lock files themselves
     // persist after exit: existence means nothing, the open fd is the
-    // signal, probed with one batched lsof. No busy/waiting distinction —
-    // an open-but-idle TUI reads as busy until STALE_BUSY_MS expires it.
+    // signal, probed with one batched lsof. The state is 'alive' — the fd
+    // proves the process exists, not that it is generating; the transcript's
+    // turn markers decide busy vs idle (server withLive).
     // lsof missing or failing degrades to the timestamp heuristic.
     liveSessions() {
-      const live = new Map<string, { state: 'busy' | 'waiting'; since: number }>();
+      const live = new Map<string, LiveSession>();
       const lockDir = path.join(root, '..', 'thread-writer-locks');
       let locks: string[];
       try {
@@ -162,7 +163,7 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       for (const line of stdout.split('\n')) {
         if (!line.startsWith('n')) continue;
         const uuid = UUID.exec(line.slice(1).replace(/\.lock$/, '.jsonl'))?.[1];
-        if (uuid) live.set(uuid, { state: 'busy', since: 0 });
+        if (uuid) live.set(uuid, { state: 'alive', since: 0 });
       }
       return live;
     },

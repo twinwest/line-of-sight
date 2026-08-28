@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
+import type { LiveSession, NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
 import type { AgentAdapter } from './types.js';
 import { parseTs, str, truncate } from './util.js';
 
@@ -194,7 +194,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
     // shape just means no live sessions, and the timestamp heuristic stays in
     // charge.
     liveSessions() {
-      const live = new Map<string, { state: 'busy' | 'waiting'; since: number }>();
+      const live = new Map<string, LiveSession>();
       const dir = path.join(root, '..', 'sessions');
       let files: string[];
       try {

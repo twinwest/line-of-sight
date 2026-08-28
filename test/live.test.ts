@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildServer, SseHub } from '../src/daemon/server.js';
+import type { LiveSession } from '../src/shared/types.js';
 import { Store } from '../src/store/store.js';
 
-type LiveMap = Map<string, { state: 'busy' | 'waiting'; since: number }>;
+type LiveMap = Map<string, LiveSession>;
 
 const MIN = 60_000;
 
@@ -58,8 +59,8 @@ describe('live flag: a busy claim needs corroboration', () => {
   });
 });
 
-describe('turn markers corroborate process-alive-only claims (codex flock)', () => {
-  const bare: LiveMap = new Map([['s1', { state: 'busy', since: 0 }]]);
+describe('turn markers corroborate alive claims (codex flock)', () => {
+  const bare: LiveMap = new Map([['s1', { state: 'alive', since: 0 }]]);
 
   it('turn ended → an open-but-idle TUI greys immediately, fresh writes or not', async () => {
     const app = serverWith(0.5 * MIN, bare, { turnOpen: false });

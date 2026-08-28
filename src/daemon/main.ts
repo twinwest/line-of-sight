@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { claudeCodeAdapter } from '../adapters/claudeCode.js';
 import { codexAdapter } from '../adapters/codex.js';
+import type { LiveSession } from '../shared/types.js';
 import { SIGHT_DIR, PID_FILE, DB_FILE, LOG_FILE, PORT } from '../shared/paths.js';
 import { Store } from '../store/store.js';
 import { Ingester } from './ingest.js';
@@ -22,7 +23,7 @@ ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
 // session ids are globally unique across adapters (see AgentAdapter), so the
 // flat merge cannot collide
 const app = buildServer(store, hub, () => {
-  const merged = new Map<string, { state: 'busy' | 'waiting'; since: number }>();
+  const merged = new Map<string, LiveSession>();
   for (const a of adapters) for (const [id, s] of a.liveSessions?.() ?? []) merged.set(id, s);
   return merged;
 });

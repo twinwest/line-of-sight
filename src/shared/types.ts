@@ -21,6 +21,13 @@ export interface SessionMeta {
 
 export type TitleSource = 'custom' | 'ai' | 'prompt';
 
+/** One session's live signal, as an adapter reports it. `busy`/`waiting` =
+ *  the agent's own status vocabulary (claude's session file); `alive` = the
+ *  process exists but exposes no busy/idle distinction (codex's flock) —
+ *  the transcript's turn markers corroborate it (see server withLive).
+ *  `since` = when the state began, 0 if unknown. */
+export interface LiveSession { state: 'busy' | 'waiting' | 'alive'; since: number }
+
 /** Applied by ingestion to the session row as lines reveal metadata. */
 export interface SessionPatch {
   projectDir?: string;

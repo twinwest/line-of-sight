@@ -6,6 +6,7 @@ import fastifyStatic from '@fastify/static';
 import { readConfig, writeConfig } from '../shared/config.js';
 import { resolveResponder } from '../responders/index.js';
 import type { ResponderRequest } from '../responders/types.js';
+import type { LiveSession } from '../shared/types.js';
 import type { Store, StoredEvent } from '../store/store.js';
 
 const WEB_DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
@@ -45,8 +46,7 @@ const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
 const STALE_BUSY_MS = 15 * 60_000;
 
 export function buildServer(store: Store, hub: SseHub,
-    liveSessions: () => Map<string, { state: 'busy' | 'waiting'; since: number }>
-      = () => new Map()): FastifyInstance {
+    liveSessions: () => Map<string, LiveSession> = () => new Map()): FastifyInstance {
   const app = Fastify({ logger: false });
 
   if (fs.existsSync(WEB_DIST)) {
@@ -79,16 +79,15 @@ export function buildServer(store: Store, hub: SseHub,
     return metas.map((m) => {
       const s = live.get(m.id);
       if (!s) return m;
-      // a process-alive-only claim (since 0, no state vocabulary — codex's
-      // flock) is corroborated by the transcript's turn markers: turn ended
-      // ⇒ the open TUI is just idle, grey immediately. Agents without turn
-      // markers leave turnOpen null and fall through to the staleness rule.
-      const bare = s.state === 'busy' && s.since === 0;
-      if (bare && m.turnOpen === false) return m;
-      const since = bare ? (m.turnStartedAt ?? 0) : s.since;
-      const lastSign = Math.max(since, m.updatedAt);
-      if (s.state === 'busy' && now - lastSign > STALE_BUSY_MS) return m;
-      return { ...m, live: true, waiting: s.state === 'waiting', busySince: since };
+      // 'alive' proves the process exists, not that it is generating —
+      // the transcript's turn markers decide: turn ended ⇒ the open TUI is
+      // just idle, grey immediately. Agents without turn markers leave
+      // turnOpen null and fall through to the staleness rule.
+      if (s.state === 'alive' && m.turnOpen === false) return m;
+      const busySince = s.state === 'alive' ? (m.turnStartedAt ?? 0) : s.since;
+      const lastSign = Math.max(busySince, m.updatedAt);
+      if (s.state !== 'waiting' && now - lastSign > STALE_BUSY_MS) return m;
+      return { ...m, live: true, waiting: s.state === 'waiting', busySince };
     });
   };
 

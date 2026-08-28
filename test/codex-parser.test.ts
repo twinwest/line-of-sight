@@ -198,7 +198,7 @@ describe('codexAdapter.liveSessions', () => {
         execFile('lsof', ['-v'], (err) => r(!err)));
       const live = a.liveSessions!();
       if (lsofWorks) {
-        expect(live.get(uuid)).toMatchObject({ state: 'busy' });
+        expect(live.get(uuid)).toMatchObject({ state: 'alive' });
       } else {
         expect(live.size).toBe(0);
       }

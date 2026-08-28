@@ -96,10 +96,11 @@ export interface AgentAdapter {
   /** Derive session metadata from path + first events. */
   sessionMeta(filePath: string, firstEvents: NormalizedEvent[]): SessionMeta;
   /** sessionId → what the agent process is doing right now ('busy' mid-turn,
-   *  'waiting' parked on the user; since = when that state began, 0 if
-   *  unknown), if the agent exposes such a signal.
-   *  MUST NOT throw; empty map when unavailable. */
-  liveSessions?(): Map<string, { state: 'busy' | 'waiting'; since: number }>;
+   *  'waiting' parked on the user, 'alive' = process exists but the agent
+   *  has no busy/idle vocabulary — the transcript's turn markers decide;
+   *  since = when that state began, 0 if unknown), if the agent exposes
+   *  such a signal. MUST NOT throw; empty map when unavailable. */
+  liveSessions?(): Map<string, { state: 'busy' | 'waiting' | 'alive'; since: number }>;
 }
 
 Session ids must be globally unique across adapters (all adapters share one
