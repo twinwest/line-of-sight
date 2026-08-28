@@ -18,6 +18,10 @@
   --user-bg: light-dark(#eef1fd, #1b2030);
   --code-bg: light-dark(#f2f1ed, #1e2128);
   --live:    light-dark(#2fb344, #3fd158);
+  /* Agent badges get their own hues so the badge stops competing with --accent,
+     which already means "waiting for you" on the row's dot. */
+  --agent-claude-code: light-dark(#c2410c, #e88b6a);
+  --agent-codex:       light-dark(#4b5563, #9aa4b2);
   --error:   light-dark(#d92d20, #f97066);
   --hl-kw:   light-dark(#cf222e, #ff7b72);
   --hl-str:  light-dark(#0a3069, #a5d6ff);
@@ -145,10 +149,13 @@ body {
   text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
 .row-count { color: var(--fg-dim); font-size: 0.8rem; min-width: 2.5rem; text-align: right; }
 .row-time { color: var(--fg-dim); font-size: 0.8rem; min-width: 4rem; text-align: right; }
+/* Bare .badge is the unknown-adapter fallback — neutral, not accent-blue. */
 .badge {
-  font-size: 0.7rem; color: var(--accent); border: 1px solid var(--accent);
+  font-size: 0.7rem; color: var(--fg-dim); border: 1px solid currentColor;
   border-radius: 999px; padding: 0 0.5rem; flex: none;
 }
+.badge.claude-code { color: var(--agent-claude-code); }
+.badge.codex { color: var(--agent-codex); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
 .dot.busy { background: var(--live); animation: generating-pulse 1.6s ease-in-out infinite; }
 .dot.waiting { background: var(--accent); animation: generating-pulse 1.6s ease-in-out infinite; }
@@ -449,6 +456,11 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
    header, so it shares .type-controls' offset (both chips sit in .topbar-tools). */
 .asks-list.sessions-list { top: 2.9rem; }
 .asks-item .dot { display: inline-block; margin-right: 0.35rem; }
+/* Flex row so a long title ellipsizes and the agent badge survives — with the
+   title inline the badge would be the first thing truncated away. */
+.asks-item .asks-q { display: flex; align-items: center; }
+.asks-q-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.asks-q .badge { margin-left: 0.4rem; }
 .asks-all { border-top: 1px solid var(--border); border-radius: 0; }
 
 .anchor {

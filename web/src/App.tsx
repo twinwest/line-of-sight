@@ -114,9 +114,7 @@ export function App() {
         <a href="/" className="brand" onClick={(e) => { e.preventDefault(); nav('/'); }}>
           Line of Sight
         </a>
-        {/* search is a list-page tool: inside a session you're reading one
-            transcript, and the switcher is what you actually reach for */}
-        {!sessionId && <SearchBox />}
+        <SearchBox />
         <span className="topbar-tools">
           <ThemeToggle />
           <TypeControls />

@@ -1,3 +1,4 @@
+import { dialectFor } from '../../src/shared/dialects';
 import { nav } from './App';
 import { fmtTime, shortDir, useSessions } from './SessionList';
 import { loadSeen } from './seen';
@@ -32,7 +33,9 @@ export function SessionsPopover({ current }: { current: string }) {
           : rows.map(({ s, st }) => (
             <button key={s.id} className="asks-item" onClick={(e) => go(e, `/s/${s.id}`)}>
               <span className="asks-q">
-                <span className={`dot ${st}`} /> {s.title || '(untitled)'}
+                <span className={`dot ${st}`} />
+                <span className="asks-q-text">{s.title || '(untitled)'}</span>
+                <span className={`badge ${s.adapter}`}>{dialectFor(s.adapter).displayName}</span>
               </span>
               <span className="asks-meta">
                 {DOT_TITLE[st]} · {shortDir(s.projectDir)} · {fmtTime(s.updatedAt, now)}
