@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import os from 'node:os';
 import { readConfig } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
-import type { Responder, ResponderRequest } from './types.js';
+import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './types.js';
 
 // Read-only cage (product promise B5): no Write/Edit/Bash. WebFetch is also
 // excluded — transcript content is untrusted, and WebFetch would let an
@@ -81,6 +81,7 @@ export function statusFromStreamLine(line: string): string {
 
 export const claudeCliResponder: Responder = {
   id: 'claude-cli',
+  options: ANTHROPIC_OPTIONS,
 
   available(): Promise<boolean> {
     return new Promise((resolve) => {

@@ -74,6 +74,8 @@ export function cancelAsk(id: string): void {
 
 export interface ResponderStatus {
   engine: string | null;
+  /** engine-declared model/effort choices; null = engine takes neither */
+  options: { models: string[]; efforts: string[] } | null;
   responderModel: string;
   responderEffort: string;
 }

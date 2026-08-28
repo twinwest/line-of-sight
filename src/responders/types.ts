@@ -1,5 +1,20 @@
+export interface ResponderOptions {
+  models: string[];
+  efforts: string[];
+}
+
+/** claude-cli and api both honor the shared responderModel/responderEffort
+ *  config, so they declare the same choice lists. */
+export const ANTHROPIC_OPTIONS: ResponderOptions = {
+  models: ['claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'],
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+};
+
 export interface Responder {
   id: 'claude-cli' | 'codex-cli' | 'api';
+  /** Model/effort choices this engine honors (rendered by the panel);
+   *  null = the engine runs on its own config and nothing here applies. */
+  options: ResponderOptions | null;
   available(): Promise<boolean>;
   /** Streamed answer. MUST be read-only (per-engine enforcement).
    *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */

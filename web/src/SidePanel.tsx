@@ -7,12 +7,6 @@ import {
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
-// Model/effort options apply to the Anthropic engines (claude-cli, api);
-// codex-cli ignores both and runs on the user's own config.toml, so the
-// selects are hidden for it rather than shown as no-ops.
-const MODELS = ['', 'claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'];
-const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
-
 const PRESETS = ['What is this?', "What's the evidence for this?", 'What alternatives were ruled out?'];
 
 export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChanged }: {
@@ -172,7 +166,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
       {status?.engine && (
         <div className="engine-row">
           <span className="engine-label">{status.engine}</span>
-          {status.engine !== 'codex-cli' && <>
+          {status.options && <>
           <select
             title="responder model"
             value={status.responderModel}
@@ -180,7 +174,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
               putResponderConfig({ responderModel: e.target.value });
               setStatus({ ...status, responderModel: e.target.value });
             }}>
-            {MODELS.map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
+            {['', ...status.options.models].map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
           </select>
           <select
             title="responder effort"
@@ -189,7 +183,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
               putResponderConfig({ responderEffort: e.target.value });
               setStatus({ ...status, responderEffort: e.target.value });
             }}>
-            {EFFORTS.map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
+            {['', ...status.options.efforts].map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
           </select>
           </>}
         </div>

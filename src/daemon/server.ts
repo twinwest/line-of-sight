@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { readConfig, writeConfig } from '../shared/config.js';
-import { resolveResponder } from '../responders/index.js';
+import { ANTHROPIC_OPTIONS, resolveResponder } from '../responders/index.js';
 import type { ResponderRequest } from '../responders/types.js';
 import { dialectFor } from '../shared/dialects/index.js';
 import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
@@ -145,10 +145,15 @@ export function buildServer(store: Store, hub: SseHub,
     const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
     const { responderModel, responderEffort } = readConfig();
     // never expose apiKey to the frontend
-    return { engine: engine?.id ?? null, responderModel: responderModel ?? '', responderEffort: responderEffort ?? '' };
+    return {
+      engine: engine?.id ?? null,
+      options: engine?.options ?? null,
+      responderModel: responderModel ?? '',
+      responderEffort: responderEffort ?? '',
+    };
   });
 
-  const EFFORTS = new Set(['', 'low', 'medium', 'high', 'xhigh', 'max']);
+  const EFFORTS = new Set(['', ...ANTHROPIC_OPTIONS.efforts]);
 
   app.put<{ Body: { responderModel?: string; responderEffort?: string } }>(
     '/api/responder/config', (req, reply) => {

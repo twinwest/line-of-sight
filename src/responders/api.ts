@@ -1,6 +1,6 @@
 import { readConfig } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
-import type { Responder, ResponderRequest } from './types.js';
+import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './types.js';
 
 // BYOK fallback (ARCHITECTURE §6): direct Anthropic Messages API, streaming,
 // no tools at all — grounding comes from the inline context in the prompt.
@@ -11,6 +11,7 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
 
 export const apiResponder: Responder = {
   id: 'api',
+  options: ANTHROPIC_OPTIONS,
 
   available(): Promise<boolean> {
     return Promise.resolve(!!readConfig().apiKey);

@@ -8,9 +8,8 @@ import type { Responder, ResponderRequest } from './types.js';
 // not created; SPIKE_NOTES 2026-08-27). --ephemeral keeps responder runs
 // out of ~/.codex/sessions — the --no-session-persistence analog (without
 // it every ask would appear as a session, the M5 pollution lesson).
-// --json streams item-level events on stdout. responderModel/responderEffort
-// are claude-cli/api settings (shared/config.ts) and are not applied here —
-// codex runs on the user's own config.toml model.
+// --json streams item-level events on stdout. options: null — codex runs on
+// the user's own config.toml model; responderModel/responderEffort don't apply.
 export const CODEX_ARGS = (prompt: string): string[] => [
   'exec',
   '--sandbox', 'read-only',
@@ -59,6 +58,7 @@ export function statusFromJsonLine(line: string): string {
 
 export const codexCliResponder: Responder = {
   id: 'codex-cli',
+  options: null,
 
   available(): Promise<boolean> {
     return new Promise((resolve) => {
