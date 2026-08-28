@@ -78,3 +78,36 @@ describe('turn markers corroborate alive claims (codex flock)', () => {
     expect((await sessionRow(serverWith(60 * MIN, bare))).live).toBeUndefined();
   });
 });
+
+describe('alive + blocking tool parked at the tail → list-level waiting', () => {
+  /** A codex session mid-turn whose tail holds a request_user_input,
+   *  answered or not, last written `quietFor` ms ago. */
+  function codexServer(quietFor: number, answered: boolean) {
+    const store = new Store(':memory:');
+    const ts = Date.now() - quietFor;
+    store.upsertSession({
+      id: 'c1', adapter: 'codex', filePath: '/f2', projectDir: '/p',
+      title: 'codex session', startedAt: ts, updatedAt: ts, messageCount: 0,
+    });
+    store.appendEvents('c1', [
+      { kind: 'meta', id: 't0', ts, label: 'task_started', raw: null,
+        sessionPatch: { turnOpen: true, turnStartedAt: ts } },
+      { kind: 'message', id: 'q1', role: 'assistant', ts,
+        blocks: [{ type: 'tool_use', id: 'call_1', toolName: 'request_user_input', summary: '', input: {} }] },
+      ...(answered ? [{ kind: 'message' as const, id: 'a1', role: 'user' as const, ts,
+        blocks: [{ type: 'tool_result' as const, toolUseId: 'call_1', summary: '', output: '{}', isError: false }] }] : []),
+    ], 100);
+    const live: LiveMap = new Map([['c1', { state: 'alive', since: 0 }]]);
+    return buildServer(store, new SseHub(), () => live);
+  }
+
+  it('unanswered → waiting, and exempt from staleness like claude waiting', async () => {
+    expect(await sessionRow(codexServer(3 * 60 * MIN, false)))
+      .toMatchObject({ live: true, waiting: true });
+  });
+
+  it('answered → busy, not waiting', async () => {
+    expect(await sessionRow(codexServer(MIN, true)))
+      .toMatchObject({ live: true, waiting: false });
+  });
+});

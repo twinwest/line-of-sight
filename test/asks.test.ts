@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { claudeCodeDialect } from '../src/shared/dialects/index.js';
 import type { RenderBlock, StoredEvent } from '../src/shared/types.js';
-import { pendingBlockId, toolOutcomes } from '../web/src/asks.js';
+import { pendingBlockId, toolOutcomes } from '../src/shared/outcomes.js';
 
 const { planMarkdown } = claudeCodeDialect;
 // the dialect methods take blocks/AskQuestions; the raw-shape assertions predate that

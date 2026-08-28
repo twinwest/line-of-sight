@@ -1,9 +1,10 @@
-import type { Dialect } from '../../src/shared/dialects';
-import type { RenderBlock, StoredEvent } from './api';
+import type { Dialect } from './dialects/index.js';
+import type { RenderBlock, StoredEvent } from './types.js';
 
-// Agent-neutral tool_use ↔ tool_result pairing over the loaded window, plus
+// Agent-neutral tool_use ↔ tool_result pairing over a window of events, plus
 // the "which event is the CLI parked on" derivation. Per-agent shapes (which
-// tools block, card parsing, …) live in src/shared/dialects/.
+// tools block, card parsing, …) live in ./dialects/. Consumed by the viewer
+// (cards, waiting tail) AND the daemon (list-level waiting in withLive).
 
 export interface ToolOutcome { output: string; isError: boolean }
 

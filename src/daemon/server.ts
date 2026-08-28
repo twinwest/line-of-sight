@@ -6,7 +6,9 @@ import fastifyStatic from '@fastify/static';
 import { readConfig, writeConfig } from '../shared/config.js';
 import { resolveResponder } from '../responders/index.js';
 import type { ResponderRequest } from '../responders/types.js';
-import type { LiveSession } from '../shared/types.js';
+import { dialectFor } from '../shared/dialects/index.js';
+import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
+import type { LiveSession, SessionMeta } from '../shared/types.js';
 import type { Store, StoredEvent } from '../store/store.js';
 
 const WEB_DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
@@ -71,7 +73,15 @@ export function buildServer(store: Store, hub: SseHub,
    *  its own status stamp or the transcript (see STALE_BUSY_MS). `waiting` is
    *  exempt: parked on the user is legitimately open-ended, and "waiting for
    *  you" is the signal the whole indicator exists to deliver. */
-  const withLive = <T extends { id: string; updatedAt: number;
+  /** Is the stored tail parked on an unresultted blocking tool use? Only
+   *  consulted for 'alive' claims — agents with a waiting vocabulary report
+   *  it themselves. A handful of tail events per live session per request. */
+  const pendingAtTail = (m: { id: string; adapter: SessionMeta['adapter'] }): boolean => {
+    const events = store.getEvents(m.id, { limit: 10 });
+    return pendingBlockId(events, toolOutcomes(events), dialectFor(m.adapter)) !== null;
+  };
+
+  const withLive = <T extends { id: string; adapter: SessionMeta['adapter']; updatedAt: number;
       turnOpen?: boolean | null; turnStartedAt?: number | null }>(metas: T[]): T[] => {
     const live = liveSessions();
     if (!live.size) return metas;
@@ -80,14 +90,17 @@ export function buildServer(store: Store, hub: SseHub,
       const s = live.get(m.id);
       if (!s) return m;
       // 'alive' proves the process exists, not that it is generating —
-      // the transcript's turn markers decide: turn ended ⇒ the open TUI is
-      // just idle, grey immediately. Agents without turn markers leave
-      // turnOpen null and fall through to the staleness rule.
+      // the transcript decides: turn ended ⇒ the open TUI is just idle,
+      // grey immediately; parked on a blocking tool at the tail ⇒ waiting
+      // (codex flushes pending calls, so the transcript can say so). Agents
+      // without turn markers leave turnOpen null and fall through to the
+      // staleness rule.
       if (s.state === 'alive' && m.turnOpen === false) return m;
       const busySince = s.state === 'alive' ? (m.turnStartedAt ?? 0) : s.since;
+      const waiting = s.state === 'waiting' || (s.state === 'alive' && pendingAtTail(m));
       const lastSign = Math.max(busySince, m.updatedAt);
-      if (s.state !== 'waiting' && now - lastSign > STALE_BUSY_MS) return m;
-      return { ...m, live: true, waiting: s.state === 'waiting', busySince };
+      if (!waiting && now - lastSign > STALE_BUSY_MS) return m;
+      return { ...m, live: true, waiting, busySince };
     });
   };
 

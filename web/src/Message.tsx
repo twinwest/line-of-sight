@@ -7,7 +7,7 @@ import {
 } from '../../src/shared/dialects';
 import { nav } from './App';
 import type { RenderBlock, SessionMeta, StoredEvent } from './api';
-import { type ToolOutcome } from './asks';
+import { type ToolOutcome } from '../../src/shared/outcomes';
 import { diffLines } from './diff';
 
 /** tool_use id → result pairing plus "which event is the CLI parked on",

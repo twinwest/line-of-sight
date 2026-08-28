@@ -6,7 +6,7 @@ import {
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
 import { dialectFor, genericDialect, type Dialect } from '../../src/shared/dialects';
-import { pendingBlockId, toolOutcomes, toolUseIds } from './asks';
+import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
 import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
 import { DOT_TITLE, RUNNING_MS, sessionStatus } from './status';
@@ -338,7 +338,7 @@ export function SessionView({ id, targetMessageId = null }:
              onClick={(e) => { e.preventDefault(); nav(`/s/${session.parentId!}`); }}>↑ parent</a>
         )}
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
-        <span className="badge">{session.parentId ? 'subagent' : dialect.displayName}</span>
+        <span className={`badge ${session.adapter}`}>{session.parentId ? 'subagent' : dialect.displayName}</span>
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
         {/* also the only way into a subagent whose Task row is outside the
