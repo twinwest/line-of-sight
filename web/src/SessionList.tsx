@@ -47,7 +47,6 @@ export function useSessions(): [SessionMeta[], string] {
 export function SessionList() {
   const [sessions, error] = useSessions();
   const [project, setProject] = useState('');
-  const [filter, setFilter] = useState('');
 
   const projects = useMemo(
     () => [...new Set(sessions.map((s) => s.projectDir).filter((p): p is string => !!p))].sort(),
@@ -56,9 +55,7 @@ export function SessionList() {
   const seen = loadSeen();
   const now = Date.now();
   const shown = sessions
-    .filter((s) =>
-      (!project || s.projectDir === project)
-      && (!filter || s.title.toLowerCase().includes(filter.toLowerCase())))
+    .filter((s) => !project || s.projectDir === project)
     .map((s) => ({ s, st: sessionStatus(s, seen, now) }))
     .sort((a, b) => RANK[a.st] - RANK[b.st] || b.s.updatedAt - a.s.updatedAt);
 
@@ -70,7 +67,6 @@ export function SessionList() {
           <option value="">All projects</option>
           {projects.map((p) => <option key={p} value={p}>{shortDir(p)}</option>)}
         </select>
-        <input placeholder="Filter titles…" value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
       <div className="session-list">
         {shown.map(({ s, st }) => (
