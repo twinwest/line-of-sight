@@ -140,8 +140,9 @@ export function buildServer(store: Store, hub: SseHub,
   app.get<{ Querystring: { q?: string } }>('/api/search', (req) =>
     store.search(req.query.q ?? ''));
 
-  app.get('/api/responder/status', async () => {
-    const engine = await resolveResponder();
+  app.get<{ Querystring: { adapter?: string } }>('/api/responder/status', async (req) => {
+    // candidates() ignores unknown adapter strings, so pass the raw value through
+    const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
     const { responderModel, responderEffort } = readConfig();
     // never expose apiKey to the frontend
     return { engine: engine?.id ?? null, responderModel: responderModel ?? '', responderEffort: responderEffort ?? '' };

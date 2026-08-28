@@ -449,6 +449,7 @@ export function SessionView({ id, targetMessageId = null }:
           <SidePanel
             key={openChat.id}
             chat={openChat}
+            adapter={session.adapter}
             siblings={chatsByMessage.get(openChat.anchorMessageId) ?? [openChat]}
             onSwitch={setOpenChat}
             onClose={() => setOpenChat(null)}

@@ -3,20 +3,22 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   askStream, cancelAsk, deleteSideChat, fetchResponderStatus, putResponderConfig,
-  type ResponderStatus, type SideChat,
+  type ResponderStatus, type SessionMeta, type SideChat,
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
-// Tracks the RESPONDER engine, not the viewed session's agent — so this is
-// not a dialect concern. Upgrade path: engine-provided options via
-// GET /api/responder/status once a non-Anthropic engine ships.
+// Model/effort options apply to the Anthropic engines (claude-cli, api);
+// codex-cli ignores both and runs on the user's own config.toml, so the
+// selects are hidden for it rather than shown as no-ops.
 const MODELS = ['', 'claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 const PRESETS = ['What is this?', "What's the evidence for this?", 'What alternatives were ruled out?'];
 
-export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
+export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChanged }: {
   chat: SideChat;
+  /** the viewed session's agent — asks route to its matching engine */
+  adapter: SessionMeta['adapter'];
   /** other chats anchored to the same message (incl. this one) */
   siblings: SideChat[];
   onSwitch: (chat: SideChat) => void;
@@ -39,7 +41,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
   useEffect(() => {
     setTurns(chat.turns); setError(''); setStreaming(null); atBottom.current = true;
   }, [chat.id]);
-  useEffect(() => { void fetchResponderStatus().then(setStatus); }, []);
+  useEffect(() => { void fetchResponderStatus(adapter).then(setStatus); }, [adapter]);
   // sticky auto-scroll: follow the streaming answer only if already at the
   // bottom, so scrolling up to re-read isn't yanked back by every chunk
   useEffect(() => {
@@ -170,6 +172,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
       {status?.engine && (
         <div className="engine-row">
           <span className="engine-label">{status.engine}</span>
+          {status.engine !== 'codex-cli' && <>
           <select
             title="responder model"
             value={status.responderModel}
@@ -188,6 +191,7 @@ export function SidePanel({ chat, siblings, onSwitch, onClose, onChanged }: {
             }}>
             {EFFORTS.map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
           </select>
+          </>}
         </div>
       )}
       <form className="panel-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>

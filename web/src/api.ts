@@ -78,8 +78,8 @@ export interface ResponderStatus {
   responderEffort: string;
 }
 
-export async function fetchResponderStatus(): Promise<ResponderStatus | null> {
-  const res = await fetch('/api/responder/status');
+export async function fetchResponderStatus(adapter?: SessionMeta['adapter']): Promise<ResponderStatus | null> {
+  const res = await fetch(`/api/responder/status${adapter ? `?adapter=${adapter}` : ''}`);
   if (!res.ok) return null;
   return res.json() as Promise<ResponderStatus>;
 }
