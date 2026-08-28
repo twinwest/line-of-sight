@@ -32,7 +32,7 @@ export const apiResponder: Responder = {
         max_tokens: 4096,
         stream: true,
         ...(responderEffort ? { output_config: { effort: responderEffort } } : {}),
-        messages: [{ role: 'user', content: composePrompt(req) }],
+        messages: [{ role: 'user', content: composePrompt(req, req.inlineContext()) }],
       }),
     });
     if (!res.ok || !res.body) {

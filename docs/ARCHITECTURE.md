@@ -247,9 +247,12 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
 
 ## 6. Responder (the answering engine) — pluggable, decoupled from the viewed agent
 
-The engine answering side-chat questions is **per-user**, independent of which
-agent produced the viewed session (a Claude engine may answer questions about a
-Codex session — that's a feature).
+The engine answering side-chat questions is decoupled from the viewed agent
+(any engine can answer about any session — the interface guarantees that),
+but by default it **matches the viewed session's agent**: a Codex session is
+answered by codex-cli, a Claude session by claude-cli. Rationale: a session's
+presence on disk implies its CLI is installed and authenticated — routing by
+session always picks a login the user actually has. A config pin overrides.
 
 ```ts
 export interface Responder {
@@ -267,14 +270,22 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
+  inlineContext: () => string;  // lazy anchor excerpt; only tool-less engines (api) call it
 }
 ```
 
-**Resolution order** (configurable in `~/.sight/config.json`):
-1. `claude-cli` if `claude` on PATH
-2. `codex-cli` if `codex` on PATH
-3. `api` if `apiKey` configured
+**Resolution** (`responders/index.ts` — routing is a pure `candidates()`
+function over config + session adapter; availability probing sits outside it):
+1. `responder` pinned in `~/.sight/config.json` → that engine ONLY. If it is
+   unavailable the ask fails with a readable 409 — no silent fallback to an
+   engine the user didn't pick.
+2. else the engine matching the viewed session's adapter
+   (`claude-code`→`claude-cli`, `codex`→`codex-cli`) if available
+3. else first available of claude-cli, codex-cli, api
 4. none → UI shows setup hint (SPEC 5.4).
+
+`GET /api/responder/status` reports the *default* engine (no session context);
+the engine actually used is announced in the ask SSE's first frame.
 
 ### claude-cli responder **[VERIFIED M0]**
 

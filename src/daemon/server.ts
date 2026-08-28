@@ -186,8 +186,15 @@ export function buildServer(store: Store, hub: SseHub,
       const session = store.getSession(chat.sessionId);
       if (!session) return reply.code(404).send({ error: 'session not found' });
 
-      const engine = await resolveResponder();
-      if (!engine) return reply.code(409).send({ error: 'no responder engine available' });
+      const engine = await resolveResponder(session.adapter);
+      if (!engine) {
+        const pinned = readConfig().responder;
+        return reply.code(409).send({
+          error: pinned
+            ? `configured responder '${pinned}' is not available`
+            : 'no responder engine available',
+        });
+      }
 
       running.get(chat.id)?.abort();
       const ctrl = new AbortController();
@@ -203,10 +210,8 @@ export function buildServer(store: Store, hub: SseHub,
         sessionFilePath: session.filePath,
         projectDir: session.projectDir,
         priorTurns: chat.turns.map(({ role, text }) => ({ role, text })),
+        inlineContext: () => store.inlineContext(chat.sessionId, chat.anchorMessageId),
       };
-      if (engine.id === 'api') {
-        request.inlineContext = store.inlineContext(chat.sessionId, chat.anchorMessageId);
-      }
 
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream',

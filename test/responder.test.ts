@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CLAUDE_ARGS, statusFromStreamLine, textFromStreamLine } from '../src/responders/claudeCli.js';
+import { candidates } from '../src/responders/index.js';
 import { composePrompt } from '../src/responders/prompt.js';
 import { Store } from '../src/store/store.js';
 
@@ -12,6 +13,7 @@ const REQ = {
     { role: 'user' as const, text: 'earlier q' },
     { role: 'assistant' as const, text: 'earlier a' },
   ],
+  inlineContext: () => { throw new Error('tool-engines must not build inline context'); },
 };
 
 describe('composePrompt', () => {
@@ -24,9 +26,31 @@ describe('composePrompt', () => {
   });
 
   it('uses inline context instead of the file pointer when provided', () => {
-    const p = composePrompt({ ...REQ, inlineContext: 'CTX HERE' });
+    const p = composePrompt(REQ, 'CTX HERE');
     expect(p).toContain('CTX HERE');
     expect(p).not.toContain(REQ.sessionFilePath);
+  });
+});
+
+describe('candidates routing', () => {
+  const ids = (cfg: Parameters<typeof candidates>[0], adapter?: 'claude-code' | 'codex') =>
+    candidates(cfg, adapter).map((e) => e.id);
+
+  it('defaults to claude-cli, codex-cli, api', () => {
+    expect(ids({})).toEqual(['claude-cli', 'codex-cli', 'api']);
+  });
+
+  it('puts the engine matching the viewed session agent first', () => {
+    expect(ids({}, 'codex')).toEqual(['codex-cli', 'claude-cli', 'api']);
+    expect(ids({}, 'claude-code')).toEqual(['claude-cli', 'codex-cli', 'api']);
+  });
+
+  it('a config pin is the only candidate — no fallback, session agent ignored', () => {
+    expect(ids({ responder: 'api' }, 'codex')).toEqual(['api']);
+  });
+
+  it('an unknown pin yields no candidates', () => {
+    expect(ids({ responder: 'gemini-cli' as never })).toEqual([]);
   });
 });
 

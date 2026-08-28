@@ -13,6 +13,7 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
-  /** For engines without tools (api): pre-built context around the anchor. */
-  inlineContext?: string;
+  /** Lazy transcript excerpt for engines without tools (api calls it,
+   *  tool-engines never do) — the caller needs no engine knowledge. */
+  inlineContext: () => string;
 }

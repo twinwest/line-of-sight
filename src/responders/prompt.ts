@@ -1,13 +1,15 @@
 import type { ResponderRequest } from './types.js';
 
-/** The one composed-prompt template for all engines (ARCHITECTURE §6). */
-export function composePrompt(req: ResponderRequest): string {
+/** The one composed-prompt template for all engines (ARCHITECTURE §6).
+ *  `inline`: pre-resolved transcript excerpt for engines without tools;
+ *  omitted = point the engine at the transcript file instead. */
+export function composePrompt(req: ResponderRequest, inline?: string): string {
   const parts: string[] = [];
   parts.push(
     `You are answering a reader's question about a coding-agent session.`,
   );
-  if (req.inlineContext) {
-    parts.push(`Relevant excerpt of the session transcript:\n\n${req.inlineContext}`);
+  if (inline) {
+    parts.push(`Relevant excerpt of the session transcript:\n\n${inline}`);
   } else {
     parts.push(
       `The full transcript is at ${req.sessionFilePath} — it is JSONL; ` +
