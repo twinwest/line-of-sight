@@ -92,10 +92,12 @@ export function buildServer(store: Store, hub: SseHub,
     const now = Date.now();
     return metas.map((m) => {
       // a subagent has no process of its own: it runs while its parent does
-      // and the parent hasn't recorded its end — regardless of how long ago
-      // it last wrote a line (long model turns write nothing)
+      // and the parent hasn't recorded its end. The quiet cap is a
+      // belt-and-braces bound, not the signal: a run killed with no
+      // task-notification (seen on disk) must not read busy for hours.
       if (m.parentId) {
-        return live.has(m.parentId) && !m.endedAt ? { ...m, live: true, waiting: false, busySince: 0 } : m;
+        const running = live.has(m.parentId) && !m.endedAt && now - m.updatedAt <= STALE_BUSY_MS;
+        return running ? { ...m, live: true, waiting: false, busySince: 0 } : m;
       }
       const s = live.get(m.id);
       if (!s) return m;
@@ -132,7 +134,12 @@ export function buildServer(store: Store, hub: SseHub,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       // children = subagent runs; the viewer hangs them off their Task row
-      return { session: withLive([session])[0], events, children: withLive(store.listChildren(session.id)) };
+      return {
+        session: withLive([session])[0], events,
+        children: withLive(store.listChildren(session.id)),
+        // names the Subagents popover's per-run groups (workflow_id → name)
+        runs: store.workflowNames(session.id),
+      };
     });
 
   // Re-parse a session and its children from byte 0 — for rows ingested by

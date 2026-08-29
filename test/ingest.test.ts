@@ -165,11 +165,12 @@ describe('incremental ingest', () => {
     for (const id of ['a', 'b']) fs.writeFileSync(path.join(wfDir, `agent-${id}.jsonl`), line(id, 'angle'));
     const ack = JSON.stringify({ type: 'user', uuid: 'u2', timestamp: '2026-08-24T00:00:00.000Z',
       message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_w', content: 'launched' }] },
-      toolUseResult: { status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9' } }) + '\n';
+      toolUseResult: { status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9', workflowName: 'deep-research' } }) + '\n';
     fs.writeFileSync(file, line('u1', 'go') + ack
       + line('u3', '<task-notification><tool-use-id>toolu_w</tool-use-id><status>completed</status></task-notification>'));
     ingester.start();
     expect(store.listChildren(SESSION).map((c) => c.endedAt)).toEqual([1787529600000, 1787529600000]);
+    expect(store.workflowNames(SESSION)).toEqual({ wf_9: 'deep-research' });
     return ingester.stop();
   });
 

@@ -13,6 +13,7 @@ export interface SessionPayload {
   session: SessionMeta;
   events: StoredEvent[];
   children: SessionMeta[];   // subagent runs spawned by this session
+  runs: Record<string, string>;  // workflow run id → workflow name
 }
 
 export async function fetchSession(id: string, beforeSeq?: number, targetMessageId?: string | null):

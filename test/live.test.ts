@@ -131,3 +131,25 @@ describe('POST /api/sessions/:id/reingest', () => {
     expect((await app.inject({ method: 'POST', url: '/api/sessions/nope/reingest' })).statusCode).toBe(404);
   });
 });
+
+describe('subagent liveness follows the parent, bounded', () => {
+  function withChild(quietFor: number, endedAt: number | null) {
+    const store = new Store(':memory:');
+    const ts = Date.now() - quietFor;
+    store.upsertSession({ id: 'p', adapter: 'claude-code', filePath: '/p.jsonl', projectDir: '/p',
+      title: 'parent', startedAt: ts, updatedAt: ts, messageCount: 0 });
+    store.upsertSession({ id: 'c', adapter: 'claude-code', filePath: '/p/subagents/agent-c.jsonl', projectDir: '/p',
+      title: 'child', startedAt: ts, updatedAt: ts, messageCount: 0, parentId: 'p' });
+    if (endedAt) store.endChildren('p', 'toolu_x', endedAt);  // no tool_use_id on the row: exercises the kv path only
+    return buildServer(store, new SseHub(), () => new Map([['p', { state: 'busy', since: Date.now() }]]));
+  }
+  const child = async (app: ReturnType<typeof buildServer>) =>
+    ((await app.inject({ method: 'GET', url: '/api/sessions/p' })).json() as { children: { live?: boolean }[] }).children[0]!;
+
+  it('quiet for minutes but parent live and no end recorded: still running', async () => {
+    expect((await child(withChild(5 * MIN, null))).live).toBe(true);
+  });
+  it('quiet past the cap: not running, even with no end recorded', async () => {
+    expect((await child(withChild(20 * MIN, null))).live).toBeUndefined();
+  });
+});

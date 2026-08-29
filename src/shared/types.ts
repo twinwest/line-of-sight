@@ -47,7 +47,7 @@ export type NormalizedEvent =
        *  (a Task/Agent call, or a Workflow call — which ends its whole run). */
       taskEnd?: string;
       /** This line acknowledges a Workflow launch: tool_use id → run id. */
-      workflowRun?: { toolUseId: string; runId: string } }
+      workflowRun?: { toolUseId: string; runId: string; name: string | null } }
   | { kind: 'meta'; id: string; ts: number; label: string; raw: unknown;
       sessionPatch?: SessionPatch }
   | { kind: 'unknown'; id: string; ts: number; raw: unknown };  // defensive fallback

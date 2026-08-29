@@ -142,8 +142,8 @@ describe('claudeCode.parseLine child lifecycle signals', () => {
       .toMatchObject({ taskEnd: 'toolu_1' });
   });
   it('a Workflow launch ack maps the call to its run id', () => {
-    expect(adapter.parseLine(ack({ status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9' }), ctx)[0])
-      .toMatchObject({ workflowRun: { toolUseId: 'toolu_1', runId: 'wf_9' } });
+    expect(adapter.parseLine(ack({ status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9', workflowName: 'deep-research' }), ctx)[0])
+      .toMatchObject({ workflowRun: { toolUseId: 'toolu_1', runId: 'wf_9', name: 'deep-research' } });
   });
 });
 

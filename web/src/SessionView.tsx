@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { nav } from './App';
 import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
-  type RenderBlock, type SessionMeta, type SideChat, type StoredEvent,
+  type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
 import { dialectFor, genericDialect, type Dialect } from '../../src/shared/dialects';
 import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
@@ -122,6 +122,7 @@ export function SessionView({ id, targetMessageId = null }:
   const [session, setSession] = useState<SessionMeta | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [children, setChildren] = useState<SessionMeta[]>([]);
+  const [runs, setRuns] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [sideChats, setSideChats] = useState<SideChat[]>([]);
   const [openChat, setOpenChat] = useState<SideChat | null>(null);
@@ -131,10 +132,11 @@ export function SessionView({ id, targetMessageId = null }:
   // poll the meta so busy→idle flips (and the last turn folds) promptly: `live`,
   // updatedAt and a freshly spawned subagent all change with no SSE event to
   // announce them
-  const applyMeta = useCallback(({ session, children }:
-      { session: SessionMeta; children: SessionMeta[] }) => {
+  const applyMeta = useCallback(({ session, children, runs }:
+      { session: SessionMeta; children: SessionMeta[]; runs: Record<string, string> }) => {
     setSession(session);
     setChildren(children);
+    setRuns(runs);
   }, []);
   useEffect(() => {
     const t = setInterval(() => { void fetchSessionMeta(id).then(applyMeta, () => {}); }, 10_000);
@@ -150,8 +152,8 @@ export function SessionView({ id, targetMessageId = null }:
   }, [id]);
 
   useEffect(() => {
-    fetchSession(id, undefined, targetMessageId).then(({ session, events, children }) => {
-      applyMeta({ session, children });
+    fetchSession(id, undefined, targetMessageId).then(({ session, events, children, runs }) => {
+      applyMeta({ session, children, runs });
       setEvents(events);
       requestAnimationFrame(() => {
         const el = scrollRef.current;
@@ -179,8 +181,8 @@ export function SessionView({ id, targetMessageId = null }:
     // events missed while the stream was down (or the tab was backgrounded and
     // throttled) never arrive on their own — re-pull the tail on reconnect/return
     const resync = () => {
-      void fetchSession(id).then(({ session: meta, events: tail, children: kids }) => {
-        applyMeta({ session: meta, children: kids });
+      void fetchSession(id).then(({ session: meta, events: tail, children: kids, runs: r }) => {
+        applyMeta({ session: meta, children: kids, runs: r });
         setEvents((prev) => merge(prev, tail));
       }, () => {});
     };
@@ -305,30 +307,16 @@ export function SessionView({ id, targetMessageId = null }:
     children.filter((c) => c.toolUseId).map((c) => [c.toolUseId!, c] as const)), [children]);
   const outcomesCtx = useMemo(() => ({ outcomes, useIds, pendingEventId, subagents }),
     [outcomes, useIds, pendingEventId, subagents]);
-  // Subagents popover: direct Task runs flat, Workflow runs folded per run id.
-  // A run's name lives only in the parent's Workflow tool_use (`input.name`),
-  // paired to its run id through the result text's "Transcript dir: …/wf_…"
-  // (undocumented; a miss just leaves the group headed by its id).
-  const workflowNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const e of events) {
-      if (e.kind !== 'message' || !Array.isArray(e.body)) continue;
-      for (const b of e.body as RenderBlock[]) {
-        if (b.type !== 'tool_use' || b.toolName !== 'Workflow' || !b.id) continue;
-        const wf = /workflows\/(wf_[\w-]+)/.exec(outcomes.get(b.id)?.output ?? '')?.[1];
-        const name = (b.input as { name?: unknown } | null)?.name;
-        if (wf && typeof name === 'string') names.set(wf, name);
-      }
-    }
-    return names;
-  }, [events, outcomes]);
+  // Subagents popover: direct Task runs flat, Workflow runs folded per run id
+  // (named from the API's `runs`, a fact the ingester stored off the launch ack).
   const childGroups = useMemo(() => {
     const groups = new Map<string | null, SessionMeta[]>();
     for (const c of children) {
       const key = c.workflowId ?? null;
       groups.set(key, [...(groups.get(key) ?? []), c]);
     }
-    return [...groups.entries()].sort(([a], [b]) => (a === null ? -1 : b === null ? 1 : 0));
+    // direct children (null key) first, runs in insertion order
+    return [...groups.entries()].sort(([a], [b]) => Number(a !== null) - Number(b !== null));
   }, [children]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
@@ -405,7 +393,7 @@ export function SessionView({ id, targetMessageId = null }:
                 return (
                   <details key={wf} className="wf-group">
                     <summary className="asks-meta">
-                      {workflowNames.get(wf) ?? 'workflow'} · {wf} · {kids.length}
+                      {runs[wf] ?? 'workflow'} · {wf} · {kids.length}
                     </summary>
                     {rows}
                   </details>

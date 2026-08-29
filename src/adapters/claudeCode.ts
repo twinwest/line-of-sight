@@ -184,7 +184,7 @@ function subagentMeta(filePath: string):
  *  `<task-notification>…<tool-use-id>…<status>completed|stopped…`. A
  *  Workflow ack also carries `runId`, which names the run's transcript dir.
  *  A sync Task (older CLIs) completes on its own tool_result instead. */
-function childSignals(line: Json, content: unknown): { taskEnd?: string; workflowRun?: { toolUseId: string; runId: string } } {
+function childSignals(line: Json, content: unknown): { taskEnd?: string; workflowRun?: { toolUseId: string; runId: string; name: string | null } } {
   if (typeof content === 'string') {
     const m = /<task-notification>[\s\S]*?<tool-use-id>([^<]+)<\/tool-use-id>[\s\S]*?<status>(\w+)<\/status>/.exec(content);
     return m && m[2] !== 'running' ? { taskEnd: m[1]! } : {};
@@ -196,7 +196,7 @@ function childSignals(line: Json, content: unknown): { taskEnd?: string; workflo
     ? str((content.find((b) => (b as Json).type === 'tool_result') as Json | undefined)?.tool_use_id) : null;
   if (!toolUseId) return {};
   const runId = str(res.runId);
-  if (res.taskType === 'local_workflow' && runId) return { workflowRun: { toolUseId, runId } };
+  if (res.taskType === 'local_workflow' && runId) return { workflowRun: { toolUseId, runId, name: str(res.workflowName) } };
   if (str(res.agentId) && res.status !== 'async_launched') return { taskEnd: toolUseId };
   return {};
 }

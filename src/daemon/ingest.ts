@@ -88,7 +88,7 @@ export class Ingester {
     if (consumed === 0) return;
     for (const e of events) {
       if (e.kind !== 'message') continue;
-      if (e.workflowRun) this.store.noteWorkflowRun(session.id, e.workflowRun.toolUseId, e.workflowRun.runId);
+      if (e.workflowRun) this.store.noteWorkflowRun(session.id, e.workflowRun.toolUseId, e.workflowRun.runId, e.workflowRun.name);
       if (e.taskEnd) this.store.endChildren(session.id, e.taskEnd, e.ts);
     }
     const stored = this.store.appendEvents(session.id, events, offset + consumed);

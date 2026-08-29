@@ -141,8 +141,17 @@ export class Store {
 
   /** A Workflow launch ack: remember which run a tool_use id names, so the
    *  run's task-notification can end every child under that run id. */
-  noteWorkflowRun(parentId: string, toolUseId: string, runId: string): void {
+  noteWorkflowRun(parentId: string, toolUseId: string, runId: string, name: string | null): void {
     this.setKv(`wfrun:${parentId}:${toolUseId}`, runId);
+    if (name) this.setKv(`wfname:${parentId}:${runId}`, name);
+  }
+
+  /** run id → workflow name, for every Workflow run this session launched. */
+  workflowNames(parentId: string): Record<string, string> {
+    const prefix = `wfname:${parentId}:`;
+    const rows = this.db.prepare('SELECT key, value FROM kv WHERE key LIKE ?')
+      .all(`${prefix}%`) as { key: string; value: string }[];
+    return Object.fromEntries(rows.map((r) => [r.key.slice(prefix.length), r.value]));
   }
 
   /** The parent recorded a child run finishing (task-notification, or a sync
