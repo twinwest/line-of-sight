@@ -157,6 +157,42 @@ async function cmdStats(): Promise<void> {
   console.log(`totals      ${String(total('viewer_open')).padStart(11)}  ${String(total('question_asked')).padStart(14)}`);
 }
 
+/** `sight inspect <transcript.jsonl>` — headless: what the adapter makes of
+ *  a file, for checking a new CLI version's format without the daemon. */
+async function cmdInspect(file: string | undefined): Promise<void> {
+  if (!file) { console.error('usage: sight inspect <transcript.jsonl>'); process.exitCode = 1; return; }
+  const { claudeCodeAdapter } = await import('../adapters/claudeCode.js');
+  const { codexAdapter } = await import('../adapters/codex.js');
+  const abs = path.resolve(file);
+  const lines = fs.readFileSync(abs, 'utf8').split('\n').filter(Boolean);
+  // a file outside the usual roots matches no adapter: take whichever
+  // understands the most lines
+  const parsed = [claudeCodeAdapter(), codexAdapter()].map((adapter) => ({
+    adapter,
+    events: lines.flatMap((line, i) => adapter.parseLine(line, { filePath: abs, byteOffset: i })),
+  }));
+  const { adapter, events } = parsed.find((p) => p.adapter.matches(abs))
+    ?? parsed.sort((x, y) => x.events.filter((e) => e.kind === 'unknown').length
+      - y.events.filter((e) => e.kind === 'unknown').length)[0]!;
+  const meta = adapter.sessionMeta(abs, events.slice(0, 5));
+  const title = meta.title || events.flatMap((e) => e.kind !== 'unknown' && e.sessionPatch?.title ? [e.sessionPatch.title] : [])[0] || '(untitled)';
+  const count = (xs: string[]) => [...xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map<string, number>())]
+    .sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}=${n}`).join(' ');
+  console.log(`${meta.id}  [${adapter.id}]  ${title}`);
+  console.log(`events: ${events.length}  ${count(events.map((e) => e.kind === 'message' ? e.role : e.kind))}`);
+  const tools = events.flatMap((e) => e.kind === 'message'
+    ? e.blocks.flatMap((b) => b.type === 'tool_use' ? [b.toolName] : []) : []);
+  if (tools.length) console.log(`tools: ${count(tools)}`);
+  const unknown = events.filter((e) => e.kind === 'unknown');
+  if (unknown.length) console.log(`unknown lines: ${count(unknown.map((e) => String((e.raw as { type?: unknown } | null)?.type ?? '?')))}`);
+  const subDir = path.join(path.dirname(abs), path.basename(abs, '.jsonl'), 'subagents');
+  if (fs.existsSync(subDir)) {
+    const kids = fs.readdirSync(subDir, { withFileTypes: true, recursive: true })
+      .filter((e) => e.isFile() && adapter.matches(path.join(e.parentPath, e.name)));
+    console.log(`subagents: ${kids.length} (${count(kids.map((e) => path.basename(path.dirname(path.join(e.parentPath, e.name)))))})`);
+  }
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 switch (cmd) {
   // wrappers bypass arg parsing entirely — everything passes through untouched
@@ -171,6 +207,7 @@ switch (cmd) {
     void (async () => { await startDaemon(); openBrowser(); })();
     break;
   case 'stats': void cmdStats(); break;
+  case 'inspect': void cmdInspect(rest[0]); break;
   default:
     console.log(`usage: sight <command>
 
@@ -178,6 +215,7 @@ switch (cmd) {
   sight codex [args...]    run codex with the viewer alongside
   sight start|stop|status  daemon lifecycle
   sight open               open the viewer in the browser
-  sight stats              dogfood usage stats (last 14 days)`);
+  sight stats              dogfood usage stats (last 14 days)
+  sight inspect <jsonl>    parse one transcript headlessly (format debugging)`);
     if (cmd !== undefined && cmd !== 'help' && cmd !== '--help' && cmd !== '-h') process.exitCode = 1;
 }

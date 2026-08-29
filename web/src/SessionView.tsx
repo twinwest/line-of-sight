@@ -14,6 +14,12 @@ import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
 
 /** Merge new events into the list, replacing by id (re-ingested lines) and keeping seq order. */
+const IDLE_GAP_MS = 10 * 60 * 1000;
+function formatGap(ms: number): string {
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} min` : m < 24 * 60 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`;
+}
+
 function merge(prev: StoredEvent[], incoming: StoredEvent[]): StoredEvent[] {
   const byId = new Map(prev.map((e) => [e.id, e]));
   let appended = false;
@@ -342,11 +348,19 @@ export function SessionView({ id, targetMessageId = null }:
    *  Headless rows (tool flows, tool_use/thinking-only) don't interrupt it. */
   const renderRun = (evs: StoredEvent[]) => {
     let prevRole: string | null = null;
-    return evs.map((e) => {
+    let prevTs = 0;
+    return evs.flatMap((e) => {
       const headed = hasEventHead(e, dialect);
       const showRole = headed && e.role !== prevRole;
       if (headed) prevRole = e.role;
-      return renderEvent(e, showRole);
+      // an idle stretch (you walked away, the CLI sat) reads as a seam, not
+      // one continuous exchange — ambient, so a thin rule with the gap
+      const gap = prevTs && e.ts ? e.ts - prevTs : 0;
+      if (e.ts) prevTs = e.ts;
+      const row = renderEvent(e, showRole);
+      return gap >= IDLE_GAP_MS
+        ? [<div className="idle-gap" key={`gap-${e.id}`}>{formatGap(gap)} idle</div>, row]
+        : [row];
     });
   };
 
