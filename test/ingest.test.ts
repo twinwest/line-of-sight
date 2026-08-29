@@ -124,6 +124,21 @@ describe('incremental ingest', () => {
     ]);
   });
 
+  it('workflow subagents land under the session, titled by run id', () => {
+    const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_abc');
+    fs.mkdirSync(wfDir, { recursive: true });
+    fs.writeFileSync(path.join(wfDir, 'agent-w.jsonl'), line('w1', 'search angle'));
+    fs.writeFileSync(path.join(wfDir, 'agent-w.meta.json'),
+      JSON.stringify({ agentType: 'workflow-subagent', spawnDepth: 1 }));
+    fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), '{"type":"started","agentId":"w"}\n');
+    ingester.start();
+    expect(store.listChildren(SESSION)).toMatchObject([
+      { id: 'agent-w', parentId: SESSION, toolUseId: null, title: 'workflow-subagent · wf_abc' },
+    ]);
+    expect(store.getSession('journal')).toBeNull();
+    return ingester.stop();
+  });
+
   it('sibling files that are not transcripts stay out', () => {
     const a = adapter();
     const dir = path.join(root, '-tmp-proj', SESSION, 'subagents');

@@ -129,6 +129,9 @@ describe('claudeCode.matches', () => {
     expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc.jsonl`)).toBe(true);
     expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/agent-x.jsonl`)).toBe(true);
     expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/agent-x.meta.json`)).toBe(false);
+    expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/workflows/wf_1/agent-x.jsonl`)).toBe(true);
+    expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/workflows/wf_1/journal.jsonl`)).toBe(false);
+    expect(adapter.matches(`${root}/-proj/12345678-1234-1234-1234-123456789abc/subagents/other/wf_1/agent-x.jsonl`)).toBe(false);
     expect(adapter.matches(`${root}/-proj/subagents/agent-x.jsonl`)).toBe(false);
     expect(adapter.matches(`${root}/-proj/memory/MEMORY.md`)).toBe(false);
     expect(adapter.matches(`${root}/-proj/notes.jsonl`)).toBe(false);

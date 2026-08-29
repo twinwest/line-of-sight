@@ -185,7 +185,11 @@ surrounding `<uuid>` dir — derived from the path, so always known) and
 `tool_use_id` (from the sibling `agent-*.meta.json`, which also supplies the
 title `agentType · description`; best-effort, the file is undocumented). Line
 schema is identical to a top-level transcript, so `parseLine` is unchanged;
-only `fork-context-ref` is new (dropped as bookkeeping).
+only `fork-context-ref` is new (dropped as bookkeeping). Workflow-tool runs
+put their agents one level down, `subagents/workflows/<wf_id>/agent-*.jsonl`,
+beside a `journal.jsonl` ledger (skipped); their meta.json has no
+`toolUseId`, so they title as `workflow-subagent · <wf_id>` and have no row
+link (DECISIONS 2026-08-28).
 
 `listSessions()` returns `parent_id IS NULL` only — children are reached from
 their parent, never from the session list. `/api/sessions/:id` carries

@@ -134,23 +134,41 @@ function startsMatch(procStart: string | null, psStart: string): boolean {
   return Date.parse(`${procStart} UTC`) === actual || Date.parse(procStart) === actual;
 }
 
-/** Subagent transcript (`<session-uuid>/subagents/agent-*.jsonl`) → its child
- *  metadata; null for an ordinary top-level transcript. The parent comes from
- *  the path, so it is always known; the sibling `.meta.json` adds the Task
- *  tool_use the run belongs to and a human title. That file is written at spawn
- *  time, before the transcript — but it is undocumented, so a missing or
- *  drifted one just costs the Task-row link, never the ingest. */
+/** The `subagents/` dir that owns a subagent transcript, or null. Two
+ *  layouts: direct Agent runs at `<uuid>/subagents/agent-*.jsonl`, and
+ *  Workflow-tool runs one level down at
+ *  `<uuid>/subagents/workflows/<wf_id>/agent-*.jsonl` (the sibling
+ *  `journal.jsonl` there is spawn/result bookkeeping, not a transcript). */
+function subagentsDir(filePath: string): { dir: string; workflow: string | null } | null {
+  const dir = path.dirname(filePath);
+  if (path.basename(dir) === 'subagents') return { dir, workflow: null };
+  const up = path.dirname(dir);
+  if (path.basename(up) === 'workflows' && path.basename(path.dirname(up)) === 'subagents') {
+    return { dir: path.dirname(up), workflow: path.basename(dir) };
+  }
+  return null;
+}
+
+/** Subagent transcript → its child metadata; null for an ordinary top-level
+ *  transcript. The parent comes from the path, so it is always known; the
+ *  sibling `.meta.json` adds the Task tool_use the run belongs to and a human
+ *  title. That file is written at spawn time, before the transcript — but it
+ *  is undocumented, so a missing or drifted one just costs the Task-row link,
+ *  never the ingest. Workflow subagents' meta carries only
+ *  `{agentType: "workflow-subagent", spawnDepth}` — no toolUseId, no
+ *  description — so they title as `workflow-subagent · <wf_id>` and are
+ *  reached through the parent's "Subagents · N" popover. */
 function subagentMeta(filePath: string):
     { parentId: string; toolUseId: string | null; title: string } | null {
-  const dir = path.dirname(filePath);
-  if (path.basename(dir) !== 'subagents') return null;
+  const sub = subagentsDir(filePath);
+  if (!sub) return null;
   let m: Json = {};
   try {
     m = JSON.parse(fs.readFileSync(filePath.replace(/\.jsonl$/, '.meta.json'), 'utf8')) as Json;
   } catch { /* not written yet, unreadable, or gone */ }
-  const title = [str(m.agentType), str(m.description)].filter(Boolean).join(' · ');
+  const title = [str(m.agentType), str(m.description) ?? sub.workflow].filter(Boolean).join(' · ');
   return {
-    parentId: path.basename(path.dirname(dir)),
+    parentId: path.basename(path.dirname(sub.dir)),
     toolUseId: str(m.toolUseId),
     title: truncate(title, 120),
   };
@@ -167,19 +185,19 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
   return {
     id: 'claude-code',
     roots: () => [root],
-    // 3 = deep enough for <project>/<uuid>/subagents/agent-*.jsonl
-    watchDepth: 3,
+    // 5 = deep enough for <project>/<uuid>/subagents/workflows/<wf>/agent-*.jsonl
+    watchDepth: 5,
 
     // <project>/<uuid>.jsonl (a session) and <project>/<uuid>/subagents/
-    // agent-*.jsonl (a subagent run, ingested as that session's child).
-    // Everything else alongside them — memory/*.md, the *.meta.json — is not
-    // a transcript (see SPIKE_NOTES.md).
+    // [workflows/<wf_id>/]agent-*.jsonl (a subagent run, ingested as that
+    // session's child). Everything else alongside them — memory/*.md, the
+    // *.meta.json, journal.jsonl — is not a transcript (see SPIKE_NOTES.md).
     matches(filePath) {
       const dir = path.dirname(filePath);
       if (UUID_JSONL.test(path.basename(filePath))) return path.dirname(dir) === root;
-      return AGENT_JSONL.test(path.basename(filePath))
-        && path.basename(dir) === 'subagents'
-        && path.dirname(path.dirname(path.dirname(dir))) === root;
+      if (!AGENT_JSONL.test(path.basename(filePath))) return false;
+      const sub = subagentsDir(filePath);
+      return sub !== null && path.dirname(path.dirname(path.dirname(sub.dir))) === root;
     },
 
     // ~/.claude/sessions/<pid>.json is written by the CLI itself and carries
