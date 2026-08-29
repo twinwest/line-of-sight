@@ -123,6 +123,30 @@ describe('claudeCode.parseLine on edge cases', () => {
   });
 });
 
+describe('claudeCode.parseLine child lifecycle signals', () => {
+  const user = (extra: object) => JSON.stringify({
+    type: 'user', uuid: 'u', timestamp: '2026-08-24T00:00:00.000Z', ...extra });
+  const ack = (toolUseResult: object) => user({
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] },
+    toolUseResult,
+  });
+  it('a task-notification ends the run its tool-use-id names', () => {
+    const [e] = adapter.parseLine(user({ message: { role: 'user', content:
+      '<task-notification>\n<task-id>x</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<status>completed</status>\n</task-notification>' } }), ctx);
+    expect(e).toMatchObject({ kind: 'message', taskEnd: 'toolu_1' });
+  });
+  it('an async spawn-ack is not a completion; a sync Task result is', () => {
+    expect(adapter.parseLine(ack({ isAsync: true, status: 'async_launched', agentId: 'a1' }), ctx)[0])
+      .not.toHaveProperty('taskEnd');
+    expect(adapter.parseLine(ack({ agentId: 'a1', content: 'done' }), ctx)[0])
+      .toMatchObject({ taskEnd: 'toolu_1' });
+  });
+  it('a Workflow launch ack maps the call to its run id', () => {
+    expect(adapter.parseLine(ack({ status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9' }), ctx)[0])
+      .toMatchObject({ workflowRun: { toolUseId: 'toolu_1', runId: 'wf_9' } });
+  });
+});
+
 describe('claudeCode.matches', () => {
   const root = '/tmp/fake-root';
   it('accepts session and subagent transcripts, nothing else', () => {

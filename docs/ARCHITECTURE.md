@@ -200,9 +200,12 @@ orphan `tool_result` when it did not (parallel Task batches write only
 results). A child with no `meta.json` has no `tool_use_id` and gets no row
 link — the header's "Subagents · N" popover is the fallback route.
 
-No live status: subagents have no `~/.claude/sessions/<pid>.json`, so
-`liveSessions()` never matches one; the transcript-timestamp heuristic still
-marks a growing child as running.
+No process signal of its own: subagents have no `~/.claude/sessions/
+<pid>.json`. Their end is read from the parent transcript instead — the
+`<task-notification>` line (async Agent/Task and Workflow calls; the
+tool_result is only a spawn-ack) or a sync Task's tool_result — and stored
+as `ended_at`; a child without one is running while its parent process is
+(DECISIONS 2026-08-28).
 
 ### Ingestion pipeline
 

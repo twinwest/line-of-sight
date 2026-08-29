@@ -177,6 +177,30 @@ function subagentMeta(filePath: string):
   };
 }
 
+/** Where the parent transcript records its children's lifecycle (CLI 2.1.x,
+ *  observed 2026-08-28): Agent/Task and Workflow calls are async — their
+ *  tool_result is a spawn-ack seconds after the call (`toolUseResult.status:
+ *  "async_launched"`), and completion arrives later as a user line
+ *  `<task-notification>…<tool-use-id>…<status>completed|stopped…`. A
+ *  Workflow ack also carries `runId`, which names the run's transcript dir.
+ *  A sync Task (older CLIs) completes on its own tool_result instead. */
+function childSignals(line: Json, content: unknown): { taskEnd?: string; workflowRun?: { toolUseId: string; runId: string } } {
+  if (typeof content === 'string') {
+    const m = /<task-notification>[\s\S]*?<tool-use-id>([^<]+)<\/tool-use-id>[\s\S]*?<status>(\w+)<\/status>/.exec(content);
+    return m && m[2] !== 'running' ? { taskEnd: m[1]! } : {};
+  }
+  const r = line.toolUseResult;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return {};
+  const res = r as Json;
+  const toolUseId = Array.isArray(content)
+    ? str((content.find((b) => (b as Json).type === 'tool_result') as Json | undefined)?.tool_use_id) : null;
+  if (!toolUseId) return {};
+  const runId = str(res.runId);
+  if (res.taskType === 'local_workflow' && runId) return { workflowRun: { toolUseId, runId } };
+  if (str(res.agentId) && res.status !== 'async_launched') return { taskEnd: toolUseId };
+  return {};
+}
+
 /** First user prompt lines that are CLI plumbing, not a real prompt. */
 function isRealPrompt(line: Json, text: string): boolean {
   if (line.isMeta === true) return false;
@@ -317,6 +341,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
           kind: 'message', id, ts, role: type,
           blocks: contentToBlocks(content),
           ...(Object.keys(patch).length ? { sessionPatch: patch } : {}),
+          ...childSignals(line, content),
         }];
       }
 

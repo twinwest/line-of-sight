@@ -139,6 +139,40 @@ describe('incremental ingest', () => {
     return ingester.stop();
   });
 
+  it('a task-notification in the parent ends the child, in either scan order', () => {
+    const subDir = path.join(root, '-tmp-proj', SESSION, 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(subDir, 'agent-x.jsonl'), line('sub1', 'child work'));
+    fs.writeFileSync(path.join(subDir, 'agent-x.meta.json'), JSON.stringify({ toolUseId: 'toolu_1' }));
+    fs.writeFileSync(file, line('u1', 'go')
+      + line('u2', '<task-notification><tool-use-id>toolu_1</tool-use-id><status>completed</status></task-notification>'));
+    // parent first
+    ingester.ingestFile(adapter(), file);
+    ingester.ingestFile(adapter(), path.join(subDir, 'agent-x.jsonl'));
+    expect(store.listChildren(SESSION)[0]!.endedAt).toBe(Date.parse('2026-08-24T00:00:00.000Z'));
+    // child first
+    const s2 = new Store(':memory:');
+    const i2 = new Ingester(s2, [adapter()]);
+    i2.ingestFile(adapter(), path.join(subDir, 'agent-x.jsonl'));
+    expect(s2.listChildren(SESSION)[0]!.endedAt).toBeNull();
+    i2.ingestFile(adapter(), file);
+    expect(s2.listChildren(SESSION)[0]!.endedAt).toBe(Date.parse('2026-08-24T00:00:00.000Z'));
+  });
+
+  it('a Workflow run\'s notification ends every child under its run id', () => {
+    const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_9');
+    fs.mkdirSync(wfDir, { recursive: true });
+    for (const id of ['a', 'b']) fs.writeFileSync(path.join(wfDir, `agent-${id}.jsonl`), line(id, 'angle'));
+    const ack = JSON.stringify({ type: 'user', uuid: 'u2', timestamp: '2026-08-24T00:00:00.000Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_w', content: 'launched' }] },
+      toolUseResult: { status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9' } }) + '\n';
+    fs.writeFileSync(file, line('u1', 'go') + ack
+      + line('u3', '<task-notification><tool-use-id>toolu_w</tool-use-id><status>completed</status></task-notification>'));
+    ingester.start();
+    expect(store.listChildren(SESSION).map((c) => c.endedAt)).toEqual([1787529600000, 1787529600000]);
+    return ingester.stop();
+  });
+
   it('sibling files that are not transcripts stay out', () => {
     const a = adapter();
     const dir = path.join(root, '-tmp-proj', SESSION, 'subagents');

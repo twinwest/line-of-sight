@@ -82,11 +82,18 @@ export function buildServer(store: Store, hub: SseHub,
   };
 
   const withLive = <T extends { id: string; adapter: SessionMeta['adapter']; updatedAt: number;
+      parentId?: string | null; endedAt?: number | null;
       turnOpen?: boolean | null; turnStartedAt?: number | null }>(metas: T[]): T[] => {
     const live = liveSessions();
     if (!live.size) return metas;
     const now = Date.now();
     return metas.map((m) => {
+      // a subagent has no process of its own: it runs while its parent does
+      // and the parent hasn't recorded its end — regardless of how long ago
+      // it last wrote a line (long model turns write nothing)
+      if (m.parentId) {
+        return live.has(m.parentId) && !m.endedAt ? { ...m, live: true, waiting: false, busySince: 0 } : m;
+      }
       const s = live.get(m.id);
       if (!s) return m;
       // 'alive' proves the process exists, not that it is generating —
@@ -122,7 +129,7 @@ export function buildServer(store: Store, hub: SseHub,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
       // children = subagent runs; the viewer hangs them off their Task row
-      return { session: withLive([session])[0], events, children: store.listChildren(session.id) };
+      return { session: withLive([session])[0], events, children: withLive(store.listChildren(session.id)) };
     });
 
   app.get<{ Params: { id: string } }>('/api/sessions/:id/stream', (req, reply) => {

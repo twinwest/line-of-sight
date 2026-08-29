@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT DEFAULT '', title_source TEXT,
   started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
   byte_offset INTEGER DEFAULT 0,
-  parent_id TEXT, tool_use_id TEXT, workflow_id TEXT,
+  parent_id TEXT, tool_use_id TEXT, workflow_id TEXT, ended_at INTEGER,
   turn_open INTEGER, turn_started_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS messages (
@@ -52,6 +52,7 @@ interface SessionRow {
   title: string; title_source: TitleSource | null;
   started_at: number; updated_at: number; message_count: number; byte_offset: number;
   parent_id: string | null; tool_use_id: string | null; workflow_id: string | null;
+  ended_at: number | null;
   turn_open: number | null; turn_started_at: number | null;
 }
 
@@ -61,6 +62,7 @@ function toMeta(r: SessionRow): SessionMeta {
     projectDir: r.project_dir, title: r.title,
     startedAt: r.started_at, updatedAt: r.updated_at, messageCount: r.message_count,
     parentId: r.parent_id, toolUseId: r.tool_use_id, workflowId: r.workflow_id,
+    endedAt: r.ended_at,
     turnOpen: r.turn_open == null ? null : r.turn_open === 1,
     turnStartedAt: r.turn_started_at,
   };
@@ -90,7 +92,7 @@ export class Store {
     // columns added after the tables shipped — CREATE TABLE IF NOT EXISTS
     // leaves an existing db untouched, so add them here (throws once they are
     // already there, which is the fresh-db case)
-    for (const col of ['parent_id TEXT', 'tool_use_id TEXT', 'workflow_id TEXT',
+    for (const col of ['parent_id TEXT', 'tool_use_id TEXT', 'workflow_id TEXT', 'ended_at INTEGER',
       'turn_open INTEGER', 'turn_started_at INTEGER']) {
       try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
     }
@@ -110,9 +112,9 @@ export class Store {
     // is the guard. Revisit loudness only if an adapter can't promise uuids.
     this.db.prepare(`
       INSERT INTO sessions (id, adapter, file_path, project_dir, title, title_source,
-        started_at, updated_at, message_count, parent_id, tool_use_id, workflow_id)
+        started_at, updated_at, message_count, parent_id, tool_use_id, workflow_id, ended_at)
       VALUES (@id, @adapter, @filePath, @projectDir, @title, @titleSource,
-        @startedAt, @updatedAt, @messageCount, @parentId, @toolUseId, @workflowId)
+        @startedAt, @updatedAt, @messageCount, @parentId, @toolUseId, @workflowId, @endedAt)
       ON CONFLICT(id) DO NOTHING
     `).run({
       id: meta.id, adapter: meta.adapter, filePath: meta.filePath,
@@ -124,10 +126,37 @@ export class Store {
       messageCount: meta.messageCount,
       parentId: meta.parentId ?? null, toolUseId: meta.toolUseId ?? null,
       workflowId: meta.workflowId ?? null,
+      // the parent may have recorded this child's end before the child's file
+      // was scanned (directory order is arbitrary) — consult the fact store
+      endedAt: meta.parentId
+        ? this.childEnd(meta.parentId, meta.toolUseId) ?? this.childEnd(meta.parentId, meta.workflowId) : null,
     });
   }
 
   /** Wipe a session's events for a from-zero re-parse (file shrank). */
+  private childEnd(parentId: string, key: string | null | undefined): number | null {
+    const v = key ? this.getKv(`ended:${parentId}:${key}`) : null;
+    return v ? Number(v) : null;
+  }
+
+  /** A Workflow launch ack: remember which run a tool_use id names, so the
+   *  run's task-notification can end every child under that run id. */
+  noteWorkflowRun(parentId: string, toolUseId: string, runId: string): void {
+    this.setKv(`wfrun:${parentId}:${toolUseId}`, runId);
+  }
+
+  /** The parent recorded a child run finishing (task-notification, or a sync
+   *  Task's tool_result). Order-independent: the fact is kept in kv for
+   *  children ingested later, and applied to the ones already here. */
+  endChildren(parentId: string, toolUseId: string, ts: number): void {
+    const keys = [toolUseId];
+    const runId = this.getKv(`wfrun:${parentId}:${toolUseId}`);
+    if (runId) keys.push(runId);
+    for (const k of keys) this.setKv(`ended:${parentId}:${k}`, String(ts));
+    this.db.prepare(`UPDATE sessions SET ended_at = ? WHERE parent_id = ? AND ended_at IS NULL
+      AND (tool_use_id = ? OR workflow_id = ?)`).run(ts, parentId, toolUseId, runId ?? '');
+  }
+
   resetSession(sessionId: string): void {
     this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(sessionId);
     this.db.prepare(`UPDATE sessions SET byte_offset = 0, message_count = 0,

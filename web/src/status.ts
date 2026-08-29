@@ -30,6 +30,8 @@ export function sessionStatus(s: SessionMeta, seen: Record<string, number>, now:
   if (s.waiting) return 'waiting';
   if (s.live) return 'busy';
   if (now - s.updatedAt < DONE_MS && s.updatedAt > (seen[s.id] ?? 0)) return 'done';
+  // a subagent whose parent recorded its end is over, however fresh its file
+  if (s.endedAt) return 'idle';
   // adapters without a live signal: recent transcript activity = probably running
   if (now - s.updatedAt < RUNNING_MS) return 'busy';
   return 'idle';
