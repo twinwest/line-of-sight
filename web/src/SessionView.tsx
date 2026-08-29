@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { nav } from './App';
 import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
-  type SessionMeta, type SideChat, type StoredEvent,
+  type RenderBlock, type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
 import { dialectFor, genericDialect, type Dialect } from '../../src/shared/dialects';
 import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
@@ -299,6 +299,31 @@ export function SessionView({ id, targetMessageId = null }:
     children.filter((c) => c.toolUseId).map((c) => [c.toolUseId!, c] as const)), [children]);
   const outcomesCtx = useMemo(() => ({ outcomes, useIds, pendingEventId, subagents }),
     [outcomes, useIds, pendingEventId, subagents]);
+  // Subagents popover: direct Task runs flat, Workflow runs folded per run id.
+  // A run's name lives only in the parent's Workflow tool_use (`input.name`),
+  // paired to its run id through the result text's "Transcript dir: …/wf_…"
+  // (undocumented; a miss just leaves the group headed by its id).
+  const workflowNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const e of events) {
+      if (e.kind !== 'message' || !Array.isArray(e.body)) continue;
+      for (const b of e.body as RenderBlock[]) {
+        if (b.type !== 'tool_use' || b.toolName !== 'Workflow' || !b.id) continue;
+        const wf = /workflows\/(wf_[\w-]+)/.exec(outcomes.get(b.id)?.output ?? '')?.[1];
+        const name = (b.input as { name?: unknown } | null)?.name;
+        if (wf && typeof name === 'string') names.set(wf, name);
+      }
+    }
+    return names;
+  }, [events, outcomes]);
+  const childGroups = useMemo(() => {
+    const groups = new Map<string | null, SessionMeta[]>();
+    for (const c of children) {
+      const key = c.workflowId ?? null;
+      groups.set(key, [...(groups.get(key) ?? []), c]);
+    }
+    return [...groups.entries()].sort(([a], [b]) => (a === null ? -1 : b === null ? 1 : 0));
+  }, [children]);
 
   const renderEvent = (e: StoredEvent, showRole: boolean) => (
     <div className="event-wrap" key={e.id}>
@@ -349,18 +374,29 @@ export function SessionView({ id, targetMessageId = null }:
               Subagents · {children.length}
             </button>
             <div id="subagents-list" className="asks-list" popover="auto">
-              {children.map((c) => (
-                <button key={c.id} className="asks-item" onClick={(e) => {
-                  e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
-                  nav(`/s/${c.id}`);
-                }}>
-                  <span className="asks-q">{c.title || '(untitled)'}</span>
-                  <span className="asks-meta">
-                    {c.messageCount} message{c.messageCount === 1 ? '' : 's'}
-                    {c.startedAt ? ` · ${new Date(c.startedAt).toLocaleTimeString()}` : ''}
-                  </span>
-                </button>
-              ))}
+              {childGroups.map(([wf, kids]) => {
+                const rows = kids.map((c) => (
+                  <button key={c.id} className="asks-item" onClick={(e) => {
+                    e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
+                    nav(`/s/${c.id}`);
+                  }}>
+                    <span className="asks-q">{c.title || '(untitled)'}</span>
+                    <span className="asks-meta">
+                      {c.messageCount} message{c.messageCount === 1 ? '' : 's'}
+                      {c.startedAt ? ` · ${new Date(c.startedAt).toLocaleTimeString()}` : ''}
+                    </span>
+                  </button>
+                ));
+                if (wf === null) return rows;
+                return (
+                  <details key={wf} className="wf-group">
+                    <summary className="asks-meta">
+                      {workflowNames.get(wf) ?? 'workflow'} · {wf} · {kids.length}
+                    </summary>
+                    {rows}
+                  </details>
+                );
+              })}
             </div>
           </>
         )}

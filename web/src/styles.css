@@ -441,6 +441,9 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 }
 .asks-list:popover-open { display: flex; flex-direction: column; gap: 0.15rem; }
 .asks-hint { font-size: 0.8rem; color: var(--fg-dim); padding: 0.3rem 0.5rem; }
+.wf-group > summary { cursor: pointer; padding: 0.3rem 0.5rem; }
+.wf-group[open] > summary { font-weight: 600; }
+.wf-group .asks-item { margin-left: 0.8rem; }
 .asks-item {
   display: flex; flex-direction: column; gap: 0.15rem; text-align: left;
   background: none; border: none; cursor: pointer; color: var(--fg);

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT DEFAULT '', title_source TEXT,
   started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
   byte_offset INTEGER DEFAULT 0,
-  parent_id TEXT, tool_use_id TEXT,
+  parent_id TEXT, tool_use_id TEXT, workflow_id TEXT,
   turn_open INTEGER, turn_started_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS messages (
@@ -51,7 +51,7 @@ interface SessionRow {
   id: string; adapter: string; file_path: string; project_dir: string | null;
   title: string; title_source: TitleSource | null;
   started_at: number; updated_at: number; message_count: number; byte_offset: number;
-  parent_id: string | null; tool_use_id: string | null;
+  parent_id: string | null; tool_use_id: string | null; workflow_id: string | null;
   turn_open: number | null; turn_started_at: number | null;
 }
 
@@ -60,7 +60,7 @@ function toMeta(r: SessionRow): SessionMeta {
     id: r.id, adapter: r.adapter as SessionMeta['adapter'], filePath: r.file_path,
     projectDir: r.project_dir, title: r.title,
     startedAt: r.started_at, updatedAt: r.updated_at, messageCount: r.message_count,
-    parentId: r.parent_id, toolUseId: r.tool_use_id,
+    parentId: r.parent_id, toolUseId: r.tool_use_id, workflowId: r.workflow_id,
     turnOpen: r.turn_open == null ? null : r.turn_open === 1,
     turnStartedAt: r.turn_started_at,
   };
@@ -90,7 +90,7 @@ export class Store {
     // columns added after the tables shipped — CREATE TABLE IF NOT EXISTS
     // leaves an existing db untouched, so add them here (throws once they are
     // already there, which is the fresh-db case)
-    for (const col of ['parent_id TEXT', 'tool_use_id TEXT',
+    for (const col of ['parent_id TEXT', 'tool_use_id TEXT', 'workflow_id TEXT',
       'turn_open INTEGER', 'turn_started_at INTEGER']) {
       try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
     }
@@ -110,9 +110,9 @@ export class Store {
     // is the guard. Revisit loudness only if an adapter can't promise uuids.
     this.db.prepare(`
       INSERT INTO sessions (id, adapter, file_path, project_dir, title, title_source,
-        started_at, updated_at, message_count, parent_id, tool_use_id)
+        started_at, updated_at, message_count, parent_id, tool_use_id, workflow_id)
       VALUES (@id, @adapter, @filePath, @projectDir, @title, @titleSource,
-        @startedAt, @updatedAt, @messageCount, @parentId, @toolUseId)
+        @startedAt, @updatedAt, @messageCount, @parentId, @toolUseId, @workflowId)
       ON CONFLICT(id) DO NOTHING
     `).run({
       id: meta.id, adapter: meta.adapter, filePath: meta.filePath,
@@ -123,6 +123,7 @@ export class Store {
       startedAt: meta.startedAt, updatedAt: meta.updatedAt,
       messageCount: meta.messageCount,
       parentId: meta.parentId ?? null, toolUseId: meta.toolUseId ?? null,
+      workflowId: meta.workflowId ?? null,
     });
   }
 

@@ -156,20 +156,23 @@ function subagentsDir(filePath: string): { dir: string; workflow: string | null 
  *  is undocumented, so a missing or drifted one just costs the Task-row link,
  *  never the ingest. Workflow subagents' meta carries only
  *  `{agentType: "workflow-subagent", spawnDepth}` — no toolUseId, no
- *  description — so they title as `workflow-subagent · <wf_id>` and are
- *  reached through the parent's "Subagents · N" popover. */
+ *  description — so they carry `workflowId` and title from their prompt;
+ *  the popover groups them per run. */
 function subagentMeta(filePath: string):
-    { parentId: string; toolUseId: string | null; title: string } | null {
+    { parentId: string; toolUseId: string | null; workflowId: string | null; title: string } | null {
   const sub = subagentsDir(filePath);
   if (!sub) return null;
   let m: Json = {};
   try {
     m = JSON.parse(fs.readFileSync(filePath.replace(/\.jsonl$/, '.meta.json'), 'utf8')) as Json;
   } catch { /* not written yet, unreadable, or gone */ }
-  const title = [str(m.agentType), str(m.description) ?? sub.workflow].filter(Boolean).join(' · ');
+  // a workflow subagent's meta has no description; leave the title to its
+  // first prompt — the run id it belongs to is the group header, not the row
+  const title = sub.workflow ? '' : [str(m.agentType), str(m.description)].filter(Boolean).join(' · ');
   return {
     parentId: path.basename(path.dirname(sub.dir)),
     toolUseId: str(m.toolUseId),
+    workflowId: sub.workflow,
     title: truncate(title, 120),
   };
 }
@@ -361,6 +364,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         messageCount: 0,
         parentId: sub?.parentId ?? null,
         toolUseId: sub?.toolUseId ?? null,
+        workflowId: sub?.workflowId ?? null,
       };
     },
   };

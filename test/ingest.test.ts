@@ -124,7 +124,7 @@ describe('incremental ingest', () => {
     ]);
   });
 
-  it('workflow subagents land under the session, titled by run id', () => {
+  it('workflow subagents land under the session, tagged with their run id', () => {
     const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_abc');
     fs.mkdirSync(wfDir, { recursive: true });
     fs.writeFileSync(path.join(wfDir, 'agent-w.jsonl'), line('w1', 'search angle'));
@@ -133,7 +133,7 @@ describe('incremental ingest', () => {
     fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), '{"type":"started","agentId":"w"}\n');
     ingester.start();
     expect(store.listChildren(SESSION)).toMatchObject([
-      { id: 'agent-w', parentId: SESSION, toolUseId: null, title: 'workflow-subagent · wf_abc' },
+      { id: 'agent-w', parentId: SESSION, toolUseId: null, workflowId: 'wf_abc', title: 'search angle' },
     ]);
     expect(store.getSession('journal')).toBeNull();
     return ingester.stop();

@@ -9,6 +9,7 @@ export interface SessionMeta {
   messageCount: number;
   parentId?: string | null;   // subagent transcript: the session that spawned it
   toolUseId?: string | null;  // …and the parent's Task tool_use it belongs to
+  workflowId?: string | null; // …or the Workflow run (`wf_…`) it was fanned out by
   live?: boolean;          // API-only: agent process is active (never stored)
   waiting?: boolean;       // API-only: live, but parked on the user (see liveSessions)
   busySince?: number;      // API-only: when that state began (0 if unknown)
