@@ -54,6 +54,12 @@ export class Ingester {
     this.queue = this.queue.then(fn, (e) => this.log(`ingest error: ${String(e)}`));
   }
 
+  /** Ingest one file by path, whichever adapter claims it (queued like fs events). */
+  reingest(filePath: string): void {
+    const adapter = this.adapters.find((a) => a.matches(filePath));
+    if (adapter) this.enqueue(() => this.ingestFile(adapter, filePath));
+  }
+
   ingestFile(adapter: AgentAdapter, filePath: string): void {
     try {
       this.ingestFileInner(adapter, filePath);

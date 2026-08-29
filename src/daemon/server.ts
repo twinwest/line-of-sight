@@ -48,8 +48,11 @@ const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
 const STALE_BUSY_MS = 15 * 60_000;
 
 export function buildServer(store: Store, hub: SseHub,
-    liveSessions: () => Map<string, LiveSession> = () => new Map()): FastifyInstance {
+    liveSessions: () => Map<string, LiveSession> = () => new Map(),
+    reingest: (filePath: string) => void = () => {}): FastifyInstance {
   const app = Fastify({ logger: false });
+  // so the CLI can tell a daemon that predates the current build
+  const startedAt = Date.now();
 
   if (fs.existsSync(WEB_DIST)) {
     app.register(fastifyStatic, { root: WEB_DIST });
@@ -61,7 +64,7 @@ export function buildServer(store: Store, hub: SseHub,
   }
 
   app.get<{ Querystring: { includeLastOpen?: string } }>('/api/health', (req) => {
-    const base = { ok: true, pid: process.pid };
+    const base = { ok: true, pid: process.pid, startedAt };
     if (req.query.includeLastOpen) {
       return { ...base, lastViewerOpen: Number(store.getKv('last_viewer_open') ?? 0) };
     }
@@ -131,6 +134,20 @@ export function buildServer(store: Store, hub: SseHub,
       // children = subagent runs; the viewer hangs them off their Task row
       return { session: withLive([session])[0], events, children: withLive(store.listChildren(session.id)) };
     });
+
+  // Re-parse a session and its children from byte 0 — for rows ingested by
+  // an older adapter (e.g. before tool_use ids were stored). Derived data
+  // only; the transcript is never touched.
+  app.post<{ Params: { id: string } }>('/api/sessions/:id/reingest', (req, reply) => {
+    const session = store.getSession(req.params.id);
+    if (!session) return reply.code(404).send({ error: 'not found' });
+    const targets = [session, ...store.listChildren(session.id)];
+    for (const s of targets) {
+      store.resetSession(s.id);
+      reingest(s.filePath);
+    }
+    return { ok: true, sessions: targets.length };
+  });
 
   app.get<{ Params: { id: string } }>('/api/sessions/:id/stream', (req, reply) => {
     reply.raw.writeHead(200, {

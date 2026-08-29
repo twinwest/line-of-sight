@@ -394,7 +394,9 @@ Serve `web/dist` statically at `/`. SPA routes: `/` (session list),
 
 `sight claude [args...]`:
 1. Best-effort (wrap in try/catch, 1s timeout budget total): ensure daemon —
-   check pidfile + `/api/health`; if down, spawn detached
+   check pidfile + `/api/health`; if down — or up but started before
+   `dist/daemon/main.js` was last written (`/api/health.startedAt`), in which
+   case SIGTERM it first — spawn detached
    (`child_process.spawn(node daemonEntry, { detached: true, stdio: 'ignore' })`).
 2. Best-effort: open browser to `http://localhost:4989` **only if** no viewer
    opened in the last 6h (daemon tracks last `viewer_open`; ask

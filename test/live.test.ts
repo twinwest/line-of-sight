@@ -111,3 +111,23 @@ describe('alive + blocking tool parked at the tail → list-level waiting', () =
       .toMatchObject({ live: true, waiting: false });
   });
 });
+
+describe('POST /api/sessions/:id/reingest', () => {
+  it('resets the session and its children and re-feeds their files', async () => {
+    const store = new Store(':memory:');
+    const ts = Date.now();
+    store.upsertSession({ id: 'p', adapter: 'claude-code', filePath: '/p.jsonl', projectDir: '/p',
+      title: 'parent', startedAt: ts, updatedAt: ts, messageCount: 0 });
+    store.upsertSession({ id: 'c', adapter: 'claude-code', filePath: '/p/subagents/agent-c.jsonl', projectDir: '/p',
+      title: 'child', startedAt: ts, updatedAt: ts, messageCount: 0, parentId: 'p' });
+    store.appendEvents('p', [{ kind: 'message', id: 'm1', role: 'user', ts, blocks: [{ type: 'text', markdown: 'hi' }] }], 100);
+    const fed: string[] = [];
+    const app = buildServer(store, new SseHub(), () => new Map(), (f) => fed.push(f));
+    const res = await app.inject({ method: 'POST', url: '/api/sessions/p/reingest' });
+    expect(res.json()).toEqual({ ok: true, sessions: 2 });
+    expect(fed).toEqual(['/p.jsonl', '/p/subagents/agent-c.jsonl']);
+    expect(store.getEvents('p')).toHaveLength(0);
+    expect(store.getSessionByPath('/p.jsonl')).toMatchObject({ byteOffset: 0 });
+    expect((await app.inject({ method: 'POST', url: '/api/sessions/nope/reingest' })).statusCode).toBe(404);
+  });
+});

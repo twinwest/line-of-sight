@@ -26,7 +26,7 @@ const app = buildServer(store, hub, () => {
   const merged = new Map<string, LiveSession>();
   for (const a of adapters) for (const [id, s] of a.liveSessions?.() ?? []) merged.set(id, s);
   return merged;
-});
+}, (filePath) => ingester.reingest(filePath));
 
 try {
   await app.listen({ port: PORT, host: '127.0.0.1' });

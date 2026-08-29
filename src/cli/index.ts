@@ -9,16 +9,35 @@ const DAEMON_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..
 const URL_BASE = `http://127.0.0.1:${PORT}`;
 const OPEN_COOLDOWN_MS = 6 * 3600 * 1000;
 
-async function health(timeoutMs = 500, includeLastOpen = false):
-    Promise<{ ok: boolean; pid?: number; lastViewerOpen?: number }> {
+type Health = { ok: boolean; pid?: number; startedAt?: number; lastViewerOpen?: number };
+
+async function health(timeoutMs = 500, includeLastOpen = false): Promise<Health> {
   try {
     const res = await fetch(`${URL_BASE}/api/health${includeLastOpen ? '?includeLastOpen=1' : ''}`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.ok ? ((await res.json()) as { ok: boolean; pid: number; lastViewerOpen?: number })
-      : { ok: false };
+    return res.ok ? ((await res.json()) as Health) : { ok: false };
   } catch {
     return { ok: false };
+  }
+}
+
+/** A running daemon older than the build on disk keeps serving stale code
+ *  silently (bit us three times in one day). Unknown ⇒ not stale. */
+function stale(h: Health): boolean {
+  try {
+    return h.startedAt != null && fs.statSync(DAEMON_ENTRY).mtimeMs > h.startedAt;
+  } catch {
+    return false;
+  }
+}
+
+/** SIGTERM a stale daemon and wait (briefly) for it to leave the port. */
+async function retire(h: Health, timeoutMs: number): Promise<void> {
+  if (h.pid == null) return;
+  try { process.kill(h.pid, 'SIGTERM'); } catch { return; }
+  for (let waited = 0; waited < timeoutMs && (await health(100)).ok; waited += 100) {
+    await new Promise((r) => setTimeout(r, 100));
   }
 }
 
@@ -47,7 +66,9 @@ function spawnDaemon(): void {
 }
 
 async function startDaemon(): Promise<boolean> {
-  if ((await health()).ok) return true;
+  const h = await health();
+  if (h.ok && !stale(h)) return true;
+  if (h.ok) await retire(h, 2000);
   spawnDaemon();
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 150));
@@ -68,6 +89,7 @@ async function wrap(agent: string, args: string[]): Promise<never> {
     const budget = new Promise<null>((r) => setTimeout(r, 1000, null));
     await Promise.race([budget, (async () => {
       let h = await health(300, true);
+      if (h.ok && stale(h)) { await retire(h, 500); h = { ok: false }; }
       if (!h.ok) {
         spawnDaemon();
         // brief wait so a cold start can still get its viewer tab; if the
@@ -101,7 +123,9 @@ function openBrowserMaybe(lastViewerOpen: number): void {
 }
 
 async function cmdStart(): Promise<void> {
-  if ((await health()).ok) { console.log(`daemon already running on port ${PORT}`); return; }
+  const h = await health();
+  if (h.ok && !stale(h)) { console.log(`daemon already running on port ${PORT}`); return; }
+  if (h.ok) console.log('daemon predates the current build; restarting');
   const ok = await startDaemon();
   console.log(ok ? `daemon started on ${URL_BASE}` : 'daemon failed to start (see ~/.sight/daemon.log)');
   if (!ok) process.exitCode = 1;
@@ -137,6 +161,15 @@ async function cmdStatus(): Promise<void> {
     console.log(pid ? `daemon not responding (stale pidfile, pid ${pid})` : 'daemon not running');
     process.exitCode = 1;
   }
+}
+
+async function cmdReingest(id: string | undefined): Promise<void> {
+  if (!id) { console.error('usage: sight reingest <session-id>'); process.exitCode = 1; return; }
+  if (!(await startDaemon())) { console.error('daemon not running'); process.exitCode = 1; return; }
+  const res = await fetch(`${URL_BASE}/api/sessions/${encodeURIComponent(id)}/reingest`, { method: 'POST' });
+  if (!res.ok) { console.error(`reingest failed: ${res.status}`); process.exitCode = 1; return; }
+  const { sessions } = (await res.json()) as { sessions: number };
+  console.log(`re-parsing ${sessions} transcript${sessions === 1 ? '' : 's'} (session + subagents)`);
 }
 
 async function cmdStats(): Promise<void> {
@@ -208,6 +241,7 @@ switch (cmd) {
     break;
   case 'stats': void cmdStats(); break;
   case 'inspect': void cmdInspect(rest[0]); break;
+  case 'reingest': void cmdReingest(rest[0]); break;
   default:
     console.log(`usage: sight <command>
 
@@ -216,6 +250,7 @@ switch (cmd) {
   sight start|stop|status  daemon lifecycle
   sight open               open the viewer in the browser
   sight stats              dogfood usage stats (last 14 days)
-  sight inspect <jsonl>    parse one transcript headlessly (format debugging)`);
+  sight inspect <jsonl>    parse one transcript headlessly (format debugging)
+  sight reingest <id>      re-parse a session and its subagents from scratch`);
     if (cmd !== undefined && cmd !== 'help' && cmd !== '--help' && cmd !== '-h') process.exitCode = 1;
 }
