@@ -9,6 +9,7 @@ import { dialectFor, genericDialect, type Dialect } from '../../src/shared/diale
 import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
 import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
+import { shortDir } from './SessionList';
 import { DOT_TITLE, RUNNING_MS, sessionStatus } from './status';
 import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
@@ -372,7 +373,7 @@ export function SessionView({ id, targetMessageId = null }:
             <CopyButton text={() => session.id} label={session.id.slice(0, 8)} doneLabel="copied" />
           </span>
         )}
-        <span className="sh-dir">{session.projectDir ?? ''}</span>
+        <span className="sh-dir">{shortDir(session.projectDir)}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
         {/* also the only way into a subagent whose Task row is outside the
             loaded window, or whose meta.json never linked it to one */}
