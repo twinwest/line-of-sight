@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionMeta } from '../src/shared/types.js';
-import { otherSessions } from '../web/src/status.js';
+import { otherSessions, sessionStatus } from '../web/src/status.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -37,5 +37,16 @@ describe('otherSessions', () => {
 
   it('counts nothing when every other session is idle', () => {
     expect(otherSessions([meta('a'), meta('b')], 'cur', {}, NOW)).toEqual([]);
+  });
+});
+
+describe('sessionStatus', () => {
+  it('a session you just watched finish is idle, not "running" — no freshness fallback', () => {
+    // wrote 10s ago, probe says not live, and the user saw the tail (seen >
+    // updatedAt): the old <60s-fresh ⇒ busy rule made this lie for a minute
+    const s = meta('a', { updatedAt: NOW - 10_000 });
+    expect(sessionStatus(s, { a: NOW - 5_000 }, NOW)).toBe('idle');
+    // the same fresh write unseen is still "just finished"
+    expect(sessionStatus(s, {}, NOW)).toBe('done');
   });
 });

@@ -30,9 +30,9 @@ export function sessionStatus(s: SessionMeta, seen: Record<string, number>, now:
   if (s.waiting) return 'waiting';
   if (s.live) return 'busy';
   if (now - s.updatedAt < DONE_MS && s.updatedAt > (seen[s.id] ?? 0)) return 'done';
-  // a subagent whose parent recorded its end is over, however fresh its file
-  if (s.endedAt) return 'idle';
-  // adapters without a live signal: recent transcript activity = probably running
-  if (now - s.updatedAt < RUNNING_MS) return 'busy';
+  // No freshness fallback to busy: reaching here with fresh writes means the
+  // probe said not-running AND the user saw the tail (else 'done' above won),
+  // so "running" would be a certain lie for the common just-watched-it-finish
+  // case, in exchange for a blind-probe window that 'done' mostly covers anyway.
   return 'idle';
 }
