@@ -1,6 +1,5 @@
 import { readConfig, type SightConfig } from '../shared/config.js';
 import type { SessionMeta } from '../shared/types.js';
-import { apiResponder } from './api.js';
 import { claudeCliResponder } from './claudeCli.js';
 import { codexCliResponder } from './codexCli.js';
 import type { Responder } from './types.js';
@@ -8,7 +7,7 @@ import type { Responder } from './types.js';
 export type { Responder, ResponderRequest } from './types.js';
 export { ANTHROPIC_OPTIONS } from './types.js';
 
-const ENGINES: Responder[] = [claudeCliResponder, codexCliResponder, apiResponder];
+const ENGINES: Responder[] = [claudeCliResponder, codexCliResponder];
 
 /** Adapter→engine preference — the only coupling between the two vocabularies. */
 const PREFERRED: Record<SessionMeta['adapter'], Responder['id']> = {

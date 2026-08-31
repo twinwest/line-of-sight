@@ -3,9 +3,8 @@ import path from 'node:path';
 import { SIGHT_DIR } from './paths.js';
 
 export interface SightConfig {
-  responder?: 'claude-cli' | 'codex-cli' | 'api';
-  apiKey?: string;
-  /** Model for responder invocations (claude-cli --model / api model id). Engine default if unset. */
+  responder?: 'claude-cli' | 'codex-cli';
+  /** Model for responder invocations (claude-cli --model). Engine default if unset. */
   responderModel?: string;
   /** Effort for responder invocations: low | medium | high | xhigh | max. Engine default if unset. */
   responderEffort?: string;

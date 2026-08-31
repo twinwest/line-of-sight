@@ -129,9 +129,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
       <div className="panel-body" ref={bodyRef} onScroll={onScroll}>
         {status?.engine === null && (
           <div className="setup-hint">
-            No answer engine found. Install the <code>claude</code> CLI, or put an API key in{' '}
-            <code>~/.sight/config.json</code>:{' '}
-            <code>{'{"responder":"api","apiKey":"sk-..."}'}</code>
+            No answer engine found. Install the <code>claude</code> or <code>codex</code> CLI.
           </div>
         )}
         {turns.map((t, i) => (

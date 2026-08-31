@@ -431,21 +431,6 @@ export class Store {
   }
 
   /** Plain-text context of ±n messages around an anchor (api-responder fallback). */
-  inlineContext(sessionId: string, anchorMessageId: string, n = 30, maxChars = 30_000): string {
-    const anchor = this.db.prepare(
-      'SELECT seq FROM messages WHERE session_id = ? AND id = ?',
-    ).get(sessionId, anchorMessageId) as { seq: number } | undefined;
-    if (!anchor) return '';
-    const rows = this.db.prepare(`
-      SELECT role, text_content FROM messages
-      WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
-      ORDER BY seq
-    `).all(sessionId, anchor.seq - n, anchor.seq + n) as { role: string; text_content: string }[];
-    const text = rows.filter((r) => r.text_content)
-      .map((r) => `[${r.role}]\n${r.text_content}`).join('\n\n');
-    return text.length > maxChars ? text.slice(0, maxChars) : text;
-  }
-
   incrementStat(event: string, day = new Date().toISOString().slice(0, 10)): void {
     this.db.prepare(`
       INSERT INTO stats (day, event, count) VALUES (?, ?, 1)

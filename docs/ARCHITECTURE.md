@@ -71,7 +71,7 @@ line-of-sight/
     daemon/         # fastify server, SSE hub, lifecycle (pidfile)
     adapters/       # Adapter interface + claudeCode.ts (+ codex.ts in v1.5)
     store/          # sqlite schema, queries, FTS
-    responders/     # Responder interface + claudeCli.ts, codexCli.ts, api.ts
+    responders/     # Responder interface + claudeCli.ts, codexCli.ts
     shared/         # types shared with frontend (SessionMeta, RenderBlock, ...)
       dialects/     # per-agent presentation policy (pure functions; see §9)
   web/              # vite react app (built to web/dist, served by daemon)
@@ -263,7 +263,7 @@ session always picks a login the user actually has. A config pin overrides.
 
 ```ts
 export interface Responder {
-  id: 'claude-cli' | 'codex-cli' | 'api';
+  id: 'claude-cli' | 'codex-cli';
   available(): Promise<boolean>;        // e.g. `which claude`
   /** Streamed answer. MUST be read-only (see per-engine notes).
    *  onStatus: optional tool-activity progress for the panel. */
@@ -277,7 +277,6 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
-  inlineContext: () => string;  // lazy anchor excerpt; only tool-less engines (api) call it
 }
 ```
 
@@ -288,7 +287,7 @@ function over config + session adapter; availability probing sits outside it):
    engine the user didn't pick.
 2. else the engine matching the viewed session's adapter
    (`claude-code`→`claude-cli`, `codex`→`codex-cli`) if available
-3. else first available of claude-cli, codex-cli, api
+3. else first available of claude-cli, codex-cli
 4. none → UI shows setup hint (SPEC 5.4).
 
 `GET /api/responder/status` reports the *default* engine (no session context);
@@ -343,20 +342,21 @@ Same prompt template, spawned with stdin IGNORED (a piped stdin makes
 into `~/.codex/sessions`. `--json` has no token deltas: completed
 `agent_message` items are the answer (item-sized chunks); `item.started`
 command executions feed the progress line. `responderModel`/
-`responderEffort` are NOT applied — they are claude-cli/api settings; codex
+`responderEffort` are NOT applied — they are claude-cli settings; codex
 runs on the user's own config.toml model. Details: DECISIONS 2026-08-27.
 
-### api responder (BYOK fallback)
+### Engine config
 
-- Direct Anthropic Messages API, model `claude-sonnet-5`, `max_tokens` 4096,
-  streaming. No tools — uses the inline-context fallback (±30 messages around
-  the anchor).
-- Config: `~/.sight/config.json` → `{ "responder": "api", "apiKey": "..." }`.
-  Never log the key.
-- Optional for any engine: `"responderModel"` (claude-cli `--model` / api
-  model id; default `claude-sonnet-5` for api, CLI default otherwise) and
-  `"responderEffort"` (low|medium|high|xhigh|max). Read per-ask — no daemon
-  restart needed.
+- Optional for any engine: `"responderModel"` (claude-cli `--model`; CLI
+  default otherwise) and `"responderEffort"` (low|medium|high|xhigh|max).
+  Read per-ask — no daemon restart needed.
+- A BYOK api engine (direct Messages API, no tools, inline excerpt as its
+  grounding) existed through 2026-08-31 and was cut: it never ran (requires
+  both CLIs absent plus a hand-configured key — contradicting "a session on
+  disk implies its CLI is installed"), and its tool-less grounding forced
+  every grounding improvement to be built twice. See DECISIONS 2026-08-31;
+  the Responder interface is the seam to rebuild it against if a real user
+  needs one.
 
 ### Read-only enforcement summary (product promise B5)
 
@@ -364,10 +364,9 @@ runs on the user's own config.toml model. Details: DECISIONS 2026-08-27.
 |---|---|
 | claude-cli | `--allowedTools "Read,Grep,Glob"` + `--disallowedTools` on all mutating/exfiltrating tools |
 | codex-cli | `--sandbox read-only` |
-| api | no tools at all |
 
-If an engine cannot guarantee read-only, it must not receive tool access —
-degrade to inline context.
+If an engine cannot guarantee read-only, it must not be offered as a
+candidate.
 
 ## 7. HTTP API (daemon, port 4989 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
 

@@ -13,7 +13,6 @@ const REQ = {
     { role: 'user' as const, text: 'earlier q' },
     { role: 'assistant' as const, text: 'earlier a' },
   ],
-  inlineContext: () => { throw new Error('tool-engines must not build inline context'); },
 };
 
 describe('composePrompt', () => {
@@ -25,28 +24,23 @@ describe('composePrompt', () => {
     expect(p.indexOf('ANCHOR')).toBeLessThan(p.indexOf('QUESTION: What is the evidence'));
   });
 
-  it('uses inline context instead of the file pointer when provided', () => {
-    const p = composePrompt(REQ, 'CTX HERE');
-    expect(p).toContain('CTX HERE');
-    expect(p).not.toContain(REQ.sessionFilePath);
-  });
 });
 
 describe('candidates routing', () => {
   const ids = (cfg: Parameters<typeof candidates>[0], adapter?: 'claude-code' | 'codex') =>
     candidates(cfg, adapter).map((e) => e.id);
 
-  it('defaults to claude-cli, codex-cli, api', () => {
-    expect(ids({})).toEqual(['claude-cli', 'codex-cli', 'api']);
+  it('defaults to claude-cli, codex-cli', () => {
+    expect(ids({})).toEqual(['claude-cli', 'codex-cli']);
   });
 
   it('puts the engine matching the viewed session agent first', () => {
-    expect(ids({}, 'codex')).toEqual(['codex-cli', 'claude-cli', 'api']);
-    expect(ids({}, 'claude-code')).toEqual(['claude-cli', 'codex-cli', 'api']);
+    expect(ids({}, 'codex')).toEqual(['codex-cli', 'claude-cli']);
+    expect(ids({}, 'claude-code')).toEqual(['claude-cli', 'codex-cli']);
   });
 
   it('a config pin is the only candidate — no fallback, session agent ignored', () => {
-    expect(ids({ responder: 'api' }, 'codex')).toEqual(['api']);
+    expect(ids({ responder: 'claude-cli' }, 'codex')).toEqual(['claude-cli']);
   });
 
   it('an unknown pin yields no candidates', () => {
@@ -128,20 +122,4 @@ describe('side chat store round-trip', () => {
     expect(store.listSideChats('s1')).toHaveLength(0);
   });
 
-  it('inlineContext returns text around the anchor only', () => {
-    const store = new Store(':memory:');
-    store.upsertSession({
-      id: 's1', adapter: 'claude-code', filePath: '/f', projectDir: null,
-      title: '', startedAt: 0, updatedAt: 0, messageCount: 0,
-    });
-    const events = Array.from({ length: 100 }, (_, i) => ({
-      kind: 'message' as const, id: `m${i}`, role: 'user' as const, ts: i,
-      blocks: [{ type: 'text' as const, markdown: `message number ${i}` }],
-    }));
-    store.appendEvents('s1', events, 1);
-    const ctx = store.inlineContext('s1', 'm50', 5);
-    expect(ctx).toContain('message number 50');
-    expect(ctx).toContain('message number 45');
-    expect(ctx).not.toContain('message number 40');
-  });
 });

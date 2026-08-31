@@ -11,7 +11,7 @@ export const ANTHROPIC_OPTIONS: ResponderOptions = {
 };
 
 export interface Responder {
-  id: 'claude-cli' | 'codex-cli' | 'api';
+  id: 'claude-cli' | 'codex-cli';
   /** Model/effort choices this engine honors (rendered by the panel);
    *  null = the engine runs on its own config and nothing here applies. */
   options: ResponderOptions | null;
@@ -28,7 +28,4 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
-  /** Lazy transcript excerpt for engines without tools (api calls it,
-   *  tool-engines never do) — the caller needs no engine knowledge. */
-  inlineContext: () => string;
 }

@@ -175,7 +175,6 @@ export function buildServer(store: Store, hub: SseHub,
     // candidates() ignores unknown adapter strings, so pass the raw value through
     const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
     const { responderModel, responderEffort } = readConfig();
-    // never expose apiKey to the frontend
     return {
       engine: engine?.id ?? null,
       options: engine?.options ?? null,
@@ -255,7 +254,6 @@ export function buildServer(store: Store, hub: SseHub,
         sessionFilePath: session.filePath,
         projectDir: session.projectDir,
         priorTurns: chat.turns.map(({ role, text }) => ({ role, text })),
-        inlineContext: () => store.inlineContext(chat.sessionId, chat.anchorMessageId),
       };
 
       reply.raw.writeHead(200, {

@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 // over src/, so a stray fetch() can't ship silently.
 const SRC = path.join(__dirname, '..', 'src');
 const NET = /\bfetch\(|https?\.request\(|https?\.get\(|net\.connect\(|new WebSocket\(|from ['"](undici|axios|node-fetch|ws)['"]/;
-// BYOK responder (the user's own key, ARCHITECTURE §6) and the CLI's
-// localhost health probe are the only sanctioned call sites.
-const ALLOWED = new Set(['responders/api.ts', 'cli/index.ts']);
+// The CLI's localhost health probe is the only sanctioned call site — the
+// responder engines are external CLIs, so src/ itself talks to no one.
+const ALLOWED = new Set(['cli/index.ts']);
 
 function walk(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -25,9 +25,7 @@ describe('zero network (SPEC B6)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the sanctioned sites only reach where they claim to', () => {
-    const api = fs.readFileSync(path.join(SRC, 'responders/api.ts'), 'utf8');
-    expect(api.match(/https?:\/\/[^'"`\s]+/g)).toEqual(['https://api.anthropic.com/v1/messages']);
+  it('the sanctioned site only reaches where it claims to', () => {
     const cli = fs.readFileSync(path.join(SRC, 'cli/index.ts'), 'utf8');
     expect(cli.match(/https?:\/\/[^'"`\s$]+/g)).toEqual(['http://127.0.0.1:']);
   });
