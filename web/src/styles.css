@@ -148,9 +148,9 @@ body {
   text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
 .row-count { color: var(--fg-dim); font-size: 0.8rem; min-width: 2.5rem; text-align: right; }
 .row-time { color: var(--fg-dim); font-size: 0.8rem; min-width: 4rem; text-align: right; }
-/* hover-revealed, like .event-actions: invisible while scanning, appears on
-   the row you're pointing at. Opacity (not display) so the row never shifts. */
-.row-id { opacity: 0; transition: opacity 0.15s; }
+/* always present but dimmed: discoverable (and touch-reachable) without the
+   high-entropy hex competing with title/dir; full strength on the hovered row */
+.row-id { opacity: 0.35; transition: opacity 0.15s; }
 .session-row:hover .row-id { opacity: 1; }
 .row-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 /* Bare .badge is the unknown-adapter fallback — neutral, not accent-blue. */
