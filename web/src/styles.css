@@ -148,6 +148,11 @@ body {
   text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
 .row-count { color: var(--fg-dim); font-size: 0.8rem; min-width: 2.5rem; text-align: right; }
 .row-time { color: var(--fg-dim); font-size: 0.8rem; min-width: 4rem; text-align: right; }
+/* hover-revealed, like .event-actions: invisible while scanning, appears on
+   the row you're pointing at. Opacity (not display) so the row never shifts. */
+.row-id { opacity: 0; transition: opacity 0.15s; }
+.session-row:hover .row-id { opacity: 1; }
+.row-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 /* Bare .badge is the unknown-adapter fallback — neutral, not accent-blue. */
 .badge {
   font-size: 0.7rem; color: var(--fg-dim); border: 1px solid currentColor;

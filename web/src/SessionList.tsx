@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { dialectFor } from '../../src/shared/dialects';
 import { nav } from './App';
 import { fetchSessions, type SessionMeta } from './api';
+import { CopyButton } from './Message';
 import { loadSeen } from './seen';
 import { DOT_TITLE, RANK, sessionStatus } from './status';
 
@@ -78,6 +79,10 @@ export function SessionList() {
             <span className="row-dir">{shortDir(s.projectDir)}</span>
             <span className="row-count">{s.messageCount}</span>
             <span className="row-time">{fmtTime(s.updatedAt, now)}</span>
+            {/* stop both: propagation (the row's nav onClick) and default (the href) */}
+            <span className="row-id" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+              <CopyButton text={() => s.id} label={s.id.slice(0, 8)} />
+            </span>
           </a>
         ))}
         {!shown.length && <div className="empty">No sessions</div>}
