@@ -255,7 +255,11 @@ export function buildServer(store: Store, hub: SseHub,
         'cache-control': 'no-cache',
         connection: 'keep-alive',
       });
-      reply.raw.on('close', () => { if (!reply.raw.writableFinished) ctrl.abort(); });
+      // a dropped connection (tab closed, reload, browser discarding the tab)
+      // must NOT kill the answer — it runs to completion and is persisted, so
+      // reopening the chat shows it. Only /cancel aborts. Writes to the dead
+      // socket are then expected: swallow their errors.
+      reply.raw.on('error', () => {});
       const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
       send({ engine: engine.id });
       try {

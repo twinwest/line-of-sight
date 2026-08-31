@@ -1,4 +1,4 @@
-import type { SessionMeta, SideChat, StoredEvent } from '../../src/shared/types';
+import type { SessionMeta, SideChat, SideChatTurn, StoredEvent } from '../../src/shared/types';
 
 export type { SessionMeta, SideChat, StoredEvent };
 export type { RenderBlock, SideChatTurn } from '../../src/shared/types';
@@ -93,6 +93,54 @@ export function putResponderConfig(cfg: { responderModel?: string; responderEffo
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(cfg),
   }).catch(() => {});
+}
+
+/** An in-flight (and then finished) ask lives here rather than in the panel, so
+ *  closing the panel or switching to a sibling chat mid-answer doesn't take the
+ *  question with it — a remounted panel reattaches to the same stream. Entries
+ *  are per page load; the daemon persists both turns either way. */
+export interface Ask {
+  turns: SideChatTurn[];      // the chat as this page has seen it
+  question: string;           // last question asked here — Retry uses it
+  streaming: string | null;   // in-flight answer text; null when not asking
+  progress: string;           // responder tool activity
+  error: string;
+}
+const asks = new Map<string, Ask>();
+const askSubs = new Set<() => void>();
+
+export function subscribeAsks(fn: () => void): () => void {
+  askSubs.add(fn);
+  return () => { askSubs.delete(fn); };
+}
+export function getAsk(id: string): Ask | undefined { return asks.get(id); }
+
+// entries are replaced, never mutated: useSyncExternalStore compares by identity
+function patchAsk(id: string, patch: Partial<Ask>): void {
+  asks.set(id, { ...asks.get(id)!, ...patch });
+  askSubs.forEach((f) => f());
+}
+
+/** Ask and stream the answer into the registry. Resolves when the stream ends. */
+export async function runAsk(chatId: string, question: string, baseTurns: SideChatTurn[]): Promise<void> {
+  const prev = asks.get(chatId);
+  asks.set(chatId, {
+    turns: [...(prev?.turns ?? baseTurns), { role: 'user', text: question, ts: Date.now() }],
+    question, streaming: '', progress: '', error: '',
+  });
+  askSubs.forEach((f) => f());
+  let acc = '';
+  await askStream(chatId, question, {
+    chunk: (t) => { acc += t; patchAsk(chatId, { streaming: acc }); },
+    status: (s) => patchAsk(chatId, { progress: s }),
+    error: (msg) => patchAsk(chatId, { error: msg }),
+  });
+  const cur = asks.get(chatId)!;
+  patchAsk(chatId, {
+    streaming: null,
+    progress: '',
+    turns: acc ? [...cur.turns, { role: 'assistant', text: acc, ts: Date.now() }] : cur.turns,
+  });
 }
 
 /** POST a question; stream chunks via callbacks. Resolves when the stream ends. */

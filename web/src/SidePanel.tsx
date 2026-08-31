@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  askStream, cancelAsk, deleteSideChat, fetchResponderStatus, putResponderConfig,
-  type ResponderStatus, type SessionMeta, type SideChat,
+  cancelAsk, deleteSideChat, fetchResponderStatus, getAsk, putResponderConfig, runAsk,
+  subscribeAsks, type ResponderStatus, type SessionMeta, type SideChat,
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
@@ -19,12 +19,15 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   onClose: () => void;
   onChanged: () => void;   // turns persisted or chat deleted — refetch
 }) {
-  const [turns, setTurns] = useState(chat.turns);
+  // an ask outlives this component (see api.ts): once one has run for this chat
+  // the registry holds the conversation, otherwise the fetched chat does
+  const live = useSyncExternalStore(subscribeAsks, () => getAsk(chat.id));
+  const turns = live?.turns ?? chat.turns;
+  const streaming = live?.streaming ?? null;   // in-flight answer text
+  const progress = live?.progress ?? '';       // responder tool activity
+  const error = live?.error ?? '';
+  const lastQuestion = live?.question ?? '';
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState<string | null>(null);   // in-flight answer text
-  const [progress, setProgress] = useState('');                      // responder tool activity
-  const [error, setError] = useState('');
-  const [lastQuestion, setLastQuestion] = useState('');
   const [status, setStatus] = useState<ResponderStatus | null | undefined>(undefined);
   const [anchorExpanded, setAnchorExpanded] = useState(false);
   const [width, setWidth] = useState(400);
@@ -32,9 +35,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true);
 
-  useEffect(() => {
-    setTurns(chat.turns); setError(''); setStreaming(null); atBottom.current = true;
-  }, [chat.id]);
+  useEffect(() => { atBottom.current = true; }, [chat.id]);
   useEffect(() => { void fetchResponderStatus(adapter).then(setStatus); }, [adapter]);
   // sticky auto-scroll: follow the streaming answer only if already at the
   // bottom, so scrolling up to re-read isn't yanked back by every chunk
@@ -63,23 +64,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
 
   const ask = (question: string) => {
     if (busy || !question.trim()) return;
-    setError('');
-    setLastQuestion(question);
     atBottom.current = true;   // asking re-arms the follow
-    setTurns((t) => [...t, { role: 'user', text: question, ts: Date.now() }]);
-    setStreaming('');
-    setProgress('');
-    let acc = '';
-    void askStream(chat.id, question, {
-      chunk: (t) => { acc += t; setStreaming(acc); },
-      status: (s) => setProgress(s),
-      error: (msg) => setError(msg),
-    }).then(() => {
-      setStreaming(null);
-      setProgress('');
-      if (acc) setTurns((t) => [...t, { role: 'assistant', text: acc, ts: Date.now() }]);
-      onChanged();
-    });
+    void runAsk(chat.id, question, chat.turns).then(onChanged);
     setInput('');
   };
 

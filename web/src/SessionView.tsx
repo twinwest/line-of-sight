@@ -126,7 +126,10 @@ export function SessionView({ id, targetMessageId = null }:
   const [runs, setRuns] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [sideChats, setSideChats] = useState<SideChat[]>([]);
-  const [openChat, setOpenChat] = useState<SideChat | null>(null);
+  // by id, not by object: the chat's turns change under us (a question is
+  // persisted the moment it's asked) and a held snapshot would go stale
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const openChat = sideChats.find((c) => c.id === openChatId) ?? null;
   const [askBtn, setAskBtn] = useState<AskButton | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -248,7 +251,7 @@ export function SessionView({ id, targetMessageId = null }:
     if (!askBtn) return;
     void createSideChat(id, askBtn.messageId, askBtn.text).then((chat) => {
       setSideChats((prev) => [...prev, chat]);
-      setOpenChat(chat);
+      setOpenChatId(chat.id);
     });
     setAskBtn(null);
     window.getSelection()?.removeAllRanges();
@@ -326,7 +329,7 @@ export function SessionView({ id, targetMessageId = null }:
         <button
           className="margin-marker"
           title="side chats on this message"
-          onClick={() => setOpenChat(chatsByMessage.get(e.id)!.at(-1)!)}
+          onClick={() => setOpenChatId(chatsByMessage.get(e.id)!.at(-1)!.id)}
         />
       )}
       <EventRow event={e} showRole={showRole} />
@@ -418,7 +421,7 @@ export function SessionView({ id, targetMessageId = null }:
             : sideChats.map((c) => (
               <button key={c.id} className="asks-item" onClick={(e) => {
                 e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover();
-                setOpenChat(c);
+                setOpenChatId(c.id);
               }}>
                 <span className="asks-q">
                   {c.turns.find((t) => t.role === 'user')?.text ?? '(no question yet)'}
@@ -461,7 +464,7 @@ export function SessionView({ id, targetMessageId = null }:
                         title="side chats inside these steps"
                         onClick={(ev) => {
                           ev.preventDefault();
-                          setOpenChat(chatsByMessage.get(anchored[0]!.id)!.at(-1)!);
+                          setOpenChatId(chatsByMessage.get(anchored[0]!.id)!.at(-1)!.id);
                         }}
                       />
                     )}
@@ -496,8 +499,8 @@ export function SessionView({ id, targetMessageId = null }:
             chat={openChat}
             adapter={session.adapter}
             siblings={chatsByMessage.get(openChat.anchorMessageId) ?? [openChat]}
-            onSwitch={setOpenChat}
-            onClose={() => setOpenChat(null)}
+            onSwitch={(c) => setOpenChatId(c.id)}
+            onClose={() => setOpenChatId(null)}
             onChanged={refreshChats}
           />
         )}
