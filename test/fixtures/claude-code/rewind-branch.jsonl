@@ -1,0 +1,12 @@
+{"type":"file-history-snapshot","messageId":"11111111-0000-0000-0000-000000000001","snapshot":{},"isSnapshotUpdate":false}
+{"parentUuid":null,"type":"user","uuid":"11111111-0000-0000-0000-000000000001","timestamp":"2026-08-30T18:24:00.000Z","message":{"role":"user","content":"first question"}}
+{"parentUuid":"11111111-0000-0000-0000-000000000001","type":"assistant","uuid":"22222222-0000-0000-0000-000000000001","timestamp":"2026-08-30T18:24:10.000Z","message":{"role":"assistant","content":[{"type":"text","text":"first answer"}]}}
+{"type":"file-history-snapshot","messageId":"11111111-0000-0000-0000-000000000002","snapshot":{},"isSnapshotUpdate":false}
+{"parentUuid":"22222222-0000-0000-0000-000000000001","type":"user","uuid":"11111111-0000-0000-0000-000000000002","timestamp":"2026-08-30T18:31:00.000Z","message":{"role":"user","content":"follow-up, first wording (abandoned by a later edit)"}}
+{"parentUuid":"11111111-0000-0000-0000-000000000002","type":"assistant","uuid":"22222222-0000-0000-0000-000000000002","timestamp":"2026-08-30T18:31:20.000Z","message":{"role":"assistant","content":[{"type":"text","text":"answer on the abandoned branch"}]}}
+{"parentUuid":"22222222-0000-0000-0000-000000000002","type":"user","uuid":"11111111-0000-0000-0000-000000000003","timestamp":"2026-08-30T18:35:00.000Z","message":{"role":"user","content":"nested question inside the abandoned branch (fork within a fork)"}}
+{"parentUuid":"22222222-0000-0000-0000-000000000002","type":"user","uuid":"11111111-0000-0000-0000-000000000004","timestamp":"2026-08-30T19:40:00.000Z","message":{"role":"user","content":"nested question, second wording — still on the abandoned branch"}}
+{"parentUuid":"11111111-0000-0000-0000-000000000004","type":"assistant","uuid":"22222222-0000-0000-0000-000000000003","timestamp":"2026-08-30T19:40:30.000Z","message":{"role":"assistant","content":[{"type":"text","text":"deep answer, all of this abandoned"}]}}
+{"type":"file-history-snapshot","messageId":"11111111-0000-0000-0000-000000000005","snapshot":{},"isSnapshotUpdate":false}
+{"parentUuid":"22222222-0000-0000-0000-000000000001","type":"user","uuid":"11111111-0000-0000-0000-000000000005","timestamp":"2026-08-30T20:35:00.000Z","message":{"role":"user","content":"follow-up, rewound wording (the live branch)"}}
+{"parentUuid":"11111111-0000-0000-0000-000000000005","type":"assistant","uuid":"22222222-0000-0000-0000-000000000004","timestamp":"2026-08-30T20:35:30.000Z","message":{"role":"assistant","content":[{"type":"text","text":"answer on the live branch"}]}}

@@ -392,3 +392,46 @@ scrub `CLAUDE_CODE_CHILD_SESSION` (we also scrubbed `CLAUDECODE`,
 - SIGKILLed probes leave stale `sessions/<pid>.json`/`.key` and
   `/tmp/cc-socks/*.sock` behind; `liveSessions()`'s pid + procStart
   verification already filters these (observed doing its job).
+
+## Addendum 2026-08-31 — rewind is branch-append; half a heavy session can be abandoned branches (issue #2)
+
+No TUI probe needed: the machine's own transcripts answer everything. Scanned
+the 50 most recent sessions, filtering out the benign "fork" that parallel
+tool_use fan-out creates (each tool_result parents onto its own tool_use, so
+a 3-tool message reads as 2-child nodes — a naive child-count over-counts).
+
+**Findings (real sessions, multiple CLI versions):**
+
+- **Rewind / double-Esc edit is append-with-branch, never truncation.**
+  Abandoned lines stay exactly where they were; the new path appends at the
+  file tail with `parentUuid` pointing back at the fork node. 14 of 50
+  recent sessions contain genuine divergence points.
+- Scale of the mess: one heavy session had **274 of 542 lines on the live
+  path** — half the file is abandoned branches, interleaved in file order.
+  Another: 1096 of 1702. Linear rendering (what the viewer does today —
+  nothing in src/ or web/ reads `parentUuid` at all) shows every abandoned
+  branch inline, including near-duplicate user prompts seconds apart.
+- Forks nest (a fork inside an already-abandoned branch; 3 children on one
+  node observed) and file order is not time order (a dead child written at
+  20:31 can sit dozens of lines before live content stamped 18:18).
+- `file-history-snapshot` lines do NOT mark rewind points — there is one per
+  user prompt (`messageId` = that prompt's uuid), pure checkpoint
+  bookkeeping. There is no explicit rewind marker anywhere; the fork in the
+  `parentUuid` graph is the only signal.
+- **uuids are unique within a file** (checked 50 sessions, zero dups), so a
+  tail-walk is well-founded: start at the last conversation node, follow
+  `parentUuid` to the root — that IS the live path; everything off it is
+  abandoned. Verified against real forked sessions.
+- Caveat for other features: uuids are NOT unique across files (82 cross-file
+  dups in 50 sessions — resume/continue copies old nodes, same uuids, into
+  the new session file). Irrelevant to per-file path-walking; relevant to any
+  future cross-session dedupe.
+
+**Scoped fix (not built in this spike):** ingest keeps all lines (raw truth);
+the adapter starts carrying `uuid`/`parentUuid` per event; at render (or
+serve) time compute the live path by tail-walk and fold contiguous off-path
+runs as `⏵ abandoned branch (N steps)` — same visual language as turn
+folding, expandable. Abandoned branches are also the "alternatives ruled out"
+data the thesis presets want. Fixture: `test/fixtures/claude-code/
+rewind-branch.jsonl` (fork + nested fork + late-appended live branch,
+modeled on observed anatomy).
