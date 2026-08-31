@@ -65,6 +65,16 @@ export async function createSideChat(sessionId: string, anchorMessageId: string,
   return res.json() as Promise<SideChat>;
 }
 
+/** `answering` = the daemon still has an ask running for this chat, whoever
+ *  started it (this page, or the page load before a reload). */
+export type LiveSideChat = SideChat & { answering: boolean };
+
+export async function fetchSideChat(id: string): Promise<LiveSideChat> {
+  const res = await fetch(`/api/side-chats/${id}`);
+  if (!res.ok) throw new Error(`side-chat: ${res.status}`);
+  return res.json() as Promise<LiveSideChat>;
+}
+
 export async function deleteSideChat(id: string): Promise<void> {
   await fetch(`/api/side-chats/${id}`, { method: 'DELETE' });
 }

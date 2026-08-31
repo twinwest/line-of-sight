@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  cancelAsk, deleteSideChat, fetchResponderStatus, getAsk, putResponderConfig, runAsk,
-  subscribeAsks, type ResponderStatus, type SessionMeta, type SideChat,
+  cancelAsk, deleteSideChat, fetchResponderStatus, fetchSideChat, getAsk, putResponderConfig,
+  runAsk, subscribeAsks, type LiveSideChat, type ResponderStatus, type SessionMeta, type SideChat,
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
@@ -22,7 +22,10 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   // an ask outlives this component (see api.ts): once one has run for this chat
   // the registry holds the conversation, otherwise the fetched chat does
   const live = useSyncExternalStore(subscribeAsks, () => getAsk(chat.id));
-  const turns = live?.turns ?? chat.turns;
+  // …and outlives the page: a reload loses the registry but not the ask, so
+  // when the chat ends on an unanswered question, poll the daemon for it
+  const [remote, setRemote] = useState<LiveSideChat | null>(null);
+  const turns = live?.turns ?? remote?.turns ?? chat.turns;
   const streaming = live?.streaming ?? null;   // in-flight answer text
   const progress = live?.progress ?? '';       // responder tool activity
   const error = live?.error ?? '';
@@ -35,7 +38,20 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true);
 
-  useEffect(() => { atBottom.current = true; }, [chat.id]);
+  useEffect(() => { atBottom.current = true; setRemote(null); }, [chat.id]);
+  // each answer re-schedules the next poll, so it stops on its own: once the
+  // daemon reports no ask running, or the chat no longer ends on a question
+  useEffect(() => {
+    if (live || (remote && !remote.answering)) return;
+    if (chat.turns.at(-1)?.role !== 'user') return;
+    const t = setTimeout(() => {
+      void fetchSideChat(chat.id).then((c) => {
+        setRemote(c);
+        if (!c.answering && c.turns.length > chat.turns.length) onChanged();
+      }, () => {});
+    }, remote ? 2000 : 0);
+    return () => clearTimeout(t);
+  }, [chat, live, remote, onChanged]);
   useEffect(() => { void fetchResponderStatus(adapter).then(setStatus); }, [adapter]);
   // sticky auto-scroll: follow the streaming answer only if already at the
   // bottom, so scrolling up to re-read isn't yanked back by every chunk
@@ -60,7 +76,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, [input]);
 
-  const busy = streaming !== null;
+  const busy = streaming !== null || (remote?.answering ?? false);
 
   const ask = (question: string) => {
     if (busy || !question.trim()) return;

@@ -214,6 +214,14 @@ export function buildServer(store: Store, hub: SseHub,
   // one in-flight answer per side chat
   const running = new Map<string, AbortController>();
 
+  // `answering` is the daemon's own view of that map — a viewer that reloaded
+  // mid-answer has no other way to know its question is still being worked on
+  app.get<{ Params: { id: string } }>('/api/side-chats/:id', (req, reply) => {
+    const chat = store.getSideChat(req.params.id);
+    if (!chat) return reply.code(404).send({ error: 'not found' });
+    return { ...chat, answering: running.has(chat.id) };
+  });
+
   app.post<{ Params: { id: string }; Body: { question?: string } }>(
     '/api/side-chats/:id/ask', async (req, reply) => {
       const chat = store.getSideChat(req.params.id);

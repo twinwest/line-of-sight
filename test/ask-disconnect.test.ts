@@ -56,6 +56,10 @@ describe('an ask outlives its HTTP connection', () => {
     // proving a negative: give the server time to see the dead socket first
     await new Promise((r) => setTimeout(r, 150));
     expect(answering!.signal.aborted).toBe(false);
+    // …and the reloaded viewer can still see that it is being worked on
+    const chatUrl = `${url}/api/side-chats/${chat.id}`;
+    expect(await (await fetch(chatUrl)).json()).toMatchObject({ answering: true });
+
     answering!.resolve('the answer');
 
     await vi.waitFor(() => {
@@ -63,6 +67,7 @@ describe('an ask outlives its HTTP connection', () => {
         { role: 'user', text: 'why?' }, { role: 'assistant', text: 'the answer' },
       ]);
     });
+    expect(await (await fetch(chatUrl)).json()).toMatchObject({ answering: false });
     await app.close();
   });
 
