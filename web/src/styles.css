@@ -111,6 +111,12 @@ body {
 .turn-fold[open] > summary { margin-left: calc(-0.6rem - 2px); }
 .margin-marker.in-summary { position: static; display: inline-block; }
 
+/* a branch the conversation rewound away from: kept and readable (it is the
+   record of what was ruled out), but dimmed so an expanded one is never
+   mistaken for the path the agent actually took */
+.turn-fold.abandoned > summary { font-style: italic; }
+.turn-fold.abandoned[open] { border-left-style: dashed; opacity: 0.65; }
+
 /* agent is mid-turn but the transcript is quiet (blocks land only when complete) */
 .generating {
   color: var(--fg-dim); font-size: 0.85rem; padding: 0.4rem 0.3rem;

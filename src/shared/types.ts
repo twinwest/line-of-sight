@@ -43,13 +43,17 @@ export interface SessionPatch {
 export type NormalizedEvent =
   | { kind: 'message'; id: string; role: 'user' | 'assistant';
       ts: number; blocks: RenderBlock[]; sessionPatch?: SessionPatch;
+      /** The line this one continues (claude: `parentUuid`). Transcripts are
+       *  trees, not lists: rewind appends a new branch off an earlier node and
+       *  leaves the abandoned one in place (SPIKE_NOTES 2026-08-31). */
+      parentId?: string | null;
       /** This line records a child run finishing: the spawning tool_use id
        *  (a Task/Agent call, or a Workflow call — which ends its whole run). */
       taskEnd?: string;
       /** This line acknowledges a Workflow launch: tool_use id → run id. */
       workflowRun?: { toolUseId: string; runId: string; name: string | null } }
   | { kind: 'meta'; id: string; ts: number; label: string; raw: unknown;
-      sessionPatch?: SessionPatch }
+      sessionPatch?: SessionPatch; parentId?: string | null }
   | { kind: 'unknown'; id: string; ts: number; raw: unknown };  // defensive fallback
 
 /** An event as stored/served by the daemon (seq-ordered within a session). */
@@ -61,6 +65,9 @@ export interface StoredEvent {
   ts: number;
   /** message: RenderBlock[]; meta/unknown: the raw event payload. */
   body: unknown;
+  /** On a branch the conversation left behind (rewind). Serve-time only —
+   *  never stored, since a later append can abandon rows already written. */
+  abandoned?: boolean;
 }
 
 export interface SideChatTurn {

@@ -10,7 +10,8 @@ import type { RenderBlock, StoredEvent } from './api';
 
 export type TurnItem =
   | { type: 'event'; event: StoredEvent }
-  | { type: 'fold'; events: StoredEvent[]; steps: number; toolCalls: number };
+  | { type: 'fold'; events: StoredEvent[]; steps: number; toolCalls: number }
+  | { type: 'abandoned'; events: StoredEvent[]; steps: number };
 
 function blocks(e: StoredEvent): RenderBlock[] {
   return e.kind === 'message' && Array.isArray(e.body) ? (e.body as RenderBlock[]) : [];
@@ -62,6 +63,31 @@ function countSteps(events: StoredEvent[]): number {
 /** foldTail: also fold the trailing run — on once the session goes idle
  *  (the 60s/busy running heuristic is the only end-of-session signal). */
 export function buildTurns(events: StoredEvent[], dialect: Dialect,
+    opts: { foldTail?: boolean } = {}): TurnItem[] {
+  // Rewound-away branches fold whole, before step folding sees them: they are
+  // real prose the conversation abandoned, so neither rendering them inline
+  // (the reader can't tell live from dead) nor dropping them (they are the
+  // "what was ruled out" record) is right. One fold per contiguous dead run.
+  const items: TurnItem[] = [];
+  let dead: StoredEvent[] = [];
+  const flushDead = () => {
+    if (dead.length) {
+      items.push({ type: 'abandoned', events: dead, steps: countSteps(dead) });
+      dead = [];
+    }
+  };
+  const live: StoredEvent[] = [];
+  for (const e of events) {
+    if (e.abandoned) { dead.push(e); continue; }
+    if (dead.length) { items.push(...buildLive(live.splice(0), dialect, { foldTail: true })); flushDead(); }
+    live.push(e);
+  }
+  flushDead();
+  items.push(...buildLive(live, dialect, opts));
+  return items;
+}
+
+function buildLive(events: StoredEvent[], dialect: Dialect,
     opts: { foldTail?: boolean } = {}): TurnItem[] {
   const items: TurnItem[] = [];
   let run: StoredEvent[] = [];

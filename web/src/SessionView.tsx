@@ -453,11 +453,16 @@ export function SessionView({ id, targetMessageId = null }:
               const containsTarget = !!targetMessageId
                 && item.events.some((e) => e.id === targetMessageId);
               out.push(
-                <details className="turn-fold" key={`fold-${item.events[0]?.id ?? idx}`}
+                <details
+                  className={item.type === 'abandoned' ? 'turn-fold abandoned' : 'turn-fold'}
+                  key={`fold-${item.events[0]?.id ?? idx}`}
                   open={containsTarget || undefined}>
                   <summary>
-                    ⏵ {item.steps} step{item.steps === 1 ? '' : 's'}
-                    {item.toolCalls > 0 && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
+                    {item.type === 'abandoned'
+                      ? `⏵ abandoned branch · ${item.steps} step${item.steps === 1 ? '' : 's'}`
+                      : `⏵ ${item.steps} step${item.steps === 1 ? '' : 's'}`}
+                    {item.type === 'fold' && item.toolCalls > 0
+                      && ` · ${item.toolCalls} tool call${item.toolCalls > 1 ? 's' : ''}`}
                     {anchored.length > 0 && (
                       <button
                         className="margin-marker in-summary"

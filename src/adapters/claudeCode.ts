@@ -305,6 +305,10 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
       const type = str(line.type);
       const id = str(line.uuid) ?? fallbackId;
       const ts = parseTs(line.timestamp);
+      // the tree edge (see NormalizedEvent.parentId). Carried on meta rows too:
+      // attachments/system lines sit mid-chain, so a graph missing them has
+      // holes exactly where the live path runs.
+      const parentId = str(line.parentUuid) ?? null;
 
       if (type === 'custom-title' || type === 'ai-title') {
         const title = str(line.customTitle) ?? str(line.aiTitle);
@@ -338,7 +342,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
           patch.titleSource = 'prompt';
         }
         return [{
-          kind: 'message', id, ts, role: type,
+          kind: 'message', id, ts, role: type, parentId,
           blocks: contentToBlocks(content),
           ...(Object.keys(patch).length ? { sessionPatch: patch } : {}),
           ...childSignals(line, content),
@@ -354,7 +358,8 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
           const att = (line.attachment ?? {}) as Json;
           const origin = (att.origin ?? {}) as Json;
           if (att.type === 'queued_command' && origin.kind === 'human' && typeof att.prompt === 'string') {
-            return [{ kind: 'message', id, ts, role: 'user', blocks: [{ type: 'text', markdown: att.prompt }] }];
+            return [{ kind: 'message', id, ts, role: 'user', parentId,
+              blocks: [{ type: 'text', markdown: att.prompt }] }];
           }
         }
         const subtype = type === 'system'
@@ -364,7 +369,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         if (type === 'system' && subtype === 'turn_duration') return [];
         if (type === 'attachment' && subtype && ATTACHMENT_DROP.has(subtype)) return [];
         const label = `${type}: ${subtype ?? ''}`.trim().replace(/:$/, '');
-        return [{ kind: 'meta', id, ts, label, raw: line }];
+        return [{ kind: 'meta', id, ts, label, raw: line, parentId }];
       }
 
       return [{ kind: 'unknown', id, ts, raw: line }];

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS messages (
   id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
   blocks_json TEXT,
   text_content TEXT,
+  parent_id TEXT,
   PRIMARY KEY (session_id, id)
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -96,6 +97,15 @@ export class Store {
       'turn_open INTEGER', 'turn_started_at INTEGER']) {
       try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
     }
+    try {
+      this.db.exec('ALTER TABLE messages ADD COLUMN parent_id TEXT');
+      // the ALTER only succeeds on a db that predates the column, i.e. one
+      // whose rows all have parent_id NULL — no tree, so no rewind branch
+      // could ever be found. Rewind the checkpoints once so the next ingest
+      // re-reads the transcripts and backfills (rows update in place; ids and
+      // seqs are stable, so side-chat anchors survive).
+      this.db.exec('UPDATE sessions SET byte_offset = 0');
+    } catch { /* already there: nothing to backfill */ }
   }
 
   close(): void { this.db.close(); }
@@ -178,10 +188,10 @@ export class Store {
     const maxSeq = (this.db.prepare('SELECT MAX(seq) s FROM messages WHERE session_id = ?')
       .get(sessionId) as { s: number | null }).s ?? 0;
     const insert = this.db.prepare(`
-      INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id, id) DO UPDATE SET blocks_json = excluded.blocks_json,
-        text_content = excluded.text_content, ts = excluded.ts
+        text_content = excluded.text_content, ts = excluded.ts, parent_id = excluded.parent_id
     `);
     let seq = maxSeq;
     let newMessages = 0;
@@ -199,7 +209,8 @@ export class Store {
       const body = ev.kind === 'message' ? ev.blocks
         : ev.kind === 'meta' ? { label: ev.label, raw: ev.raw }
         : ev.raw;
-      const r = insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev));
+      const parentId = ev.kind === 'unknown' ? null : ev.parentId ?? null;
+      const r = insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev), parentId);
       if (ev.kind === 'message' && r.changes > 0) newMessages++;
       // only real messages count as activity — trailing bookkeeping writes
       // (away_summary etc.) must not make an idle session look running
@@ -284,12 +295,72 @@ export class Store {
       ORDER BY seq DESC LIMIT ?
     `).all(sessionId, opts.beforeSeq ?? Number.MAX_SAFE_INTEGER, opts.limit ?? 200) as
       { id: string; seq: number; role: string; ts: number; blocks_json: string }[];
+    const abandoned = this.abandonedSeqs(sessionId);
     return rows.reverse().map((r) => ({
       id: r.id, seq: r.seq, ts: r.ts,
       kind: r.role === 'meta' || r.role === 'unknown' ? r.role : 'message',
       role: r.role === 'meta' || r.role === 'unknown' ? null : (r.role as 'user' | 'assistant'),
       body: JSON.parse(r.blocks_json) as unknown,
+      ...(abandoned.has(r.seq) ? { abandoned: true } : {}),
     }));
+  }
+
+  /** Seqs on branches the conversation left behind (rewind / prompt edit).
+   *
+   *  Transcripts are trees: rewinding appends a new branch off an earlier node
+   *  and leaves the old one in the file, so a linear read interleaves live and
+   *  dead turns (half the rows, in the worst session measured — SPIKE_NOTES
+   *  2026-08-31). Rule, validated against the full parent graph of 50 real
+   *  sessions with zero mismatches: at a node with several non-tool_result
+   *  children, the LAST child is the branch that survived; every earlier child
+   *  opens a dead run that ends where the next sibling begins.
+   *
+   *  Deliberately not a tail-walk from the last row: dropped bookkeeping lines
+   *  (attachment subtypes, turn_duration) sit mid-chain, which broke the chain
+   *  in 49 of those 50 sessions. Fork children are user prompts, which are
+   *  never dropped, so this rule needs no intact chain. Computed per read
+   *  because a later append can abandon rows already written. */
+  private abandonedSeqs(sessionId: string): Set<number> {
+    const rows = this.db.prepare(
+      'SELECT id, seq, parent_id FROM messages WHERE session_id = ? ORDER BY seq',
+    ).all(sessionId) as { id: string; seq: number; parent_id: string | null }[];
+    const byParent = new Map<string, { id: string; seq: number }[]>();
+    for (const r of rows) {
+      if (!r.parent_id) continue;
+      const sibs = byParent.get(r.parent_id);
+      if (sibs) sibs.push(r); else byParent.set(r.parent_id, [r]);
+    }
+    const forks = [...byParent.values()].filter((sibs) => sibs.length > 1);
+    if (!forks.length) return new Set();
+    // tool_result carriers are not branches: parallel tool calls each parent
+    // their own result, so a fan-out looks like a fork until they are excluded
+    const results = this.toolResultIds(sessionId, forks.flat().map((s) => s.id));
+    const dead = new Set<number>();
+    for (const sibs of forks) {
+      const real = sibs.filter((s) => !results.has(s.id));
+      for (let i = 0; i < real.length - 1; i++) {
+        for (let seq = real[i]!.seq; seq < real[i + 1]!.seq; seq++) dead.add(seq);
+      }
+    }
+    return dead;
+  }
+
+  /** Of the given message ids, those whose blocks are only tool_results.
+   *  Bodies are fetched for fork children alone — never the whole session. */
+  private toolResultIds(sessionId: string, ids: string[]): Set<string> {
+    const out = new Set<string>();
+    if (!ids.length) return out;
+    const rows = this.db.prepare(
+      `SELECT id, blocks_json FROM messages WHERE session_id = ? AND id IN (${ids.map(() => '?').join(',')})`,
+    ).all(sessionId, ...ids) as { id: string; blocks_json: string }[];
+    for (const r of rows) {
+      try {
+        const blocks = JSON.parse(r.blocks_json) as { type?: string }[] | null;
+        if (Array.isArray(blocks) && blocks.length > 0
+          && blocks.every((b) => b?.type === 'tool_result')) out.add(r.id);
+      } catch { /* unparseable body: treat as a real branch */ }
+    }
+    return out;
   }
 
   search(q: string): { sessionId: string; sessionTitle: string; messageId: string; snippet: string }[] {
