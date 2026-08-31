@@ -366,6 +366,12 @@ export function SessionView({ id, targetMessageId = null }:
         )}
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
         <span className={`badge ${session.adapter}`}>{session.parentId ? 'subagent' : dialect.displayName}</span>
+        {/* subagent ids are Line of Sight's own, not CLI session ids — nothing to copy */}
+        {!session.parentId && (
+          <span className="sh-id" title={`${session.id} — click to copy`}>
+            <CopyButton text={() => session.id} label={session.id.slice(0, 8)} />
+          </span>
+        )}
         <span className="sh-dir">{session.projectDir ?? ''}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
         {/* also the only way into a subagent whose Task row is outside the

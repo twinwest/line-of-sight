@@ -171,6 +171,7 @@ body {
 .sh-dir { color: var(--fg-dim); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; flex: 1; }
 .sh-time { color: var(--fg-dim); font-size: 0.8rem; flex: none; }
+.sh-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 /* left padding must exceed .margin-marker's -1.1rem offset, or the marker
    (the only way back into a closed side chat) gets clipped on narrow widths */
