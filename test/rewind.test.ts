@@ -123,6 +123,17 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     upgraded.close();
   });
 
+  it('branchInfo: null without forks, else which side the anchor is on', () => {
+    const head = line('u1', null, 'first') + line('a1', 'u1', 'answer', 'assistant');
+    ingest(head + line('u2', 'a1', 'follow-up'));
+    expect(store.branchInfo(SESSION, 'u2')).toBeNull();
+    ingest(head + line('u2', 'a1', 'follow-up') + line('u3', 'a1', 'follow-up, edited'));
+    expect(store.branchInfo(SESSION, 'u2')).toEqual({ anchorAbandoned: true });
+    expect(store.branchInfo(SESSION, 'u3')).toEqual({ anchorAbandoned: false });
+    // unknown anchor: branches exist but the anchor can't be placed on one
+    expect(store.branchInfo(SESSION, 'nope')).toEqual({ anchorAbandoned: false });
+  });
+
   it('folds each abandoned run whole, ahead of step folding', () => {
     const events = ingest(fs.readFileSync(FIXTURE, 'utf8'));
     const items = buildTurns(events, claudeCodeDialect);

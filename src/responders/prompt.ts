@@ -12,6 +12,24 @@ export function composePrompt(req: ResponderRequest): string {
     `Read with offsets for context).`,
   );
   if (req.projectDir) parts.push(`The project lives at ${req.projectDir}.`);
+  if (req.branches) {
+    parts.push(
+      `This transcript contains branches the user rewound away from. It is a ` +
+      `tree, not a list: lines carry parentUuid, and where several non-tool_result ` +
+      `lines share a parent, the LAST one in the file is the path actually taken — ` +
+      `earlier siblings and their descendants were abandoned, and near-identical ` +
+      `wordings of the same prompt may appear on both sides. Authority order: for ` +
+      `"what happened / how was it solved", only the path taken counts; abandoned ` +
+      `branches may be cited only for "what was tried / why was it dropped", and ` +
+      `must be labeled as abandoned when cited.`,
+    );
+    parts.push(req.branches.anchorAbandoned
+      ? `The ANCHOR below sits INSIDE an abandoned branch: the question is about ` +
+        `a path the conversation rewound away from — say so, and check what ` +
+        `replaced it on the path taken.`
+      : `The ANCHOR below is on the path taken; when you Grep for it, make sure ` +
+        `you are not reading context around an abandoned copy.`);
+  }
   parts.push(
     `Be grounded: cite what in the transcript or files supports your answer. ` +
     `Answer concisely.`,

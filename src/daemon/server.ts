@@ -254,6 +254,7 @@ export function buildServer(store: Store, hub: SseHub,
         sessionFilePath: session.filePath,
         projectDir: session.projectDir,
         priorTurns: chat.turns.map(({ role, text }) => ({ role, text })),
+        branches: store.branchInfo(chat.sessionId, chat.anchorMessageId),
       };
 
       reply.raw.writeHead(200, {

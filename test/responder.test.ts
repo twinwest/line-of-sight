@@ -24,6 +24,20 @@ describe('composePrompt', () => {
     expect(p.indexOf('ANCHOR')).toBeLessThan(p.indexOf('QUESTION: What is the evidence'));
   });
 
+  it('says nothing about branches unless the session has them', () => {
+    expect(composePrompt(REQ)).not.toContain('abandoned');
+    expect(composePrompt({ ...REQ, branches: null })).not.toContain('abandoned');
+  });
+
+  it('with branches: teaches the tree, authority order, and the anchor side', () => {
+    const live = composePrompt({ ...REQ, branches: { anchorAbandoned: false } });
+    expect(live).toContain('rewound away');
+    expect(live).toContain('the LAST one in the file is the path actually taken');
+    expect(live).toContain('labeled as abandoned when cited');
+    expect(live).toContain('on the path taken');
+    const dead = composePrompt({ ...REQ, branches: { anchorAbandoned: true } });
+    expect(dead).toContain('INSIDE an abandoned branch');
+  });
 });
 
 describe('candidates routing', () => {

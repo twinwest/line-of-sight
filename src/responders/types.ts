@@ -28,4 +28,8 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
+  /** Present only when the session contains rewound-away branches: the
+   *  prompt then teaches the tree shape and says which side the anchor is
+   *  on (Store.branchInfo). Absent = say nothing about branches. */
+  branches?: { anchorAbandoned: boolean } | null;
 }

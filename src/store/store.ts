@@ -288,6 +288,17 @@ export class Store {
     return r?.seq ?? null;
   }
 
+  /** Rewind-branch facts for a responder ask (issue #9): null when the
+   *  session has no abandoned branches (the common case — the prompt then
+   *  says nothing about branches); otherwise whether the anchor message
+   *  itself sits on one. */
+  branchInfo(sessionId: string, anchorMessageId: string): { anchorAbandoned: boolean } | null {
+    const abandoned = this.abandonedSeqs(sessionId);
+    if (!abandoned.size) return null;
+    const seq = this.getMessageSeq(sessionId, anchorMessageId);
+    return { anchorAbandoned: seq !== null && abandoned.has(seq) };
+  }
+
   getEvents(sessionId: string, opts: { beforeSeq?: number; limit?: number } = {}): StoredEvent[] {
     const rows = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages

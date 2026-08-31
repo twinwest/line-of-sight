@@ -277,6 +277,7 @@ export interface ResponderRequest {
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
+  branches?: { anchorAbandoned: boolean } | null;  // rewind branches exist; which side the anchor is on
 }
 ```
 
