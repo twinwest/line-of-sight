@@ -81,7 +81,7 @@ export function SessionList() {
             <span className="row-time">{fmtTime(s.updatedAt, now)}</span>
             {/* stop both: propagation (the row's nav onClick) and default (the href) */}
             <span className="row-id" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-              <CopyButton text={() => s.id} label={s.id.slice(0, 8)} />
+              <CopyButton text={() => s.id} label={s.id.slice(0, 8)} doneLabel="copied" />
             </span>
           </a>
         ))}

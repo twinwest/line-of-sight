@@ -32,8 +32,8 @@ function copy(text: string): void {
   void navigator.clipboard.writeText(text);
 }
 
-export function CopyButton({ text, label = 'Copy', onCopied }:
-    { text: () => string; label?: string; onCopied?: () => void }) {
+export function CopyButton({ text, label = 'Copy', doneLabel = '✓', onCopied }:
+    { text: () => string; label?: string; doneLabel?: string; onCopied?: () => void }) {
   const [done, setDone] = useState(false);
   return (
     <button className="copy-btn" onClick={() => {
@@ -41,7 +41,7 @@ export function CopyButton({ text, label = 'Copy', onCopied }:
       setDone(true);
       setTimeout(() => setDone(false), 1200);
       onCopied?.();
-    }}>{done ? '✓' : label}</button>
+    }}>{done ? doneLabel : label}</button>
   );
 }
 

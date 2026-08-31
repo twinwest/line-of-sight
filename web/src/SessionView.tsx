@@ -369,7 +369,7 @@ export function SessionView({ id, targetMessageId = null }:
         {/* subagent ids are Line of Sight's own, not CLI session ids — nothing to copy */}
         {!session.parentId && (
           <span className="sh-id" title={`${session.id} — click to copy`}>
-            <CopyButton text={() => session.id} label={session.id.slice(0, 8)} />
+            <CopyButton text={() => session.id} label={session.id.slice(0, 8)} doneLabel="copied" />
           </span>
         )}
         <span className="sh-dir">{session.projectDir ?? ''}</span>
