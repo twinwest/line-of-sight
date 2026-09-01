@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
-import type { NormalizedEvent, SessionMeta, SessionPatch, SideChat, SideChatTurn, StoredEvent, TitleSource } from '../shared/types.js';
+import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat, SideChatTurn, StoredEvent, TitleSource } from '../shared/types.js';
 
 export type { SideChat, StoredEvent };
 
@@ -70,13 +70,22 @@ function toMeta(r: SessionRow): SessionMeta {
 }
 
 /** Searchable plain text of a message event. */
+/** Search-indexed text. tool_result output is excluded — it dominates
+ *  transcript bytes (file dumps, build logs) and drowns dialog hits
+ *  (DECISIONS 2026-09-01). tool_use summaries stay: small, and they cover
+ *  "which session ran that command". Excerpts (askContext) re-read
+ *  blocks_json so the responder still sees tool output. */
 function textContent(ev: NormalizedEvent): string {
   if (ev.kind !== 'message') return '';
-  return ev.blocks.map((b) => {
+  return blocksText(ev.blocks, false);
+}
+
+function blocksText(blocks: RenderBlock[], withToolOutput: boolean): string {
+  return blocks.map((b) => {
     switch (b.type) {
       case 'text': return b.markdown;
       case 'thinking': return b.text;
-      case 'tool_result': return b.output;
+      case 'tool_result': return withToolOutput ? b.output : '';
       case 'tool_use': return b.summary;
       default: return '';
     }
@@ -106,6 +115,20 @@ export class Store {
       // seqs are stable, so side-chat anchors survive).
       this.db.exec('UPDATE sessions SET byte_offset = 0');
     } catch { /* already there: nothing to backfill */ }
+    // search index v2 (tool_result output dropped): recompute existing rows
+    // once — the UPDATE trigger keeps the FTS table in sync
+    if (!this.getKv('text_content_v2')) {
+      const upd = this.db.prepare('UPDATE messages SET text_content = ? WHERE rowid = ?');
+      this.db.transaction(() => {
+        const rows = this.db.prepare(
+          `SELECT rowid, blocks_json FROM messages WHERE role IN ('user','assistant')`,
+        ).all() as { rowid: number; blocks_json: string }[];
+        for (const r of rows) {
+          upd.run(blocksText(JSON.parse(r.blocks_json) as RenderBlock[], false), r.rowid);
+        }
+        this.setKv('text_content_v2', '1');
+      })();
+    }
   }
 
   close(): void { this.db.close(); }
@@ -306,14 +329,18 @@ export class Store {
       : null;
     if (anchorSeq === null) return { excerpt: '', branches };
     const rows = this.db.prepare(`
-      SELECT id, seq, role, text_content FROM messages
+      SELECT id, seq, role, blocks_json FROM messages
       WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
       ORDER BY seq
     `).all(sessionId, anchorSeq - n, anchorSeq + n) as
-      { id: string; seq: number; role: string; text_content: string }[];
-    const blocks = rows.filter((r) => r.text_content).map((r) => {
-      const text = r.text_content.length > 2000
-        ? `${r.text_content.slice(0, 2000)} …[truncated]` : r.text_content;
+      { id: string; seq: number; role: string; blocks_json: string }[];
+    // from blocks_json, not text_content: the search index dropped tool_result
+    // output, but the excerpt still needs it (the anchor may sit inside one)
+    const blocks = rows
+      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[], true) }))
+      .filter((r) => r.full).map((r) => {
+      const text = r.full.length > 2000
+        ? `${r.full.slice(0, 2000)} …[truncated]` : r.full;
       const tags = [r.role];
       if (abandoned.has(r.seq)) tags.push('abandoned branch');
       if (r.id === anchorMessageId) tags.push('contains the ANCHOR');
