@@ -133,19 +133,14 @@ export function SessionView({ id, targetMessageId = null }:
   const [askBtn, setAskBtn] = useState<AskButton | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
-  // poll the meta so busy→idle flips (and the last turn folds) promptly: `live`,
-  // updatedAt and a freshly spawned subagent all change with no SSE event to
-  // announce them
   const applyMeta = useCallback(({ session, children, runs }:
       { session: SessionMeta; children: SessionMeta[]; runs: Record<string, string> }) => {
     setSession(session);
     setChildren(children);
     setRuns(runs);
   }, []);
-  useEffect(() => {
-    const t = setInterval(() => { void fetchSessionMeta(id).then(applyMeta, () => {}); }, 10_000);
-    return () => clearInterval(t);
-  }, [id, applyMeta]);
+  // rebuilt by the poll below when the browser gives up on reconnecting
+  const esRef = useRef<EventSource | null>(null);
 
   // anything arriving while the view is open counts as seen — clears the
   // list's "just finished" state; later activity re-arms it
@@ -176,12 +171,6 @@ export function SessionView({ id, targetMessageId = null }:
     }, (e: unknown) => setError(String(e)));
     refreshChats();
 
-    const es = new EventSource(`/api/sessions/${id}/stream`);
-    es.onmessage = (msg) => {
-      const incoming = JSON.parse(msg.data as string) as StoredEvent[];
-      setEvents((prev) => merge(prev, incoming));
-    };
-
     // events missed while the stream was down (or the tab was backgrounded and
     // throttled) never arrive on their own — re-pull the tail on reconnect/return
     const resync = () => {
@@ -191,12 +180,33 @@ export function SessionView({ id, targetMessageId = null }:
       }, () => {});
     };
     let opened = false;
-    es.onopen = () => { if (opened) resync(); opened = true; };
+    const connect = () => {
+      const es = new EventSource(`/api/sessions/${id}/stream`);
+      es.onmessage = (msg) => {
+        const incoming = JSON.parse(msg.data as string) as StoredEvent[];
+        setEvents((prev) => merge(prev, incoming));
+      };
+      es.onopen = () => { if (opened) resync(); opened = true; };
+      esRef.current = es;
+    };
+    connect();
     const onVisible = () => { if (!document.hidden) resync(); };
     document.addEventListener('visibilitychange', onVisible);
 
+    // Poll the meta so busy→idle flips (and the last turn folds) promptly:
+    // `live`, updatedAt and a freshly spawned subagent all change with no SSE
+    // event to announce them. Same tick: a reconnect attempt that hits the
+    // daemon mid-restart (every rebuild) closes the EventSource for good —
+    // the browser never retries a failed reconnect — so rebuild it here;
+    // onopen then resyncs the tail missed while it was down.
+    const t = setInterval(() => {
+      void fetchSessionMeta(id).then(applyMeta, () => {});
+      if (esRef.current?.readyState === EventSource.CLOSED) connect();
+    }, 10_000);
+
     return () => {
-      es.close();
+      clearInterval(t);
+      esRef.current?.close();
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [id, refreshChats, applyMeta]);
