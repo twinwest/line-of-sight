@@ -14,6 +14,7 @@ export class Ingester {
   private watchers: FSWatcher[] = [];
   private listeners: IngestListener[] = [];
   private queue = Promise.resolve();
+  private rechecks = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private store: Store,
@@ -35,7 +36,17 @@ export class Ingester {
         }
         const watcher = chokidar.watch(root, { ignoreInitial: true, depth: adapter.watchDepth });
         const onFile = (p: string) => {
-          if (adapter.matches(p)) this.enqueue(() => this.ingestFile(adapter, p));
+          if (!adapter.matches(p)) return;
+          this.enqueue(() => this.ingestFile(adapter, p));
+          // fs events coalesce: a write burst can land after our read
+          // snapshot with no further event, orphaning the file's tail
+          // (seen dropping codex's final message + task_complete). One
+          // trailing recheck once the burst goes quiet picks it up.
+          clearTimeout(this.rechecks.get(p));
+          this.rechecks.set(p, setTimeout(() => {
+            this.rechecks.delete(p);
+            this.enqueue(() => this.ingestFile(adapter, p));
+          }, 1000));
         };
         watcher.on('add', onFile).on('change', onFile);
         watcher.on('error', (err) => this.log(`watcher error: ${String(err)}`));
@@ -45,6 +56,8 @@ export class Ingester {
   }
 
   async stop(): Promise<void> {
+    for (const t of this.rechecks.values()) clearTimeout(t);
+    this.rechecks.clear();
     await Promise.all(this.watchers.map((w) => w.close()));
     await this.queue;
   }
