@@ -29,10 +29,15 @@ export class Ingester {
     for (const adapter of this.adapters) {
       for (const root of adapter.roots()) {
         if (!fs.existsSync(root)) continue;
-        for (const entry of fs.readdirSync(root, { withFileTypes: true, recursive: true })) {
-          if (!entry.isFile()) continue;
-          const filePath = path.join(entry.parentPath, entry.name);
-          if (adapter.matches(filePath)) this.ingestFile(adapter, filePath);
+        // a root can be a single file (codex's session_index.jsonl)
+        if (fs.statSync(root).isFile()) {
+          if (adapter.matches(root)) this.ingestFile(adapter, root);
+        } else {
+          for (const entry of fs.readdirSync(root, { withFileTypes: true, recursive: true })) {
+            if (!entry.isFile()) continue;
+            const filePath = path.join(entry.parentPath, entry.name);
+            if (adapter.matches(filePath)) this.ingestFile(adapter, filePath);
+          }
         }
         const watcher = chokidar.watch(root, { ignoreInitial: true, depth: adapter.watchDepth });
         const onFile = (p: string) => {
@@ -82,6 +87,7 @@ export class Ingester {
   }
 
   private ingestFileInner(adapter: AgentAdapter, filePath: string): void {
+    if (adapter.patchFile?.(filePath)) return this.ingestPatchFile(adapter, filePath);
     const size = fs.statSync(filePath).size;
     let session = this.store.getSessionByPath(filePath);
     if (session && size < session.byteOffset) {
@@ -106,6 +112,19 @@ export class Ingester {
     }
     const stored = this.store.appendEvents(session.id, events, offset + consumed);
     if (stored.length) for (const fn of this.listeners) fn(session.id, stored);
+  }
+
+  /** Cross-session patch carrier: no session row, no offset — re-read whole
+   *  on every change. The file is tiny and append-only, and replaying
+   *  last-wins patches is idempotent; a patch for a session whose transcript
+   *  lands later (dropped by patchSession) self-heals on the next pass. */
+  private ingestPatchFile(adapter: AgentAdapter, filePath: string): void {
+    const { events } = this.parseFrom(adapter, filePath, 0, fs.statSync(filePath).size);
+    for (const e of events) {
+      if (e.kind === 'meta' && e.sessionPatch?.sessionId) {
+        this.store.patchSession(e.sessionPatch.sessionId, e.sessionPatch);
+      }
+    }
   }
 
   /** Read [offset, size), split complete lines (partial tail stays unconsumed). */

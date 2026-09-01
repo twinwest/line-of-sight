@@ -32,6 +32,9 @@ export interface LiveSession { state: 'busy' | 'waiting' | 'alive'; since: numbe
 
 /** Applied by ingestion to the session row as lines reveal metadata. */
 export interface SessionPatch {
+  /** Route the patch to this session instead of the file's own (patch files
+   *  carry lines for many sessions, e.g. codex's session_index.jsonl). */
+  sessionId?: string;
   projectDir?: string;
   title?: string;
   titleSource?: TitleSource;

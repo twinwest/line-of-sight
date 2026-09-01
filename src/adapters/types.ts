@@ -13,6 +13,10 @@ export interface AgentAdapter {
   watchDepth?: number;
   /** Cheap check: is this file a session transcript this adapter owns? */
   matches(filePath: string): boolean;
+  /** A matched file that is not a transcript but a cross-session patch
+   *  carrier (e.g. codex's session_index.jsonl): no session row of its own,
+   *  re-read whole on every change, lines route via SessionPatch.sessionId. */
+  patchFile?(filePath: string): boolean;
   /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
   parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */

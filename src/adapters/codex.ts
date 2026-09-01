@@ -122,17 +122,25 @@ function itemToEvents(item: Json, ts: number, fallbackId: string): NormalizedEve
 }
 
 export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions')): AgentAdapter {
+  // Codex keeps AI-generated thread names OUT of the rollout transcript, in
+  // this append-only sibling index: {id, thread_name, updated_at} per line,
+  // first the truncated prompt, then the AI rename seconds later, last wins.
+  // Ingested as a patch file (see Ingester.ingestPatchFile).
+  const indexPath = path.join(root, '..', 'session_index.jsonl');
   return {
     id: 'codex',
-    roots: () => [root],
+    roots: () => [root, indexPath],
     // 3 = <root>/YYYY/MM/DD/rollout-*.jsonl
     watchDepth: 3,
 
     matches(filePath) {
+      if (filePath === indexPath) return true;
       if (!ROLLOUT.test(path.basename(filePath))) return false;
       const dd = path.dirname(filePath);
       return path.dirname(path.dirname(path.dirname(dd))) === root;
     },
+
+    patchFile: (filePath) => filePath === indexPath,
 
     // ~/.codex/thread-writer-locks/<session-uuid>.lock is held OPEN by the
     // live codex process for the session's whole lifetime and the fd dies
@@ -179,6 +187,16 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
         line = parsed as Json;
       } catch {
         return [{ kind: 'unknown', id: fallbackId, ts: 0, raw: rawLine }];
+      }
+
+      if (ctx.filePath === indexPath) {
+        // both the truncated-prompt line and the AI rename land as 'ai':
+        // in-file order + last-wins replay leaves the rename standing
+        const sessionId = str(line.id);
+        const name = str(line.thread_name)?.trim();
+        if (!sessionId || !name) return [{ kind: 'unknown', id: fallbackId, ts: 0, raw: line }];
+        return [{ kind: 'meta', id: fallbackId, ts: parseTs(line.updated_at), label: 'thread_name',
+          raw: null, sessionPatch: { sessionId, title: truncate(name, 120), titleSource: 'ai' } }];
       }
 
       const type = str(line.type);

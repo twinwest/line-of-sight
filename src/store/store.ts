@@ -253,7 +253,7 @@ export class Store {
       // patch-only carriers (title lines: raw === null) update the session
       // but have nothing to display — no row, no SSE broadcast
       if (ev.kind === 'meta' && ev.raw === null) {
-        if (ev.sessionPatch) this.applyPatch(sessionId, ev.sessionPatch);
+        if (ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch);
         continue;
       }
       const role = ev.kind === 'message' ? ev.role : ev.kind;
@@ -267,7 +267,7 @@ export class Store {
       // only real messages count as activity — trailing bookkeeping writes
       // (away_summary etc.) must not make an idle session look running
       if (ev.kind === 'message' && ev.ts > lastTs) lastTs = ev.ts;
-      if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(sessionId, ev.sessionPatch);
+      if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch);
       stored.push({
         id: ev.id, seq, ts: ev.ts, kind: ev.kind,
         role: ev.kind === 'message' ? ev.role : null,
@@ -282,6 +282,11 @@ export class Store {
     `).run(newByteOffset, newMessages, lastTs, events[0]?.ts ?? 0, sessionId);
     return stored;
   });
+
+  /** Apply one patch outside the append flow (patch files, see Ingester). */
+  patchSession(sessionId: string, patch: SessionPatch): void {
+    this.applyPatch(sessionId, patch);
+  }
 
   private applyPatch(sessionId: string, patch: SessionPatch): void {
     if (patch.turnOpen !== undefined) {

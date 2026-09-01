@@ -210,3 +210,57 @@ describe('codexAdapter.liveSessions', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('codexAdapter session_index.jsonl (AI thread names)', () => {
+  const INDEX = '/home/u/.codex/session_index.jsonl';
+  const UUID1 = '01a05dd9-9149-7e12-96a4-4d771586ae00';
+  const idx = (id: string, name: string) =>
+    JSON.stringify({ id, thread_name: name, updated_at: '2026-09-01T16:44:50.000Z' });
+
+  it('is matched and flagged as a patch file; rollouts are not', () => {
+    expect(adapter.matches(INDEX)).toBe(true);
+    expect(adapter.patchFile!(INDEX)).toBe(true);
+    expect(adapter.patchFile!(FILE)).toBe(false);
+  });
+
+  it('index lines become ai-title patches routed by session id', () => {
+    const [ev] = adapter.parseLine(idx(UUID1, 'Compare repo ownership options'), { filePath: INDEX, byteOffset: 0 });
+    expect(ev).toMatchObject({ kind: 'meta', raw: null,
+      sessionPatch: { sessionId: UUID1, title: 'Compare repo ownership options', titleSource: 'ai' } });
+    // malformed lines fall through, never throw
+    expect(adapter.parseLine('{"id":"x"}', { filePath: INDEX, byteOffset: 0 })[0])
+      .toMatchObject({ kind: 'unknown' });
+  });
+
+  it('ingest: the AI name overrides the prompt title, in either arrival order', async () => {
+    const { Ingester } = await import('../src/daemon/ingest.js');
+    const { Store } = await import('../src/store/store.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-index-'));
+    const root = path.join(dir, 'sessions');
+    const day = path.join(root, '2026', '09', '01');
+    fs.mkdirSync(day, { recursive: true });
+    const rollout = path.join(day, `rollout-2026-09-01T09-42-14-${UUID1}.jsonl`);
+    fs.writeFileSync(rollout, line('event_msg', { type: 'item_completed',
+      item: { type: 'UserMessage', id: 'u1', content: [{ type: 'text', text: 'long raw prompt' }] } }) + '\n');
+    const index = path.join(dir, 'session_index.jsonl');
+    fs.writeFileSync(index, idx(UUID1, 'long raw prompt (truncated)') + '\n' + idx(UUID1, 'Compare repo ownership options') + '\n');
+    const a = codexAdapter(root);
+    const store = new Store(':memory:');
+    const ingester = new Ingester(store, [a]);
+
+    // index first: patches drop (no session yet) — the whole-file replay heals
+    ingester.ingestFile(a, index);
+    expect(store.getSession(UUID1)).toBeNull();
+    ingester.ingestFile(a, rollout);
+    expect(store.getSession(UUID1)!.title).toBe('long raw prompt');
+    ingester.ingestFile(a, index);
+    expect(store.getSession(UUID1)!.title).toBe('Compare repo ownership options');
+    // a later prompt (new first message never happens, but same priority rule:
+    // prompt must not override ai)
+    ingester.ingestFile(a, rollout);
+    expect(store.getSession(UUID1)!.title).toBe('Compare repo ownership options');
+
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
