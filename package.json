@@ -21,11 +21,14 @@
     "better-sqlite3": "^12.2.0",
     "chokidar": "^4.0.0",
     "fastify": "^5.0.0",
+    "mdast-util-to-string": "^4.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

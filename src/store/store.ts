@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
+import { toString as mdastToString } from 'mdast-util-to-string';
+import remarkGfm from 'remark-gfm';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat, SideChatTurn, StoredEvent, TitleSource } from '../shared/types.js';
 
 export type { SideChat, StoredEvent };
@@ -69,23 +73,48 @@ function toMeta(r: SessionRow): SessionMeta {
   };
 }
 
-/** Searchable plain text of a message event. */
-/** Search-indexed text. tool_result output is excluded — it dominates
- *  transcript bytes (file dumps, build logs) and drowns dialog hits
- *  (DECISIONS 2026-09-01). tool_use summaries stay: small, and they cover
- *  "which session ran that command". Excerpts (askContext) re-read
- *  blocks_json so the responder still sees tool output. */
-function textContent(ev: NormalizedEvent): string {
-  if (ev.kind !== 'message') return '';
-  return blocksText(ev.blocks, false);
+// Must be the same parser the viewer renders with (react-markdown +
+// remark-gfm), or the index and the visible text drift apart again.
+const mdParser = unified().use(remarkParse).use(remarkGfm);
+
+/** What the reader saw, not what the agent typed: markdown stripped to plain
+ *  text so "about 35 lines" is findable when the source says "about **35 lines**".
+ *  Blocks whose children are themselves blocks join with \n so list items
+ *  and paragraphs don't concatenate into false phrases. Raw HTML is dropped
+ *  — react-markdown doesn't render it either. */
+const MD_CONTAINERS = new Set(['root', 'blockquote', 'list', 'listItem', 'table', 'tableRow']);
+function mdNodeText(n: { type: string; children?: unknown[] }): string {
+  if (MD_CONTAINERS.has(n.type)) {
+    return (n.children ?? []).map((c) => mdNodeText(c as { type: string })).filter(Boolean).join('\n');
+  }
+  if (n.type === 'html') return '';
+  return mdastToString(n);
+}
+function stripMarkdown(src: string): string {
+  try { return mdNodeText(mdParser.parse(src)); } catch { return src; }
 }
 
-function blocksText(blocks: RenderBlock[], withToolOutput: boolean): string {
+/** Search-indexed text: dialog only — user input and agent output, stripped
+ *  to what the reader saw. thinking, tool_use summaries and tool_result
+ *  output are all out of scope (DECISIONS 2026-09-01). Excerpts (askContext)
+ *  use blocksText instead, so the responder still sees everything. */
+function textContent(ev: NormalizedEvent): string {
+  if (ev.kind !== 'message') return '';
+  return dialogText(ev.blocks);
+}
+
+function dialogText(blocks: RenderBlock[]): string {
+  return blocks.filter((b) => b.type === 'text')
+    .map((b) => stripMarkdown(b.markdown)).filter(Boolean).join('\n');
+}
+
+/** Full raw text of a message, for responder excerpts. */
+function blocksText(blocks: RenderBlock[]): string {
   return blocks.map((b) => {
     switch (b.type) {
       case 'text': return b.markdown;
       case 'thinking': return b.text;
-      case 'tool_result': return withToolOutput ? b.output : '';
+      case 'tool_result': return b.output;
       case 'tool_use': return b.summary;
       default: return '';
     }
@@ -115,18 +144,18 @@ export class Store {
       // seqs are stable, so side-chat anchors survive).
       this.db.exec('UPDATE sessions SET byte_offset = 0');
     } catch { /* already there: nothing to backfill */ }
-    // search index v2 (tool_result output dropped): recompute existing rows
-    // once — the UPDATE trigger keeps the FTS table in sync
-    if (!this.getKv('text_content_v2')) {
+    // search index v3 (dialog only, markdown stripped): recompute existing
+    // rows once — the UPDATE trigger keeps the FTS table in sync
+    if (!this.getKv('text_content_v3')) {
       const upd = this.db.prepare('UPDATE messages SET text_content = ? WHERE rowid = ?');
       this.db.transaction(() => {
         const rows = this.db.prepare(
           `SELECT rowid, blocks_json FROM messages WHERE role IN ('user','assistant')`,
         ).all() as { rowid: number; blocks_json: string }[];
         for (const r of rows) {
-          upd.run(blocksText(JSON.parse(r.blocks_json) as RenderBlock[], false), r.rowid);
+          upd.run(dialogText(JSON.parse(r.blocks_json) as RenderBlock[]), r.rowid);
         }
-        this.setKv('text_content_v2', '1');
+        this.setKv('text_content_v3', '1');
       })();
     }
   }
@@ -337,7 +366,7 @@ export class Store {
     // from blocks_json, not text_content: the search index dropped tool_result
     // output, but the excerpt still needs it (the anchor may sit inside one)
     const blocks = rows
-      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[], true) }))
+      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[]) }))
       .filter((r) => r.full).map((r) => {
       const text = r.full.length > 2000
         ? `${r.full.slice(0, 2000)} …[truncated]` : r.full;

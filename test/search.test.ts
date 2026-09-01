@@ -17,9 +17,11 @@ function makeStore(): Store {
       blocks: [{ type: 'text', markdown: '전문검색 구현 방안을 논의했습니다' }] },
     { kind: 'message', id: 'm3', role: 'assistant', ts: 3,
       blocks: [
+        { type: 'thinking', text: 'pondering about zeppelins' },
         { type: 'tool_use', id: 't1', toolName: 'Bash', summary: 'npm run migrate-users', input: {} },
         { type: 'tool_result', toolUseId: 't1', summary: 'ok',
           output: 'giant file dump mentioning kaleidoscope', isError: false },
+        { type: 'text', markdown: '약 **35 줄**, `askContext` 및 [문서](https://hidden.example) 참고' },
       ] },
   ], 100);
   return store;
@@ -43,10 +45,18 @@ describe('search', () => {
     expect(hits[0]!.messageId).toBe('m2');
   });
 
-  it('indexes tool_use summaries but not tool_result output', () => {
+  it('indexes dialog only: no thinking, tool summaries, or tool output', () => {
     const store = makeStore();
-    expect(store.search('migrate-users')).toHaveLength(1);
+    expect(store.search('zeppelins')).toHaveLength(0);
+    expect(store.search('migrate-users')).toHaveLength(0);
     expect(store.search('kaleidoscope')).toHaveLength(0);
+  });
+
+  it('matches the rendered text, not the markdown source', () => {
+    const store = makeStore();
+    expect(store.search('약 35 줄')).toHaveLength(1);   // source has ** around 35 줄
+    expect(store.search('askContext')).toHaveLength(1);   // inline code
+    expect(store.search('hidden.example')).toHaveLength(0); // link URL is not rendered text
   });
 
   it('deleted messages disappear from the index', () => {
@@ -59,7 +69,7 @@ describe('search', () => {
     expect(makeStore().search('  ')).toHaveLength(0);
   });
 
-  it('reindexes pre-v2 rows once on open', () => {
+  it('reindexes pre-v3 rows once on open', () => {
     const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sight-')), 'test.db');
     const store = new Store(dbPath);
     store.upsertSession({
@@ -71,9 +81,9 @@ describe('search', () => {
         blocks: [{ type: 'tool_result', toolUseId: 't1', summary: 'ok',
           output: 'kaleidoscope', isError: false }] },
     ], 100);
-    // simulate a pre-v2 db: tool output in the index, no migration flag
+    // simulate a pre-v3 db: tool output in the index, no migration flag
     store.db.prepare("UPDATE messages SET text_content = 'kaleidoscope'").run();
-    store.db.prepare("DELETE FROM kv WHERE key = 'text_content_v2'").run();
+    store.db.prepare("DELETE FROM kv WHERE key = 'text_content_v3'").run();
     expect(store.search('kaleidoscope')).toHaveLength(1);
     store.close();
     const reopened = new Store(dbPath);
