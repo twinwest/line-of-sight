@@ -30,6 +30,10 @@ export interface ResponderRequest {
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   /** Present only when the session contains rewound-away branches: the
    *  prompt then teaches the tree shape and says which side the anchor is
-   *  on (Store.branchInfo). Absent = say nothing about branches. */
+   *  on (Store.askContext). Absent = say nothing about branches. */
   branches?: { anchorAbandoned: boolean } | null;
+  /** Clean anchor-centered conversation excerpt (Store.askContext) — spares
+   *  the engine the locate/orient tool rounds; the transcript file stays the
+   *  source of truth for anything beyond it. */
+  excerpt?: string;
 }

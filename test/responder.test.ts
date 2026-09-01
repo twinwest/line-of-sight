@@ -24,6 +24,16 @@ describe('composePrompt', () => {
     expect(p.indexOf('ANCHOR')).toBeLessThan(p.indexOf('QUESTION: What is the evidence'));
   });
 
+  it('seeds the excerpt between the pointer and the anchor, framed as non-authoritative', () => {
+    const p = composePrompt({ ...REQ, excerpt: '[user]\nhello world' });
+    expect(p).toContain('[user]\nhello world');
+    expect(p).toContain('source of truth');
+    expect(p.indexOf(REQ.sessionFilePath)).toBeLessThan(p.indexOf('hello world'));
+    expect(p.indexOf('hello world')).toBeLessThan(p.indexOf('ANCHOR (user-selected text)'));
+    // empty excerpt (unknown anchor): no stray framing paragraph
+    expect(composePrompt({ ...REQ, excerpt: '' })).not.toContain('source of truth');
+  });
+
   it('says nothing about branches unless the session has them', () => {
     expect(composePrompt(REQ)).not.toContain('abandoned');
     expect(composePrompt({ ...REQ, branches: null })).not.toContain('abandoned');

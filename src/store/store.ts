@@ -288,15 +288,49 @@ export class Store {
     return r?.seq ?? null;
   }
 
-  /** Rewind-branch facts for a responder ask (issue #9): null when the
-   *  session has no abandoned branches (the common case — the prompt then
-   *  says nothing about branches); otherwise whether the anchor message
-   *  itself sits on one. */
-  branchInfo(sessionId: string, anchorMessageId: string): { anchorAbandoned: boolean } | null {
+  /** Everything a responder ask needs from the store, in one pass:
+   *  - `branches` (#9): null when the session has no abandoned branches (the
+   *    common case — the prompt then says nothing about them); otherwise
+   *    whether the anchor message itself sits on one.
+   *  - `excerpt` (#10): clean anchor-centered conversation text. Measured
+   *    2026-08-31: the tool loop spends its first ~5-8 rounds (~4s each) just
+   *    locating the anchor and orienting in the raw jsonl; text_content is
+   *    the same material without the envelope, so those rounds are free here.
+   *  Both need the abandoned set — computed once. */
+  askContext(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
+      { excerpt: string; branches: { anchorAbandoned: boolean } | null } {
     const abandoned = this.abandonedSeqs(sessionId);
-    if (!abandoned.size) return null;
-    const seq = this.getMessageSeq(sessionId, anchorMessageId);
-    return { anchorAbandoned: seq !== null && abandoned.has(seq) };
+    const anchorSeq = this.getMessageSeq(sessionId, anchorMessageId);
+    const branches = abandoned.size
+      ? { anchorAbandoned: anchorSeq !== null && abandoned.has(anchorSeq) }
+      : null;
+    if (anchorSeq === null) return { excerpt: '', branches };
+    const rows = this.db.prepare(`
+      SELECT id, seq, role, text_content FROM messages
+      WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
+      ORDER BY seq
+    `).all(sessionId, anchorSeq - n, anchorSeq + n) as
+      { id: string; seq: number; role: string; text_content: string }[];
+    const blocks = rows.filter((r) => r.text_content).map((r) => {
+      const text = r.text_content.length > 2000
+        ? `${r.text_content.slice(0, 2000)} …[truncated]` : r.text_content;
+      const tags = [r.role];
+      if (abandoned.has(r.seq)) tags.push('abandoned branch');
+      if (r.id === anchorMessageId) tags.push('contains the ANCHOR');
+      return { seq: r.seq, text: `[${tags.join(', ')}]\n${text}` };
+    });
+    // budget by distance from the anchor, so a fat early message can never
+    // push the anchor itself out; re-sort into reading order after
+    blocks.sort((a, b) => Math.abs(a.seq - anchorSeq) - Math.abs(b.seq - anchorSeq));
+    const kept: typeof blocks = [];
+    let total = 0;
+    for (const b of blocks) {
+      if (total + b.text.length > maxChars) break;
+      kept.push(b);
+      total += b.text.length + 2;
+    }
+    kept.sort((a, b) => a.seq - b.seq);
+    return { excerpt: kept.map((b) => b.text).join('\n\n'), branches };
   }
 
   getEvents(sessionId: string, opts: { beforeSeq?: number; limit?: number } = {}): StoredEvent[] {

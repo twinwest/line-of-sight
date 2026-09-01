@@ -12,6 +12,14 @@ export function composePrompt(req: ResponderRequest): string {
     `Read with offsets for context).`,
   );
   if (req.projectDir) parts.push(`The project lives at ${req.projectDir}.`);
+  if (req.excerpt) {
+    parts.push(
+      `Conversation around the anchor, extracted for you (rows labeled by ` +
+      `role; this usually answers locate/orient questions without tools). The ` +
+      `transcript file remains the source of truth — use your tools to verify ` +
+      `quotes and to read anything beyond this excerpt:\n\n${req.excerpt}`,
+    );
+  }
   if (req.branches) {
     parts.push(
       `This transcript contains branches the user rewound away from. It is a ` +

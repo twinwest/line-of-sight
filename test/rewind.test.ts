@@ -123,15 +123,42 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     upgraded.close();
   });
 
-  it('branchInfo: null without forks, else which side the anchor is on', () => {
+  it('askContext branches: null without forks, else which side the anchor is on', () => {
     const head = line('u1', null, 'first') + line('a1', 'u1', 'answer', 'assistant');
     ingest(head + line('u2', 'a1', 'follow-up'));
-    expect(store.branchInfo(SESSION, 'u2')).toBeNull();
+    expect(store.askContext(SESSION, 'u2').branches).toBeNull();
     ingest(head + line('u2', 'a1', 'follow-up') + line('u3', 'a1', 'follow-up, edited'));
-    expect(store.branchInfo(SESSION, 'u2')).toEqual({ anchorAbandoned: true });
-    expect(store.branchInfo(SESSION, 'u3')).toEqual({ anchorAbandoned: false });
+    expect(store.askContext(SESSION, 'u2').branches).toEqual({ anchorAbandoned: true });
+    expect(store.askContext(SESSION, 'u3').branches).toEqual({ anchorAbandoned: false });
     // unknown anchor: branches exist but the anchor can't be placed on one
-    expect(store.branchInfo(SESSION, 'nope')).toEqual({ anchorAbandoned: false });
+    const unknown = store.askContext(SESSION, 'nope');
+    expect(unknown.branches).toEqual({ anchorAbandoned: false });
+    expect(unknown.excerpt).toBe('');
+  });
+
+  it('askContext excerpt: role labels, anchor and abandoned marks, distance budget', () => {
+    const head = line('u1', null, 'first question') + line('a1', 'u1', 'first answer', 'assistant');
+    ingest(head + line('u2', 'a1', 'dead wording') + line('u3', 'a1', 'live wording'));
+    const { excerpt } = store.askContext(SESSION, 'u3');
+    expect(excerpt).toContain('[user]\nfirst question');
+    expect(excerpt).toContain('[assistant]\nfirst answer');
+    expect(excerpt).toContain('[user, abandoned branch]\ndead wording');
+    expect(excerpt).toContain('[user, contains the ANCHOR]\nlive wording');
+    // reading order preserved
+    expect(excerpt.indexOf('first question')).toBeLessThan(excerpt.indexOf('dead wording'));
+
+  });
+
+  it('askContext excerpt: per-message truncation; a fat message cannot squeeze the anchor out', () => {
+    const head = line('u1', null, 'first question') + line('a1', 'u1', 'first answer', 'assistant');
+    ingest(head + line('u2', 'a1', 'y'.repeat(3000)));
+    expect(store.askContext(SESSION, 'u2').excerpt).toContain('…[truncated]');
+    // smaller rewrite → shrink guard reparses from 0 (rewrite is not append-shaped)
+    const fat = 'x'.repeat(1900);
+    ingest(head + line('u2', 'a1', fat) + line('u3', 'u2', 'the anchor row'));
+    const tight = store.askContext(SESSION, 'u3', 20, 100);
+    expect(tight.excerpt).toContain('the anchor row');
+    expect(tight.excerpt).not.toContain(fat);
   });
 
   it('folds each abandoned run whole, ahead of step folding', () => {
