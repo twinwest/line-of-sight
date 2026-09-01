@@ -143,7 +143,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
           <div className="turn assistant">
             {streaming
               ? <div className="md"><Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{streaming}</Markdown></div>
-              : <div className="typing" title={progress || undefined}>✦ {progress || 'thinking'}…</div>}
+              : <div className="typing" title={progress || undefined}>{progress || 'thinking'}…</div>}
             <button className="copy-btn cancel" onClick={() => cancelAsk(chat.id)}>Cancel</button>
           </div>
         )}

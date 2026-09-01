@@ -44,7 +44,7 @@ function Generating({ since }: { since: number }) {
   }, []);
   const s = Math.max(0, Math.floor((now - since) / 1000));
   const elapsed = since === 0 ? '' : s < 60 ? ` ${s}s` : ` ${Math.floor(s / 60)}m ${s % 60}s`;
-  return <div className="generating">✦ generating…{elapsed}</div>;
+  return <div className="generating">generating…{elapsed}</div>;
 }
 
 /** Compose the next prompt next to what it replies to; the only action is
