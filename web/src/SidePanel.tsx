@@ -141,9 +141,11 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
         ))}
         {busy && (
           <div className="turn assistant">
-            {streaming
-              ? <div className="md"><Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{streaming}</Markdown></div>
-              : <div className="typing" title={progress || undefined}>{progress || 'thinking'}…</div>}
+            {streaming && <div className="md"><Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{streaming}</Markdown></div>}
+            {/* stays visible under partial text: both engines go quiet while
+                researching (codex between whole-message chunks, claude during
+                tool calls) and a frozen answer reads as a dead responder */}
+            <div className="typing" title={progress || undefined}>{progress || 'thinking'}…</div>
             <button className="copy-btn cancel" onClick={() => cancelAsk(chat.id)}>Cancel</button>
           </div>
         )}
