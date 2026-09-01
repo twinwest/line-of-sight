@@ -502,7 +502,14 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
    used to contain a floated per-answer Copy button — removed 2026-08-26, see
    DECISIONS: code blocks carry their own Copy, prose is selection-copied.) */
 .turn.assistant { padding: 0 0.1rem; display: flow-root; }
-.typing { color: var(--fg-dim); font-style: italic; }
+/* responder activity: same species as the main view's "✦ generating…" —
+   small, dim, one steady line (ellipsis, full text in title), pulse carries
+   the "alive" signal so the text can stay calm */
+.typing {
+  color: var(--fg-dim); font-size: 0.8rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: generating-pulse 1.6s ease-in-out infinite;
+}
 .cancel { margin-top: 0.4rem; }
 
 .setup-hint, .panel-error {

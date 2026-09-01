@@ -100,12 +100,18 @@ describe('claude-cli command construction', () => {
     expect(args.slice(-4)).toEqual(['--model', 'claude-sonnet-5', '--effort', 'low']);
   });
 
-  it('extracts tool activity for progress display', () => {
-    const line = JSON.stringify({
-      type: 'assistant',
-      message: { content: [{ type: 'tool_use', name: 'Grep', input: { pattern: 'welcome page' } }] },
+  it('narrates tool activity for progress display', () => {
+    const tool = (name: string, input: Record<string, string>) => JSON.stringify({
+      type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] },
     });
-    expect(statusFromStreamLine(line)).toBe('Grep welcome page');
+    const ctx = { sessionFilePath: '/home/u/.claude/projects/-p/abc-123.jsonl', projectDir: '/home/u/proj' };
+    expect(statusFromStreamLine(tool('Grep', { pattern: 'welcome page' }), ctx)).toBe('searching welcome page');
+    expect(statusFromStreamLine(tool('Grep', { path: '/home/u/.claude/projects/-p/abc-123.jsonl' }), ctx))
+      .toBe('searching the transcript');
+    expect(statusFromStreamLine(tool('Read', { file_path: '/home/u/proj/web/src/SidePanel.tsx' }), ctx))
+      .toBe('reading web/src/SidePanel.tsx');
+    expect(statusFromStreamLine(tool('Read', { file_path: '/etc/hosts' }), ctx)).toBe('reading hosts');
+    expect(statusFromStreamLine(tool('LS', { path: '/home/u/elsewhere' }), ctx)).toBe('LS elsewhere');
     expect(statusFromStreamLine(JSON.stringify({
       type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] },
     }))).toBe('');

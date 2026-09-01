@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import os from 'node:os';
+import path from 'node:path';
 import { readConfig } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
 import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './types.js';
@@ -60,7 +61,24 @@ export function textFromStreamLine(line: string): string {
 
 /** Progress line for the panel: "Grep welcome page", "Read /path/to.jsonl" ('' if none).
  *  Complete tool_use blocks arrive on `assistant` snapshot lines. */
-export function statusFromStreamLine(line: string): string {
+/** Tool verbs in reading language — the panel narrates ("searching the
+ *  transcript"), it does not print commands (owner call, 2026-09-01). */
+const VERBS: Record<string, string> = { Grep: 'searching', Glob: 'searching', Read: 'reading' };
+
+/** Humanize the tool target: the session transcript (matched by its uuid
+ *  basename, so offset-reads and subagent paths still hit) → "the
+ *  transcript"; project files → repo-relative; other paths → basename;
+ *  patterns/queries pass through. */
+function statusTarget(arg: string, ctx?: { sessionFilePath?: string; projectDir?: string | null }): string {
+  if (ctx?.sessionFilePath && arg.includes(path.basename(ctx.sessionFilePath, '.jsonl'))) {
+    return 'the transcript';
+  }
+  if (ctx?.projectDir && arg.startsWith(`${ctx.projectDir}/`)) return arg.slice(ctx.projectDir.length + 1);
+  return arg.startsWith('/') ? path.basename(arg) : arg;
+}
+
+export function statusFromStreamLine(line: string,
+    ctx?: { sessionFilePath?: string; projectDir?: string | null }): string {
   let parsed: StreamLine;
   try {
     parsed = JSON.parse(line) as StreamLine;
@@ -73,7 +91,8 @@ export function statusFromStreamLine(line: string): string {
     const input = (block.input ?? {}) as Record<string, unknown>;
     const arg = [input.file_path, input.path, input.pattern, input.query, input.command]
       .find((v) => typeof v === 'string') as string | undefined;
-    const s = `${String(block.name ?? 'tool')} ${arg ?? ''}`.trim();
+    const name = String(block.name ?? 'tool');
+    const s = `${VERBS[name] ?? name} ${arg ? statusTarget(arg, ctx) : ''}`.trim();
     return s.length > 80 ? s.slice(0, 79) + '…' : s;
   }
   return '';
@@ -111,7 +130,7 @@ export const claudeCliResponder: Responder = {
           buf = buf.slice(nl + 1);
           const text = textFromStreamLine(line);
           if (text) { answer += text; onChunk(text); continue; }
-          const status = statusFromStreamLine(line);
+          const status = statusFromStreamLine(line, req);
           if (status) onStatus?.(status);
         }
       });
