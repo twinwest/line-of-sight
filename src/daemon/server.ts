@@ -177,6 +177,7 @@ export function buildServer(store: Store, hub: SseHub,
     const { responderModel, responderEffort } = readConfig();
     return {
       engine: engine?.id ?? null,
+      label: engine ? engine.label?.() ?? engine.id : null,
       options: engine?.options ?? null,
       responderModel: responderModel ?? '',
       responderEffort: responderEffort ?? '',

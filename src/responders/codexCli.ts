@@ -1,5 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { composePrompt } from './prompt.js';
 import type { Responder, ResponderRequest } from './types.js';
 
@@ -56,9 +58,28 @@ export function statusFromJsonLine(line: string): string {
   return s.length > 80 ? s.slice(0, 79) + '…' : s;
 }
 
+/** Engine row label: what actually answers is codex on the user's own
+ *  config.toml model. The keys are top-level simple strings, so a line scan
+ *  (stopping at the first [section]) beats pulling in a toml parser. */
+export function codexEngineLabel(configPath = path.join(os.homedir(), '.codex', 'config.toml')): string {
+  let model = '';
+  let effort = '';
+  try {
+    for (const line of fs.readFileSync(configPath, 'utf8').split('\n')) {
+      if (line.trimStart().startsWith('[')) break;
+      const m = /^\s*(model|model_reasoning_effort)\s*=\s*"([^"]*)"/.exec(line);
+      if (m?.[1] === 'model') model = m[2]!;
+      else if (m?.[1] === 'model_reasoning_effort') effort = m[2]!;
+    }
+  } catch { /* no config → codex's own default model */ }
+  if (!model) return 'codex';
+  return effort ? `codex · ${model} (${effort})` : `codex · ${model}`;
+}
+
 export const codexCliResponder: Responder = {
   id: 'codex-cli',
   options: null,
+  label: () => codexEngineLabel(),
 
   available(): Promise<boolean> {
     return new Promise((resolve) => {

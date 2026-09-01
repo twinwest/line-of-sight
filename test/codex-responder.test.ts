@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CODEX_ARGS, statusFromJsonLine, textFromJsonLine } from '../src/responders/codexCli.js';
+import { CODEX_ARGS, codexEngineLabel, statusFromJsonLine, textFromJsonLine } from '../src/responders/codexCli.js';
 
 // Stream lines pinned from a real `codex exec --json` run (0.150.1,
 // SPIKE_NOTES 2026-08-27).
@@ -33,5 +36,27 @@ describe('statusFromJsonLine', () => {
     expect(statusFromJsonLine('{"type":"item.started","item":{"type":"command_execution","command":"ls"}}'))
       .toBe('exec ls');
     expect(statusFromJsonLine('junk')).toBe('');
+  });
+});
+
+describe('codexEngineLabel', () => {
+  const withConfig = (toml: string) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-cfg-'));
+    const p = path.join(dir, 'config.toml');
+    fs.writeFileSync(p, toml);
+    return p;
+  };
+
+  it('reads top-level model + effort; ignores keys inside sections', () => {
+    expect(codexEngineLabel(withConfig(
+      'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "medium"\n[profiles.x]\nmodel = "other"\n')))
+      .toBe('codex · gpt-5.6-sol (medium)');
+    expect(codexEngineLabel(withConfig('model = "gpt-5.6-sol"\n')))
+      .toBe('codex · gpt-5.6-sol');
+  });
+
+  it('no model key or no file → plain "codex"', () => {
+    expect(codexEngineLabel(withConfig('[notice]\nmodel = "not-top-level"\n'))).toBe('codex');
+    expect(codexEngineLabel('/nonexistent/config.toml')).toBe('codex');
   });
 });

@@ -15,6 +15,10 @@ export interface Responder {
   /** Model/effort choices this engine honors (rendered by the panel);
    *  null = the engine runs on its own config and nothing here applies. */
   options: ResponderOptions | null;
+  /** Display name for the panel's engine row; omit = the id. Lets an engine
+   *  that runs on its own config (options: null) say what actually answers,
+   *  e.g. "codex · gpt-5.6-sol (medium)" from ~/.codex/config.toml. */
+  label?(): string;
   available(): Promise<boolean>;
   /** Streamed answer. MUST be read-only (per-engine enforcement).
    *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */

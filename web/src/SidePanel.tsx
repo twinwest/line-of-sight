@@ -167,7 +167,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
       )}
       {status?.engine && (
         <div className="engine-row">
-          <span className="engine-label">{status.engine}</span>
+          <span className="engine-label">{status.label ?? status.engine}</span>
           {status.options && <>
           <select
             title="responder model"

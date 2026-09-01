@@ -85,6 +85,9 @@ export function cancelAsk(id: string): void {
 
 export interface ResponderStatus {
   engine: string | null;
+  /** display name for the engine row (codex: the config.toml model); falls
+   *  back to the engine id server-side */
+  label: string | null;
   /** engine-declared model/effort choices; null = engine takes neither */
   options: { models: string[]; efforts: string[] } | null;
   responderModel: string;
