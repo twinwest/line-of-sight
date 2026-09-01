@@ -439,12 +439,12 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   padding: 0.75rem 0.9rem;
 }
 .type-controls:popover-open { display: flex; flex-direction: column; gap: 0.6rem; }
-.type-controls label {
+.type-controls label, .type-controls .row {
   display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
   font-size: 0.8rem; color: var(--fg-dim);
 }
 .type-controls input[type="range"] { width: 9rem; accent-color: var(--accent); }
-.type-controls .chip { align-self: flex-end; }
+.type-controls > .chip { align-self: flex-end; }
 
 /* Asks popover — same top-layer fixed pattern as .type-controls; the offset
    approximates topbar + session-header height (both fixed-content bars) */

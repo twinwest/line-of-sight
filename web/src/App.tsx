@@ -27,7 +27,7 @@ function storedTheme(): Theme {
  *  override and light-dark() does the rest. The pre-paint script in
  *  index.html duplicates this — React mounts too late to avoid a flash of the
  *  wrong palette — so keep THEME_KEY and the attribute in sync with it. */
-function ThemeToggle() {
+function ThemeRow() {
   const [theme, setTheme] = useState<Theme>(storedTheme);
   useEffect(() => {
     if (theme === 'system') delete document.documentElement.dataset.theme;
@@ -35,14 +35,17 @@ function ThemeToggle() {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
   return (
-    <span className="theme-toggle">
-      {THEMES.map((t) => (
-        <button key={t.id} className={`chip ${t.id === theme ? 'active' : ''}`}
-          title={t.label} aria-pressed={t.id === theme} onClick={() => setTheme(t.id)}>
-          {t.icon}
-        </button>
-      ))}
-    </span>
+    <div className="row">
+      Theme
+      <span className="theme-toggle">
+        {THEMES.map((t) => (
+          <button key={t.id} className={`chip ${t.id === theme ? 'active' : ''}`}
+            title={t.label} aria-pressed={t.id === theme} onClick={() => setTheme(t.id)}>
+            {t.icon}
+          </button>
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -76,8 +79,9 @@ function TypeControls() {
   }, [measure]);
   return (
     <>
-      <button className="chip" title="Reading settings" popoverTarget="type-controls">Aa</button>
+      <button className="chip" title="Appearance" popoverTarget="type-controls">Aa</button>
       <div id="type-controls" className="type-controls" popover="auto">
+        <ThemeRow />
         <label>
           Text size
           <input type="range" min={SIZE.min} max={SIZE.max} step={SIZE.step}
@@ -118,7 +122,6 @@ export function App() {
         </a>
         <SearchBox />
         <span className="topbar-tools">
-          <ThemeToggle />
           <TypeControls />
           {sessionId && <SessionsPopover current={sessionId} />}
         </span>
