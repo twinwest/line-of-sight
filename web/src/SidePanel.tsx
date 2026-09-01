@@ -167,7 +167,9 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
       )}
       {status?.engine && (
         <div className="engine-row">
-          <span className="engine-label">{status.label ?? status.engine}</span>
+          {/* engines with dropdowns need no text label — the selectors say
+              what answers; label-only engines (codex) show their model */}
+          {!status.options && <span className="engine-label">{status.label ?? status.engine}</span>}
           {status.options && <>
           <select
             title="responder model"
