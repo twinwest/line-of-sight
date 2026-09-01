@@ -27,13 +27,7 @@ function storedTheme(): Theme {
  *  override and light-dark() does the rest. The pre-paint script in
  *  index.html duplicates this — React mounts too late to avoid a flash of the
  *  wrong palette — so keep THEME_KEY and the attribute in sync with it. */
-function ThemeRow() {
-  const [theme, setTheme] = useState<Theme>(storedTheme);
-  useEffect(() => {
-    if (theme === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+function ThemeRow({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
   return (
     <div className="row">
       Theme
@@ -67,8 +61,14 @@ function storedNum(key: string, r: { min: number; max: number; initial: number }
 }
 
 function TypeControls() {
+  const [theme, setTheme] = useState<Theme>(storedTheme);
   const [size, setSize] = useState(() => storedNum(SIZE_KEY, SIZE));
   const [measure, setMeasure] = useState(() => storedNum(MEASURE_KEY, MEASURE));
+  useEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
   useEffect(() => {
     document.documentElement.style.setProperty('--font-scale', String(size));
     localStorage.setItem(SIZE_KEY, String(size));
@@ -81,7 +81,7 @@ function TypeControls() {
     <>
       <button className="chip" title="Appearance" popoverTarget="type-controls">Aa</button>
       <div id="type-controls" className="type-controls" popover="auto">
-        <ThemeRow />
+        <ThemeRow theme={theme} setTheme={setTheme} />
         <label>
           Text size
           <input type="range" min={SIZE.min} max={SIZE.max} step={SIZE.step}
@@ -93,7 +93,7 @@ function TypeControls() {
             value={measure} onChange={(e) => setMeasure(e.currentTarget.valueAsNumber)} />
         </label>
         <button className="chip"
-          onClick={() => { setSize(SIZE.initial); setMeasure(MEASURE.initial); }}>
+          onClick={() => { setTheme('system'); setSize(SIZE.initial); setMeasure(MEASURE.initial); }}>
           Default
         </button>
       </div>
