@@ -269,10 +269,18 @@ export function buildServer(store: Store, hub: SseHub,
       reply.raw.on('error', () => {});
       const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
       send({ engine: engine.id });
+      // dogfood telemetry for the excerpt parameters (n=20/30KB, DECISIONS
+      // 2026-08-31): many tool rounds despite an excerpt = window too small;
+      // review with `sight stats`
+      let toolRounds = 0;
+      const t0 = Date.now();
       try {
         const answer = await engine.answer(request, (text) => send({ text }), ctrl.signal,
-          (status) => send({ status }));
+          (status) => { toolRounds++; send({ status }); });
         store.appendSideChatTurn(chat.id, { role: 'assistant', text: answer, ts: Date.now() });
+        const secs = (Date.now() - t0) / 1000;
+        store.incrementStat(`ask_rounds_${toolRounds === 0 ? '0' : toolRounds <= 3 ? '1_3' : '4p'}`);
+        store.incrementStat(`ask_secs_${secs <= 10 ? '0_10' : secs <= 30 ? '10_30' : '30p'}`);
         send({ done: true });
       } catch (e) {
         send({ error: ctrl.signal.aborted ? 'canceled' : String(e), engine: engine.id });

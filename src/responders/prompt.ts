@@ -15,9 +15,11 @@ export function composePrompt(req: ResponderRequest): string {
   if (req.excerpt) {
     parts.push(
       `Conversation around the anchor, extracted for you (rows labeled by ` +
-      `role; this usually answers locate/orient questions without tools). The ` +
-      `transcript file remains the source of truth — use your tools to verify ` +
-      `quotes and to read anything beyond this excerpt:\n\n${req.excerpt}`,
+      `role; this usually answers locate/orient questions without tools). It ` +
+      `covers ONLY the vicinity of the anchor — if the question is about the ` +
+      `whole session, or about anything not visible here, you MUST read the ` +
+      `transcript file; never present an excerpt-only view as the full ` +
+      `session. The transcript file remains the source of truth:\n\n${req.excerpt}`,
     );
   }
   if (req.branches) {
@@ -40,7 +42,7 @@ export function composePrompt(req: ResponderRequest): string {
   }
   parts.push(
     `Be grounded: cite what in the transcript or files supports your answer. ` +
-    `Answer concisely.`,
+    `Answer concisely, in the language the question is asked in.`,
   );
   for (const t of req.priorTurns) {
     parts.push(`${t.role === 'user' ? 'PRIOR QUESTION' : 'PRIOR ANSWER'}: ${t.text}`);
