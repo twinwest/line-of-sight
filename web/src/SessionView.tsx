@@ -122,8 +122,8 @@ function ReplyDraft({ sessionId, events, dialect }:
  *  — no DOM mutation, so a React re-render can't conflict (worst case the
  *  marks vanish early, and they're transient anyway). No-op where the API is
  *  missing or nothing matches; the message-level flash still locates the hit. */
-function markMatches(el: Element, query: string): boolean {
-  if (!('highlights' in CSS) || !query) return false;
+function markMatches(el: Element, query: string): Range[] | null {
+  if (!('highlights' in CSS) || !query) return null;
   // concatenate all text nodes so a match split across nodes (bold spans,
   // syntax-highlighted code tokens) still marks — a Range may start and end
   // in different nodes, and the Highlight API accepts that
@@ -139,7 +139,7 @@ function markMatches(el: Element, query: string): boolean {
   const hay = all.toLowerCase();
   const q = query.toLowerCase();
   // rare case-folds change string length (İ → i̇) and would skew every offset
-  if (hay.length !== all.length) return false;
+  if (hay.length !== all.length) return null;
   // position in the concatenation → (node, in-node offset)
   const locate = (pos: number): [Text, number] => {
     let i = nodes.length - 1;
@@ -154,9 +154,9 @@ function markMatches(el: Element, query: string): boolean {
     r.setEnd(endNode, endOff + 1);                        // end could sit past a node boundary
     ranges.push(r);
   }
-  if (!ranges.length) return false;
+  if (!ranges.length) return null;
   CSS.highlights.set('search-hit', new Highlight(...ranges));
-  return true;
+  return ranges;
 }
 
 export function SessionView({ id, targetMessageId = null, highlightQuery = null }:
@@ -203,12 +203,18 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
         if (target) {
           atBottom.current = false;
           target.scrollIntoView({ block: 'center' });
+          const marks = highlightQuery ? markMatches(target, highlightQuery) : null;
+          if (marks) {
+            // center the first match itself — a multi-screen message's center
+            // can sit far from the keyword the user came for
+            const r = marks[0]!.getBoundingClientRect();
+            const c = el.getBoundingClientRect();
+            el.scrollTop += r.top + r.height / 2 - (c.top + c.height / 2);
+          }
           target.classList.add('flash');
-          const marked = !!highlightQuery && markMatches(target, highlightQuery);
-          setTimeout(() => {
-            target.classList.remove('flash');
-            if (marked) CSS.highlights.delete('search-hit');
-          }, 2500);
+          // marks are not on this timer: they stay until the landing unmounts,
+          // like find-in-page — hunting around a long message takes >2.5s
+          setTimeout(() => target.classList.remove('flash'), 2500);
         } else {
           el.scrollTo({ top: el.scrollHeight });
         }
@@ -253,6 +259,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
       clearInterval(t);
       esRef.current?.close();
       document.removeEventListener('visibilitychange', onVisible);
+      if ('highlights' in CSS) CSS.highlights.delete('search-hit');
     };
   }, [id, refreshChats, applyMeta]);
 
