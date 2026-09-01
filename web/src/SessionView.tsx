@@ -123,18 +123,36 @@ function ReplyDraft({ sessionId, events, dialect }:
  *  marks vanish early, and they're transient anyway). No-op where the API is
  *  missing or nothing matches; the message-level flash still locates the hit. */
 function markMatches(el: Element, query: string): boolean {
-  if (!('highlights' in CSS)) return false;
-  const q = query.toLowerCase();
-  const ranges: Range[] = [];
+  if (!('highlights' in CSS) || !query) return false;
+  // concatenate all text nodes so a match split across nodes (bold spans,
+  // syntax-highlighted code tokens) still marks — a Range may start and end
+  // in different nodes, and the Highlight API accepts that
+  const nodes: Text[] = [];
+  const starts: number[] = [];
+  let all = '';
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent?.toLowerCase() ?? '';
-    for (let i = text.indexOf(q); i >= 0; i = text.indexOf(q, i + q.length)) {
-      const r = new Range();
-      r.setStart(node, i);
-      r.setEnd(node, i + q.length);
-      ranges.push(r);
-    }
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    nodes.push(n as Text);
+    starts.push(all.length);
+    all += (n as Text).data;
+  }
+  const hay = all.toLowerCase();
+  const q = query.toLowerCase();
+  // rare case-folds change string length (İ → i̇) and would skew every offset
+  if (hay.length !== all.length) return false;
+  // position in the concatenation → (node, in-node offset)
+  const locate = (pos: number): [Text, number] => {
+    let i = nodes.length - 1;
+    while (i > 0 && starts[i]! > pos) i--;
+    return [nodes[i]!, pos - starts[i]!];
+  };
+  const ranges: Range[] = [];
+  for (let i = hay.indexOf(q); i >= 0; i = hay.indexOf(q, i + q.length)) {
+    const r = new Range();
+    r.setStart(...locate(i));
+    const [endNode, endOff] = locate(i + q.length - 1);   // last char, not end —
+    r.setEnd(endNode, endOff + 1);                        // end could sit past a node boundary
+    ranges.push(r);
   }
   if (!ranges.length) return false;
   CSS.highlights.set('search-hit', new Highlight(...ranges));

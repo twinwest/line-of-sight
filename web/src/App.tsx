@@ -124,8 +124,8 @@ export function App() {
         </span>
       </header>
       {sessionId
-        ? <SessionView key={`${sessionId}:${target ?? ''}`} id={sessionId} targetMessageId={target}
-            highlightQuery={query} />
+        ? <SessionView key={`${sessionId}:${target ?? ''}:${query ?? ''}`} id={sessionId}
+            targetMessageId={target} highlightQuery={query} />
         : <SessionList />}
     </div>
   );
