@@ -128,6 +128,9 @@ body {
 }
 
 .event.flash { animation: flash-bg 2.5s ease-out; }
+/* keyword marks on search landing — same look as the snippet's <mark>, so the
+   eye carries one visual from result list to transcript */
+::highlight(search-hit) { background: var(--accent); color: #fff; }
 @keyframes flash-bg {
   0%, 40% { box-shadow: 0 0 0 3px var(--accent); border-radius: 8px; }
   100% { box-shadow: 0 0 0 3px transparent; }

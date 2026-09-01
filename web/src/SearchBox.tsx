@@ -51,7 +51,7 @@ export function SearchBox() {
 
   const go = (h: SearchHit) => {
     setOpen(false);
-    nav(`/s/${h.sessionId}?m=${encodeURIComponent(h.messageId)}`);
+    nav(`/s/${h.sessionId}?m=${encodeURIComponent(h.messageId)}&q=${encodeURIComponent(q.trim())}`);
   };
 
   return (

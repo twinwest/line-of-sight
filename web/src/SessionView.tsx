@@ -118,8 +118,31 @@ function ReplyDraft({ sessionId, events, dialect }:
   );
 }
 
-export function SessionView({ id, targetMessageId = null }:
-    { id: string; targetMessageId?: string | null }) {
+/** Temporarily mark query matches inside el via the CSS Custom Highlight API
+ *  — no DOM mutation, so a React re-render can't conflict (worst case the
+ *  marks vanish early, and they're transient anyway). No-op where the API is
+ *  missing or nothing matches; the message-level flash still locates the hit. */
+function markMatches(el: Element, query: string): boolean {
+  if (!('highlights' in CSS)) return false;
+  const q = query.toLowerCase();
+  const ranges: Range[] = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent?.toLowerCase() ?? '';
+    for (let i = text.indexOf(q); i >= 0; i = text.indexOf(q, i + q.length)) {
+      const r = new Range();
+      r.setStart(node, i);
+      r.setEnd(node, i + q.length);
+      ranges.push(r);
+    }
+  }
+  if (!ranges.length) return false;
+  CSS.highlights.set('search-hit', new Highlight(...ranges));
+  return true;
+}
+
+export function SessionView({ id, targetMessageId = null, highlightQuery = null }:
+    { id: string; targetMessageId?: string | null; highlightQuery?: string | null }) {
   const [session, setSession] = useState<SessionMeta | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [children, setChildren] = useState<SessionMeta[]>([]);
@@ -163,7 +186,11 @@ export function SessionView({ id, targetMessageId = null }:
           atBottom.current = false;
           target.scrollIntoView({ block: 'center' });
           target.classList.add('flash');
-          setTimeout(() => target.classList.remove('flash'), 2500);
+          const marked = !!highlightQuery && markMatches(target, highlightQuery);
+          setTimeout(() => {
+            target.classList.remove('flash');
+            if (marked) CSS.highlights.delete('search-hit');
+          }, 2500);
         } else {
           el.scrollTo({ top: el.scrollHeight });
         }

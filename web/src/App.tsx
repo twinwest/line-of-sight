@@ -107,7 +107,9 @@ export function App() {
 
   const path = loc.split('?')[0]!;
   const sessionId = path.startsWith('/s/') ? path.slice(3) : null;
-  const target = new URLSearchParams(loc.split('?')[1] ?? '').get('m');
+  const params = new URLSearchParams(loc.split('?')[1] ?? '');
+  const target = params.get('m');
+  const query = params.get('q');
   return (
     <div className="app">
       <header className="topbar">
@@ -122,7 +124,8 @@ export function App() {
         </span>
       </header>
       {sessionId
-        ? <SessionView key={`${sessionId}:${target ?? ''}`} id={sessionId} targetMessageId={target} />
+        ? <SessionView key={`${sessionId}:${target ?? ''}`} id={sessionId} targetMessageId={target}
+            highlightQuery={query} />
         : <SessionList />}
     </div>
   );
