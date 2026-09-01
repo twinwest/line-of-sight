@@ -50,9 +50,9 @@ describe('codexEngineLabel', () => {
   it('reads top-level model + effort; ignores keys inside sections', () => {
     expect(codexEngineLabel(withConfig(
       'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "medium"\n[profiles.x]\nmodel = "other"\n')))
-      .toBe('codex · gpt-5.6-sol (medium)');
+      .toBe('gpt-5.6-sol (medium)');
     expect(codexEngineLabel(withConfig('model = "gpt-5.6-sol"\n')))
-      .toBe('codex · gpt-5.6-sol');
+      .toBe('gpt-5.6-sol');
   });
 
   it('no model key or no file → plain "codex"', () => {

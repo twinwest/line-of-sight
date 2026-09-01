@@ -72,8 +72,8 @@ export function codexEngineLabel(configPath = path.join(os.homedir(), '.codex', 
       else if (m?.[1] === 'model_reasoning_effort') effort = m[2]!;
     }
   } catch { /* no config → codex's own default model */ }
-  if (!model) return 'codex';
-  return effort ? `codex · ${model} (${effort})` : `codex · ${model}`;
+  if (!model) return 'codex';   // model unset → codex's own default, name unknown
+  return effort ? `${model} (${effort})` : model;
 }
 
 export const codexCliResponder: Responder = {
