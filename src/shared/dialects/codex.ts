@@ -118,6 +118,7 @@ function plumbing(text: string): Plumbing | null {
 
 export const codexDialect: Dialect = {
   displayName: 'codex',
+  resumeArgv: (id) => ['codex', 'resume', id],
   isBlockingUse,
   askQuestions,
   chosenAnswer,

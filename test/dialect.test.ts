@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dialectFor, genericDialect } from '../src/shared/dialects/index.js';
+import { dialectFor, genericDialect, resumeCommand } from '../src/shared/dialects/index.js';
 import type { RenderBlock, StoredEvent } from '../src/shared/types.js';
 
 describe('dialectFor', () => {
@@ -28,11 +28,26 @@ describe('genericDialect', () => {
     expect(d.editDiff({ ...tool, toolName: 'Edit',
       input: { old_string: 'a', new_string: 'b' } })).toBeNull();
     expect(d.plumbing('<task-notification>x')).toBeNull();
+    expect(d.resumeArgv('x')).toBeNull();
     const queueOp: StoredEvent = {
       id: 'e', seq: 1, kind: 'meta', role: null, ts: 0,
       body: { label: 'queue-operation', raw: { operation: 'enqueue', content: 'x' } },
     };
     expect(d.isQueueOp(queueOp)).toBe(false);
     expect(d.queuedInputs([queueOp])).toEqual([]);
+  });
+});
+
+describe('resumeCommand', () => {
+  it("cd + the agent's own resume argv, directory shell-quoted", () => {
+    expect(resumeCommand(dialectFor('claude-code'), 'a1b2-c3', "/Users/x/it's"))
+      .toBe("cd '/Users/x/it'\\''s' && claude --resume a1b2-c3");
+    expect(resumeCommand(dialectFor('codex'), 'a1b2-c3', null)).toBe('codex resume a1b2-c3');
+  });
+
+  it('null for agents without resume, and for ids that are not plain tokens', () => {
+    expect(resumeCommand(genericDialect, 'a1', '/p')).toBeNull();
+    for (const bad of ['-x', 'a b', 'a;rm', '../x', ''])
+      expect(resumeCommand(dialectFor('claude-code'), bad, '/p')).toBeNull();
   });
 });

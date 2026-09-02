@@ -28,6 +28,9 @@ export interface EditPair { oldText: string; newText: string }
 export interface Dialect {
   /** Session-badge label; generic fallback = the adapter id itself. */
   displayName: string;
+  /** argv that reopens this session in the agent's own CLI; null → no
+   *  resume for this agent. Composed into a copyable line by resumeCommand. */
+  resumeArgv(sessionId: string): string[] | null;
   /** tool_use where the agent stops for the user — never folds; an
    *  unresultted one at the tail means "waiting for you", not "generating". */
   isBlockingUse(b: RenderBlock): boolean;

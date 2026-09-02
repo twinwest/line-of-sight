@@ -166,6 +166,7 @@ function queuedInputs(events: StoredEvent[]): string[] {
 
 export const claudeCodeDialect: Dialect = {
   displayName: 'claude',
+  resumeArgv: (id) => ['claude', '--resume', id],
   isBlockingUse, askQuestions, chosenAnswer, isPlanUse, planMarkdown,
   planDraft, editDiff, plumbing, isQueueOp, queuedInputs,
 };
