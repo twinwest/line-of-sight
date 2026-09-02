@@ -359,7 +359,8 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
         <div className="event-head">
           <span className="role">{showRole ? event.role : ''}</span>
           <span className="event-actions">
-            <CopyButton text={md} label="Copy Markdown" />
+            {/* user input isn't markdown — it's what they typed; selection-copy covers it */}
+            {event.role !== 'user' && <CopyButton text={md} label="Copy Markdown" />}
             {event.ts > 0 && <span className="event-ts">
               {new Date(event.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
             </span>}
