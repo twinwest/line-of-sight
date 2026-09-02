@@ -65,6 +65,26 @@ describe('search', () => {
     expect(store.search('incremental')).toHaveLength(0);
   });
 
+  it('one hit per message: a resumed/forked copy is owned by the session that moved last', () => {
+    // s1's m1 (ts 1) copied verbatim into s2, which then went on (ts 5 > s1's last ts 3)
+    const store = makeStore();
+    store.upsertSession({
+      id: 's2', adapter: 'claude-code', filePath: '/f2', projectDir: '/p',
+      title: 'the fork', startedAt: 4, updatedAt: 4, messageCount: 0,
+    });
+    store.appendEvents('s2', [
+      { kind: 'message', id: 'm1', role: 'user', ts: 1,
+        blocks: [{ type: 'text', markdown: 'incremental parsing is great' }] },
+      { kind: 'message', id: 'm9', role: 'assistant', ts: 5,
+        blocks: [{ type: 'text', markdown: 'only in the fork' }] },
+    ], 100);
+    const hits = store.search('incremental');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ sessionId: 's2', messageId: 'm1', sessionTitle: 'the fork' });
+    expect(hits[0]).not.toHaveProperty('updatedAt');
+    expect(store.search('only in the fork')).toHaveLength(1);   // branch-only text is untouched
+  });
+
   it('empty query returns nothing', () => {
     expect(makeStore().search('  ')).toHaveLength(0);
   });

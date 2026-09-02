@@ -483,13 +483,23 @@ export class Store {
           SELECT session_id, id, substr(text_content, MAX(1, instr(text_content, ?) - 40), 120) snip
           FROM messages WHERE text_content LIKE '%' || ? || '%' LIMIT 100
         `).all(query, query);
-    const titleStmt = this.db.prepare('SELECT title FROM sessions WHERE id = ?');
-    return (rows as { session_id: string; id: string; snip: string }[]).map((r) => ({
-      sessionId: r.session_id,
-      sessionTitle: (titleStmt.get(r.session_id) as { title: string } | undefined)?.title ?? '',
-      messageId: r.id,
-      snippet: r.snip,
-    }));
+    const sessStmt = this.db.prepare('SELECT title, updated_at FROM sessions WHERE id = ?');
+    const hits = (rows as { session_id: string; id: string; snip: string }[]).map((r) => {
+      const s = sessStmt.get(r.session_id) as { title: string; updated_at: number } | undefined;
+      return { sessionId: r.session_id, sessionTitle: s?.title ?? '', messageId: r.id,
+        snippet: r.snip, updatedAt: s?.updated_at ?? 0 };
+    });
+    // One hit per message: a resume/fork copies earlier turns verbatim — same
+    // uuids — into a new file (101 shared ids across one pair on disk,
+    // DECISIONS 2026-09-02), so both sessions would land on the same text.
+    // The session that moved last owns the message; rank order is kept.
+    const owner = new Map<string, typeof hits[number]>();
+    for (const h of hits) {
+      const o = owner.get(h.messageId);
+      if (!o || h.updatedAt > o.updatedAt) owner.set(h.messageId, h);
+    }
+    return hits.filter((h) => owner.get(h.messageId) === h)
+      .map(({ updatedAt: _, ...h }) => h);
   }
 
   createSideChat(sessionId: string, anchorMessageId: string, anchorText: string): SideChat {
