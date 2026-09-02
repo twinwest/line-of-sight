@@ -416,7 +416,16 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   display: flex; align-items: center; padding: 0.5rem 0.75rem; gap: 0.4rem;
   border-bottom: 1px solid var(--border);
 }
-.panel-actions { margin-left: auto; display: flex; gap: 0.4rem; }
+/* actions float on the anchor quote's top-right corner; the head row above
+   only exists when sibling chips need it. Delete is destructive and low-
+   frequency — hidden until the quote is hovered (or the button is tabbed to). */
+.anchor-wrap { position: relative; }
+.anchor-wrap .panel-actions {
+  position: absolute; top: 0.85rem; right: 1rem; display: flex; gap: 0.3rem;
+}
+.anchor-wrap .copy-btn { background: var(--user-bg); }
+.anchor-wrap .delete { opacity: 0; transition: opacity 0.15s; }
+.anchor-wrap:hover .delete, .anchor-wrap .delete:focus-visible { opacity: 1; }
 .chat-chips { display: flex; gap: 0.25rem; }
 /* reuses .chip / .chip.active from below; margin-left pins the group to the topbar's end */
 .topbar-tools { display: flex; gap: 0.25rem; margin-left: auto; flex: none; }

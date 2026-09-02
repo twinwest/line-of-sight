@@ -7,6 +7,8 @@ import {
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
+const WIDTH_KEY = 'sight:panel-width';
+
 const PRESETS = ['What is this?', 'Why did the agent do this?', 'Any problems with this?'];
 
 export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChanged }: {
@@ -32,8 +34,10 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const lastQuestion = live?.question ?? '';
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ResponderStatus | null | undefined>(undefined);
-  const [anchorExpanded, setAnchorExpanded] = useState(false);
-  const [width, setWidth] = useState(400);
+  const [width, setWidth] = useState(() => {
+    const w = parseFloat(localStorage.getItem(WIDTH_KEY) ?? '');
+    return Number.isFinite(w) ? Math.min(700, Math.max(280, w)) : 400;
+  });
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true);
@@ -76,6 +80,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, [input]);
 
+  useEffect(() => { localStorage.setItem(WIDTH_KEY, String(width)); }, [width]);
+
   const busy = streaming !== null || (remote?.answering ?? false);
 
   const ask = (question: string) => {
@@ -98,34 +104,34 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
     addEventListener('pointerup', up);
   };
 
-  const anchorLong = chat.anchorText.length > 500;
-  const anchorShown = anchorExpanded || !anchorLong
-    ? chat.anchorText : chat.anchorText.slice(0, 500) + '…';
+  const close = () => {
+    if (turns.length === 0 && !busy) void deleteSideChat(chat.id).then(onChanged);
+    onClose();
+  };
 
   return (
     <aside className="side-panel" style={{ width }}>
       <div className="panel-drag" onPointerDown={startDrag} />
-      <div className="panel-head">
-        {siblings.length > 1 && (
+      {siblings.length > 1 && (
+        <div className="panel-head">
           <span className="chat-chips">
             {siblings.map((c, i) => (
               <button key={c.id} className={`chip ${c.id === chat.id ? 'active' : ''}`}
                 onClick={() => onSwitch(c)}>{i + 1}</button>
             ))}
           </span>
-        )}
+        </div>
+      )}
+      <div className="anchor-wrap">
+        <blockquote className="anchor">{chat.anchorText}</blockquote>
         <span className="panel-actions">
-          <button className="copy-btn" onClick={() => {
+          <button className="copy-btn delete" onClick={() => {
             void deleteSideChat(chat.id).then(onChanged);
             onClose();
           }}>Delete</button>
-          <button className="copy-btn" onClick={onClose}>✕</button>
+          <button className="copy-btn" onClick={close}>✕</button>
         </span>
       </div>
-      <blockquote className="anchor" onClick={() => setAnchorExpanded((v) => !v)}
-        title={anchorLong ? 'click to expand' : undefined}>
-        {anchorShown}
-      </blockquote>
       <div className="panel-body" ref={bodyRef} onScroll={onScroll}>
         {status?.engine === null && (
           <div className="setup-hint">
