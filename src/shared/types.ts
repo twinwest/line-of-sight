@@ -14,6 +14,9 @@ export interface SessionMeta {
   live?: boolean;          // API-only: agent process is active (never stored)
   waiting?: boolean;       // API-only: live, but parked on the user (see liveSessions)
   busySince?: number;      // API-only: when that state began (0 if unknown)
+  /** API-only: the process is verified alive but nothing has moved since this
+   *  stamp for longer than the stale cap — unverifiable, not busy, not idle. */
+  quietSince?: number;
   /** Transcript-derived turn state (agents with turn markers, e.g. codex
    *  task_started/task_complete). Corroborates process-alive-only live
    *  signals: false = the turn ended, an open TUI is just idle. */

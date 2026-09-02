@@ -173,6 +173,8 @@ body {
 .dot.busy { background: var(--live); animation: generating-pulse 1.6s ease-in-out infinite; }
 .dot.waiting { background: var(--accent); animation: generating-pulse 1.6s ease-in-out infinite; }
 .dot.done { background: var(--live); }
+/* process alive, nothing written past the stale cap: a ring, not a claim */
+.dot.unverifiable { background: transparent; border: 1.5px dashed var(--fg-dim); box-sizing: border-box; }
 
 /* ---- session view ---- */
 .session-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -311,6 +313,10 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 }
 .ask-option.picked { border-color: var(--accent); background: var(--user-bg); }
 .ask-desc { color: var(--fg-dim); font-size: 0.8rem; }
+
+/* the transcript tail when the process is alive but silent past the stale
+   cap — static: nothing is known to be happening */
+.quiet { color: var(--fg-dim); font-size: 0.85rem; padding: 0.4rem 0.3rem; }
 
 /* the transcript tail while the CLI is parked on a question/plan */
 .awaiting {

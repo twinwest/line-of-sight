@@ -4,7 +4,7 @@ import { nav } from './App';
 import { fetchSessions, type SessionMeta } from './api';
 import { CopyButton } from './Message';
 import { loadSeen } from './seen';
-import { DOT_TITLE, RANK, sessionStatus } from './status';
+import { dotTitle, RANK, sessionStatus } from './status';
 
 export function shortDir(dir: string | null): string {
   if (!dir) return '';
@@ -73,7 +73,7 @@ export function SessionList() {
         {shown.map(({ s, st }) => (
           <a key={s.id} className="session-row" href={`/s/${s.id}`}
              onClick={(e) => { e.preventDefault(); nav(`/s/${s.id}`); }}>
-            <span className={`dot ${st}`} title={DOT_TITLE[st]} />
+            <span className={`dot ${st}`} title={dotTitle(s, st, now)} />
             <span className="row-title">{s.title || '(untitled)'}</span>
             <span className={`badge ${s.adapter}`}>{dialectFor(s.adapter).displayName}</span>
             <span className="row-dir">{shortDir(s.projectDir)}</span>

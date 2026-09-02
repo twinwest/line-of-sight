@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionMeta } from '../src/shared/types.js';
-import { otherSessions, sessionStatus } from '../web/src/status.js';
+import { dotTitle, fmtQuiet, otherSessions, RANK, sessionStatus } from '../web/src/status.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -37,6 +37,36 @@ describe('otherSessions', () => {
 
   it('counts nothing when every other session is idle', () => {
     expect(otherSessions([meta('a'), meta('b')], 'cur', {}, NOW)).toEqual([]);
+  });
+});
+
+describe('unverifiable: process alive, nothing written past the stale cap', () => {
+  const MIN = 60_000;
+  const quiet = meta('q', { updatedAt: NOW - 34 * MIN, quietSince: NOW - 34 * MIN });
+
+  it('is its own status, and the title says how long the observer has heard nothing', () => {
+    expect(sessionStatus(quiet, {}, NOW)).toBe('unverifiable');
+    expect(dotTitle(quiet, 'unverifiable', NOW)).toBe('no update in 34m · process still alive');
+  });
+
+  it('stays in the switcher, after running sessions', () => {
+    const rows = otherSessions([quiet, meta('busy', { live: true })], 'cur', {}, NOW);
+    expect(rows.map((r) => r.st)).toEqual(['busy', 'unverifiable']);
+  });
+
+  it('ties with idle in rank — a week-old abandoned process sorts by recency, not above today', () => {
+    const old = meta('old', { updatedAt: NOW - 7 * 24 * 60 * MIN, quietSince: NOW - 7 * 24 * 60 * MIN });
+    const today = meta('today', { updatedAt: NOW - 60 * MIN });
+    const shown = [old, today]
+      .map((s) => ({ s, st: sessionStatus(s, { today: NOW }, NOW) }))
+      .sort((a, b) => RANK[a.st] - RANK[b.st] || b.s.updatedAt - a.s.updatedAt);
+    expect(shown.map((r) => r.s.id)).toEqual(['today', 'old']);
+  });
+
+  it('floors the silence so it never overstates', () => {
+    expect(fmtQuiet(34.9 * MIN)).toBe('34m');
+    expect(fmtQuiet(2.5 * 60 * MIN)).toBe('2h');
+    expect(fmtQuiet(3.9 * 24 * 60 * MIN)).toBe('3d');
   });
 });
 

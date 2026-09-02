@@ -2,7 +2,7 @@ import { dialectFor } from '../../src/shared/dialects';
 import { nav } from './App';
 import { fmtTime, shortDir, useSessions } from './SessionList';
 import { loadSeen } from './seen';
-import { DOT_TITLE, otherSessions } from './status';
+import { dotTitle, otherSessions } from './status';
 
 /** Topbar switcher for the other sessions that are running, waiting on you, or
  *  just finished — the session view's replacement for the search box, which is
@@ -38,7 +38,7 @@ export function SessionsPopover({ current }: { current: string }) {
                 <span className={`badge ${s.adapter}`}>{dialectFor(s.adapter).displayName}</span>
               </span>
               <span className="asks-meta">
-                {DOT_TITLE[st]} · {shortDir(s.projectDir)} · {fmtTime(s.updatedAt, now)}
+                {dotTitle(s, st, now)} · {shortDir(s.projectDir)} · {fmtTime(s.updatedAt, now)}
               </span>
             </button>
           ))}

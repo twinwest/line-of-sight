@@ -120,7 +120,10 @@ export function buildServer(store: Store, hub: SseHub,
       const busySince = s.state === 'alive' ? (m.turnStartedAt ?? 0) : s.since;
       const waiting = s.state === 'waiting' || (s.state === 'alive' && pendingAtTail(m));
       const lastSign = Math.max(busySince, m.updatedAt);
-      if (!waiting && now - lastSign > STALE_BUSY_MS) return m;
+      // stale: the process is verified alive (it is in the map) but nothing
+      // has moved — report how long, never "busy" (forever-green) and never
+      // plain "idle" (silence is not evidence the turn ended)
+      if (!waiting && now - lastSign > STALE_BUSY_MS) return { ...m, quietSince: lastSign };
       return { ...m, live: true, waiting, busySince };
     });
   };

@@ -26,7 +26,7 @@ function serverWith(quietFor: number, live: LiveMap,
 
 async function sessionRow(app: ReturnType<typeof buildServer>) {
   const res = await app.inject({ method: 'GET', url: '/api/sessions' });
-  return (res.json() as { id: string; live?: boolean; waiting?: boolean; busySince?: number }[])[0]!;
+  return (res.json() as { id: string; live?: boolean; waiting?: boolean; busySince?: number; quietSince?: number }[])[0]!;
 }
 
 describe('live flag: a busy claim needs corroboration', () => {
@@ -50,6 +50,14 @@ describe('live flag: a busy claim needs corroboration', () => {
     const row = await sessionRow(app);
     expect(row.live).toBeUndefined();
     expect(row.id).toBe('s1');
+    // …but not plain idle either: the pid is verified, only the writes stopped —
+    // the row says when the observer last heard anything (unverifiable)
+    expect(row.quietSince).toBeCloseTo(Date.now() - 3 * 60 * MIN, -3);
+  });
+
+  it('fresh busy carries no quiet stamp', async () => {
+    const app = serverWith(MIN, new Map([['s1', { state: 'busy', since: Date.now() - MIN }]]));
+    expect((await sessionRow(app)).quietSince).toBeUndefined();
   });
 
   it('waiting is exempt — parked on the user is open-ended', async () => {
@@ -64,7 +72,9 @@ describe('turn markers corroborate alive claims (codex flock)', () => {
 
   it('turn ended → an open-but-idle TUI greys immediately, fresh writes or not', async () => {
     const app = serverWith(0.5 * MIN, bare, { turnOpen: false });
-    expect((await sessionRow(app)).live).toBeUndefined();
+    const row = await sessionRow(app);
+    expect(row.live).toBeUndefined();
+    expect(row.quietSince).toBeUndefined();   // the turn ended: idle, not unverifiable
   });
 
   it('turn open → busy survives a long silent item, timer from turn start', async () => {
@@ -75,7 +85,9 @@ describe('turn markers corroborate alive claims (codex flock)', () => {
 
   it('no turn info (agent without markers, pre-marker rows) → staleness rule as before', async () => {
     expect((await sessionRow(serverWith(0.5 * MIN, bare))).live).toBe(true);
-    expect((await sessionRow(serverWith(60 * MIN, bare))).live).toBeUndefined();
+    const stale = await sessionRow(serverWith(60 * MIN, bare));
+    expect(stale.live).toBeUndefined();
+    expect(stale.quietSince).toBeCloseTo(Date.now() - 60 * MIN, -3);   // flock held, nothing moving
   });
 });
 
@@ -144,13 +156,15 @@ describe('subagent liveness follows the parent, bounded', () => {
     return buildServer(store, new SseHub(), () => new Map([['p', { state: 'busy', since: Date.now() }]]));
   }
   const child = async (app: ReturnType<typeof buildServer>) =>
-    ((await app.inject({ method: 'GET', url: '/api/sessions/p' })).json() as { children: { live?: boolean }[] }).children[0]!;
+    ((await app.inject({ method: 'GET', url: '/api/sessions/p' })).json() as { children: { live?: boolean; quietSince?: number }[] }).children[0]!;
 
   it('quiet for minutes but parent live and no end recorded: still running', async () => {
     expect((await child(withChild(5 * MIN, null))).live).toBe(true);
   });
   it('quiet past the cap: not running, even with no end recorded', async () => {
-    expect((await child(withChild(20 * MIN, null))).live).toBeUndefined();
+    const row = await child(withChild(20 * MIN, null));
+    expect(row.live).toBeUndefined();
+    expect(row.quietSince).toBeUndefined();   // a child has no process of its own to be unverifiable
   });
 });
 

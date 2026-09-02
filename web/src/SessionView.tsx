@@ -10,7 +10,7 @@ import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outco
 import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
 import { shortDir } from './SessionList';
-import { DOT_TITLE, RUNNING_MS, sessionStatus } from './status';
+import { dotTitle, RUNNING_MS, sessionStatus } from './status';
 import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
 
@@ -425,7 +425,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
   return (
     <div className="session-view">
       <div className="session-header">
-        <span className={`dot ${dotStatus}`} title={DOT_TITLE[dotStatus]} />
+        <span className={`dot ${dotStatus}`} title={dotTitle(session, dotStatus, Date.now())} />
         {session.parentId && (
           <a className="chip" href={`/s/${session.parentId}`} title="back to the session that spawned this subagent"
              onClick={(e) => { e.preventDefault(); nav(`/s/${session.parentId!}`); }}>↑ parent</a>
@@ -552,7 +552,9 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
               transcript-derived pendingEventId stays as the fallback. */}
           {session.waiting || pendingEventId
             ? <div className="awaiting">✋ waiting for your input in the CLI</div>
-            : session.live && <Generating since={session.busySince || lastMsgTs} />}
+            : session.quietSince
+              ? <div className="quiet">{dotTitle(session, 'unverifiable', Date.now())}</div>
+              : session.live && <Generating since={session.busySince || lastMsgTs} />}
           {queued.map((text, i) => (
             <div key={`q${i}`} className="event user queued">
               <span className="queued-tag">⏳ queued</span>{text}
