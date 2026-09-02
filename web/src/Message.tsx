@@ -357,7 +357,8 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
       {hasEventHead(event, dialect) && (
         <div className="event-head">
-          <span className="role">{showRole ? event.role : ''}</span>
+          {/* display-only: "assistant" is the wire-format role; this product's word is agent */}
+          <span className="role">{showRole ? (event.role === 'assistant' ? 'agent' : event.role) : ''}</span>
           <span className="event-actions">
             {/* user input isn't markdown — it's what they typed; selection-copy covers it */}
             {event.role !== 'user' && <CopyButton text={md} label="Copy Markdown" />}
