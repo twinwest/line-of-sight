@@ -7,7 +7,7 @@ import {
 } from './api';
 import { MD_COMPONENTS } from './Message';
 
-const PRESETS = ['What is this?', "What's the evidence for this?", 'What alternatives were ruled out?'];
+const PRESETS = ['What is this?', 'Why did the agent do this?', 'Any problems with this?'];
 
 export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChanged }: {
   chat: SideChat;
