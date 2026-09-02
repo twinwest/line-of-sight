@@ -391,6 +391,29 @@ GET  /api/health
 Serve `web/dist` statically at `/`. SPA routes: `/` (session list),
 `/s/:sessionId` (viewer, `?m=<messageId>` scroll target).
 
+### Liveness derivation (signals × rules × outcomes)
+
+The `live` / `waiting` / `busySince` fields on API session rows are never
+stored — they are derived per response across four layers (each rule decided
+separately, DECISIONS 2026-08-24 → 2026-09-01; this table is the whole
+machine in one place). Fail-open at every layer: `liveSessions()` returns an
+empty map on any error, and an empty map makes `withLive` pass rows through
+undecorated — dots grey out, nothing breaks.
+
+| # | Layer | Signal | Rule | Outcome |
+|---|-------|--------|------|---------|
+| 1a | claude-code adapter `liveSessions()` | `~/.claude/sessions/<pid>.json`: `status`, `pid`, `procStart`, `statusUpdatedAt` | file says busy/waiting AND the pid exists in one `ps` batch AND its start time matches `procStart` (recycled-pid guard). `ps` unusable → degrade to a bare pid-alive check (a recycled pid is cosmetic; a blacked-out running dot is the M5 bug) | live-map entry `busy` or `waiting`, `since = statusUpdatedAt` (0 if absent) |
+| 1b | codex adapter `liveSessions()` | flock on `~/.codex/thread-writer-locks/<uuid>.lock`, probed via one `lsof` batch | lock held ⇒ process exists; codex has no busy/idle vocabulary — layers 2–3 decide what it's doing | live-map entry `alive`, `since = 0` |
+| 2 | codex `parseLine` → store `turn_open` / `turn_started_at` | `event_msg` `task_*` lines (patch-only carriers, no display row) | `task_started` opens the turn; **any other** `task_*` subtype — including unobserved future ones — closes it (a stuck-open turn pins the busy dot; a wrongly-closed one just greys until the next `task_started`) | `turnOpen` + `turnStartedAt` on the session row. claude-code writes no turn markers → `turnOpen` stays `null` |
+| 3a | server `withLive` — subagent rows (`parentId` set) | parent's live-map entry, own `endedAt` + `updatedAt` | a subagent has no process of its own: it runs while its parent does, its end isn't recorded in the parent transcript, and it moved within `STALE_BUSY_MS` (a run killed with no task-notification must not read busy for hours) | `live: true, waiting: false`, else row unchanged |
+| 3b | server `withLive` | no live-map entry for the session | process gone or signal unavailable | row unchanged (not live) |
+| 3c | server `withLive` | `alive` AND `turnOpen === false` | process exists but the transcript says the turn ended — an open TUI sitting idle | row unchanged, grey immediately (`turnOpen: null` falls through to 3e instead) |
+| 3d | server `withLive` | `waiting` from the live map, or `alive` AND the stored tail parked on an unresultted blocking `tool_use` (`pendingBlockId` × `dialect.isBlockingUse`) | agents with a waiting vocabulary (claude) report it themselves; codex flushes pending calls, so its transcript can say so | `waiting: true` — and exempt from 3e: parked on the user is legitimately open-ended, and "waiting for you" is the signal the indicator exists to deliver |
+| 3e | server `withLive` — staleness backstop | `now − max(busySince, updatedAt) > STALE_BUSY_MS` (15 min) and not waiting | a `busy`/`alive` claim must be corroborated by something still moving — the CLI writes `status: busy` once at turn start and never refreshes it. Margin calibrated on claude's write batching (longest measured in-turn silence ~5.5 min) | row unchanged (not live) |
+| 3f | server `withLive` | everything above passed | | `live: true, waiting, busySince` = `turnStartedAt` (alive) or the live-map `since` (busy/waiting) |
+| 4a | web `status.ts` `sessionStatus` | API `waiting` / `live`, `updatedAt`, per-browser `seen` stamps | `waiting` → **waiting**; `live` → **busy**; updated < 10 min ago AND newer than `seen` → **done**; else **idle**. Deliberately no freshness→busy fallback: reaching the fallback means the probe said not-running and the user saw the tail, so "running" would lie in the common just-watched-it-finish case | one display status for list + switcher, ranked waiting > done > busy > idle (actionability) |
+| 4b | web `SessionView` `running` | `session.live` OR last real message row < 60 s old (`RUNNING_MS`; meta rows like `away_summary` excluded so they can't re-light the dot) | in-view freshness heuristic covers agents/versions with no live signal; long model turns write nothing, so `live` ORs in | trailing tool fold stays expanded (live-follow); view-header dot |
+
 ## 8. CLI behaviors (fail-open details)
 
 `sight claude [args...]`:
