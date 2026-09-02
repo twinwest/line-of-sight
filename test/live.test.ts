@@ -153,3 +153,11 @@ describe('subagent liveness follows the parent, bounded', () => {
     expect((await child(withChild(20 * MIN, null))).live).toBeUndefined();
   });
 });
+
+describe('CSP', () => {
+  it('every response forbids remote images (exfiltration channel)', async () => {
+    const app = serverWith(0, new Map());
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.headers['content-security-policy']).toBe("img-src 'self' data:");
+  });
+});

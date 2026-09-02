@@ -54,6 +54,15 @@ export function buildServer(store: Store, hub: SseHub,
   // so the CLI can tell a daemon that predates the current build
   const startedAt = Date.now();
 
+  // The viewer renders untrusted markdown (transcripts, responder answers);
+  // a remote image in it would auto-fetch on view — an exfiltration channel
+  // that violates "all user data stays local". CSP shuts it at the browser;
+  // everything the app itself loads is same-origin, so nothing else changes.
+  app.addHook('onSend', (_req, reply, payload, done) => {
+    reply.header('content-security-policy', "img-src 'self' data:");
+    done(null, payload);
+  });
+
   if (fs.existsSync(WEB_DIST)) {
     app.register(fastifyStatic, { root: WEB_DIST });
     // SPA fallback: non-/api paths serve the app shell
