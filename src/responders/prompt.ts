@@ -41,6 +41,14 @@ export function composePrompt(req: ResponderRequest): string {
         `you are not reading context around an abandoned copy.`);
   }
   parts.push(
+    `If the question asks for judgment (problems, correctness, a review): ` +
+    `read the relevant project files as they are NOW, not just the ` +
+    `transcript — the repo may have moved past the anchored moment, so a ` +
+    `problem the session already fixed must be reported as fixed, not as a ` +
+    `problem. Report only real problems, worst first, and skip style nits; ` +
+    `if it holds up, say so plainly.`,
+  );
+  parts.push(
     `Be grounded: cite what in the transcript or files supports your answer. ` +
     `Answer concisely, in the language the question is asked in.`,
   );
