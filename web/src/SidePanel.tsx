@@ -171,12 +171,26 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
           ))}
         </div>
       )}
-      {status?.engine && (
-        <div className="engine-row">
+      <form className="panel-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
+        <textarea ref={inputRef} rows={1} value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter breaks the line. isComposing means an IME
+            // has candidates open and this Enter is picking one — sending there
+            // would cut every CJK sentence short. The old <input> got that for
+            // free (browsers suppress form submit mid-composition); an explicit
+            // keydown handler has to check for it.
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            ask(input);
+          }}
+          placeholder="Ask about the selection…" disabled={busy} autoFocus />
+        <div className="input-foot">
           {/* engines with dropdowns need no text label — the selectors say
               what answers; label-only engines (codex) show their model */}
-          {!status.options && <span className="engine-label">{status.label ?? status.engine}</span>}
-          {status.options && <>
+          {status?.engine && !status.options &&
+            <span className="engine-label">{status.label ?? status.engine}</span>}
+          {status?.engine && status.options && <>
           <select
             title="responder model"
             value={status.responderModel}
@@ -196,23 +210,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             {['', ...status.options.efforts].map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
           </select>
           </>}
+          <button type="submit" disabled={busy || !input.trim()} title="Ask (Enter)">↑</button>
         </div>
-      )}
-      <form className="panel-input" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
-        <textarea ref={inputRef} rows={1} value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            // Enter sends, Shift+Enter breaks the line. isComposing means an IME
-            // has candidates open and this Enter is picking one — sending there
-            // would cut every CJK sentence short. The old <input> got that for
-            // free (browsers suppress form submit mid-composition); an explicit
-            // keydown handler has to check for it.
-            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
-            e.preventDefault();
-            ask(input);
-          }}
-          placeholder="Ask about the selection…" disabled={busy} />
-        <button type="submit" disabled={busy || !input.trim()}>Ask</button>
       </form>
     </aside>
   );
