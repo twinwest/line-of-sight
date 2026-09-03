@@ -436,9 +436,9 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
         {!session.parentId && (
           <span className="sh-id" title={`${session.id} — click to copy`}>
             <CopyButton text={() => session.id} label={session.id.slice(0, 8)} doneLabel="copied" />
+            <ResumeChip s={session} />
           </span>
         )}
-        {!session.parentId && <ResumeChip s={session} />}
         <span className="sh-dir">{shortDir(session.projectDir)}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
         {/* also the only way into a subagent whose Task row is outside the

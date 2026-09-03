@@ -188,7 +188,12 @@ body {
   white-space: nowrap; flex: 1; }
 .sh-time { color: var(--fg-dim); font-size: 0.8rem; flex: none; }
 .sh-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-.resume-chip { margin-left: 0.3rem; }
+/* the id chip's hover-revealed sibling: resume is a use of the id, not a fact
+   about the session, so it appears only while the pointer is on the id (header)
+   or the row (list, where the id itself is hover-revealed) — never a fifth
+   standing chip. Invisible = unclickable, so a miss on the id can't copy it. */
+.resume-chip { margin-left: 0.3rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.sh-id:hover .resume-chip, .session-row:hover .resume-chip { opacity: 1; pointer-events: auto; }
 
 /* left padding must exceed .margin-marker's -1.1rem offset, or the marker
    (the only way back into a closed side chat) gets clipped on narrow widths */
