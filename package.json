@@ -14,7 +14,8 @@
     "build": "tsc && vite build web",
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
     "test": "vitest run",
-    "dev": "vite web"
+    "dev": "vite web",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
@@ -42,5 +43,9 @@
   },
   "author": "Ray Qian",
   "repository": "github:twinwest/line-of-sight",
-  "homepage": "https://github.com/twinwest/line-of-sight#readme"
+  "homepage": "https://github.com/twinwest/line-of-sight#readme",
+  "files": [
+    "dist",
+    "web/dist"
+  ]
 }
