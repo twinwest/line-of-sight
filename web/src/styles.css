@@ -187,13 +187,7 @@ body {
 .sh-dir { color: var(--fg-dim); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; flex: 1; }
 .sh-time { color: var(--fg-dim); font-size: 0.8rem; flex: none; }
-.sh-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-/* the id chip's hover-revealed sibling: resume is a use of the id, not a fact
-   about the session, so it appears only while the pointer is on the id (header)
-   or the row (list, where the id itself is hover-revealed) — never a fifth
-   standing chip. Invisible = unclickable, so a miss on the id can't copy it. */
-.resume-chip { margin-left: 0.3rem; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
-.sh-id:hover .resume-chip, .session-row:hover .resume-chip { opacity: 1; pointer-events: auto; }
+.sh-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 /* left padding must exceed .margin-marker's -1.1rem offset, or the marker
    (the only way back into a closed side chat) gets clipped on narrow widths */
@@ -494,6 +488,16 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .asks-item .asks-q,
 .asks-item .asks-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
 .asks-meta { font-size: 0.72rem; color: var(--fg-dim); }
+
+/* id popover rows: label · value · copy. The value is real text — selectable,
+   wrapping — the copy button is the convenience, not the only way out. */
+.asks-list.facts { max-width: 36rem; }
+.fact {
+  display: grid; grid-template-columns: 3.4rem 1fr auto; gap: 0.6rem; align-items: baseline;
+  padding: 0.35rem 0.5rem; font-size: 0.8rem;
+}
+.fact-label { font-size: 0.68rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.fact code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: break-word; }
 
 /* Sessions switcher — an .asks-list hung off the topbar instead of the session
    header, so it shares .type-controls' offset (both chips sit in .topbar-tools). */

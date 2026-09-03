@@ -5,11 +5,11 @@ import {
   createSideChat, fetchSession, fetchSessionMeta, fetchSideChats,
   type SessionMeta, type SideChat, type StoredEvent,
 } from './api';
-import { dialectFor, genericDialect, type Dialect } from '../../src/shared/dialects';
+import { dialectFor, genericDialect, resumeCommand, type Dialect } from '../../src/shared/dialects';
 import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
 import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
-import { ResumeChip, shortDir } from './SessionList';
+import { shortDir } from './SessionList';
 import { dotTitle, RUNNING_MS, sessionStatus } from './status';
 import { SidePanel } from './SidePanel';
 import { buildTurns, isUserPrompt } from './turns';
@@ -422,6 +422,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
   if (!session) return <div className="page">Loading…</div>;
   // same derivation as the list's dot; viewing = seen, so 'done' can't occur here
   const dotStatus = sessionStatus(session, { [session.id]: Date.now() }, Date.now());
+  const resumeCmd = resumeCommand(dialect, session.id, session.projectDir);
   return (
     <div className="session-view">
       <div className="session-header">
@@ -432,15 +433,36 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
         )}
         <span className="sh-title" title={session.title}>{session.title || '(untitled)'}</span>
         <span className={`badge ${session.adapter}`}>{session.parentId ? 'subagent' : dialect.displayName}</span>
-        {/* subagent ids are Line of Sight's own, not CLI session ids — nothing to copy */}
-        {!session.parentId && (
-          <span className="sh-id" title={`${session.id} — click to copy`}>
-            <CopyButton text={() => session.id} label={session.id.slice(0, 8)} doneLabel="copied" />
-            <ResumeChip s={session} />
-          </span>
-        )}
         <span className="sh-dir">{shortDir(session.projectDir)}</span>
         <span className="sh-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : ''}</span>
+        {/* subagent ids are Line of Sight's own, not CLI session ids — nothing
+            to copy or resume. The chip sits with the header's other popover
+            chips: the id is a fact, but both of its uses (copy, resume) are
+            actions, and the header keeps its actions at the row's end. */}
+        {!session.parentId && (
+          <>
+            <button className="chip sh-id" popoverTarget="session-id"
+              title="session id — click for the full id and the resume command">
+              {session.id.slice(0, 8)}
+            </button>
+            <div id="session-id" className="asks-list facts" popover="auto">
+              <div className="fact">
+                <span className="fact-label">id</span>
+                <code>{session.id}</code>
+                <CopyButton text={() => session.id} label="copy" doneLabel="copied" />
+              </div>
+              {resumeCmd && (
+                <div className="fact">
+                  <span className="fact-label">resume</span>
+                  {/* shown as two lines (cd, then the agent) — `&&` before a
+                      newline is still one command if selection-copied */}
+                  <code>{resumeCmd.replace(' && ', ' &&\n')}</code>
+                  <CopyButton text={() => resumeCmd} label="copy" doneLabel="copied" />
+                </div>
+              )}
+            </div>
+          </>
+        )}
         {/* also the only way into a subagent whose Task row is outside the
             loaded window, or whose meta.json never linked it to one */}
         {children.length > 0 && (

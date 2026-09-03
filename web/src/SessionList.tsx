@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { dialectFor, resumeCommand } from '../../src/shared/dialects';
+import { dialectFor } from '../../src/shared/dialects';
 import { nav } from './App';
 import { fetchSessions, type SessionMeta } from './api';
 import { CopyButton } from './Message';
@@ -20,18 +20,6 @@ export function fmtTime(ts: number, now: number): string {
   const today = new Date().toDateString() === d.toDateString();
   return today ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/** Copies the one-liner that reopens the session in its own CLI; absent when
- *  the agent has no resume. Copy is the whole feature — no send (SPEC §6). */
-export function ResumeChip({ s }: { s: SessionMeta }) {
-  const cmd = resumeCommand(dialectFor(s.adapter), s.id, s.projectDir);
-  if (!cmd) return null;
-  return (
-    <span className="resume-chip" title={`${cmd} — click to copy`}>
-      <CopyButton text={() => cmd} label="resume" doneLabel="copied" />
-    </span>
-  );
 }
 
 /** Poll every session's meta. Only the first failure surfaces — a later blip
@@ -94,7 +82,6 @@ export function SessionList() {
             {/* stop both: propagation (the row's nav onClick) and default (the href) */}
             <span className="row-id" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
               <CopyButton text={() => s.id} label={s.id.slice(0, 8)} doneLabel="copied" />
-              <ResumeChip s={s} />
             </span>
           </a>
         ))}
