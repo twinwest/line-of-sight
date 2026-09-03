@@ -96,7 +96,7 @@ function stripMarkdown(src: string): string {
 
 /** Search-indexed text: dialog only — user input and agent output, stripped
  *  to what the reader saw. thinking, tool_use summaries and tool_result
- *  output are all out of scope (DECISIONS 2026-09-01). Excerpts (askContext)
+ *  output are all out of scope (decided 2026-09-01). Excerpts (askContext)
  *  use blocksText instead, so the responder still sees everything. */
 function textContent(ev: NormalizedEvent): string {
   if (ev.kind !== 'message') return '';
@@ -491,7 +491,7 @@ export class Store {
     });
     // One hit per message: a resume/fork copies earlier turns verbatim — same
     // uuids — into a new file (101 shared ids across one pair on disk,
-    // DECISIONS 2026-09-02), so both sessions would land on the same text.
+    // decided 2026-09-02), so both sessions would land on the same text.
     // The session that moved last owns the message; rank order is kept.
     const owner = new Map<string, typeof hits[number]>();
     for (const h of hits) {

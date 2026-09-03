@@ -48,7 +48,7 @@ function ThemeRow({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => v
  * pre-paint script in index.html mirrors these keys AND ranges — a resized
  * reader would get a layout jump on every load otherwise — keep them in sync.
  * Ranges: size ×0.85–1.3 covers the 16–21.5px needs of every macOS scaling
- * tier (TYPOGRAPHY §0.4); measure 30–60rem = 66–133 latin chars (§6.1). */
+ * tier; measure 30–60rem = 66–133 latin chars. */
 const SIZE_KEY = 'sight:font-scale';
 const MEASURE_KEY = 'sight:measure';
 const SIZE = { min: 0.85, max: 1.3, step: 0.05, initial: 1 };

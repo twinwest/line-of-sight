@@ -1,50 +1,29 @@
-# Line of Sight — Implementation Session Guide
+# Line of Sight — contributor guide
 
-You are implementing **Line of Sight**: a local-first, agent-agnostic companion viewer
-for coding-agent CLI sessions (Claude Code first, Codex CLI next). The full
-product rationale, scope, and technical design are already decided. 
+Line of Sight is a local-first, agent-agnostic companion viewer for coding-agent
+CLI sessions (Claude Code, Codex CLI). Read `docs/ARCHITECTURE.md` first.
+`docs/SPIKE_NOTES.md` documents the undocumented transcript formats the adapters
+parse; `docs/SPEC.md` is what v1 is and, just as important, is not.
 
-## Read in this order (all in `docs/`)
+## Hard rules (product promises — a change that breaks one is a bug)
 
-1. `docs/SPEC.md` — what we are building and, equally important, what we are NOT building
-2. `docs/ARCHITECTURE.md` — components, data model, interfaces, tech stack (all decided)
-3. `docs/PLAN.md` — ordered milestones M0–M5 with acceptance criteria. **Start with M0 (spikes).**
-
-## Hard rules (from the product's design principles — violating these breaks the product)
-
-- **Fail-open, never in the critical path.** The `sight claude` wrapper must
-  behave exactly like bare `claude` even if every other part of Line of Sight is
-  broken. Daemon errors must never block or delay the wrapped agent.
-- **Line of Sight never writes to the user's repo or mutates any agent state.** The
-  Q&A responder gets read-only tools only. No write tools, no toggle.
+- **Fail-open, never in the critical path.** `sight claude` must behave exactly
+  like bare `claude` even if every other part of Line of Sight is broken.
+  Daemon errors never block or delay the wrapped agent.
+- **Never write to the user's repo or mutate agent state.** The Q&A responder
+  gets read-only tools only. No write tools, no toggle.
 - **All user data stays local.** No network calls except the responder
-  invocations (which go through the user's own agent CLI or their own API key).
+  invocations, which go through the user's own agent CLI. No telemetry.
 - **Zero push.** The UI never interrupts, pops up, or prompts on its own.
-- **Parse transcripts defensively.** Transcript schemas are undocumented and
-  change between agent-CLI versions. Unknown entry types must render as a raw
-  fallback, never crash ingestion.
+- **Parse transcripts defensively.** Schemas are undocumented and change between
+  CLI versions. Unknown entry types render as a raw fallback, never crash
+  ingestion.
 
 ## Working style
 
-- Follow `docs/PLAN.md` milestone by milestone; each has acceptance criteria —
-  verify them before moving on.
-- **Decision log.** You have latitude on implementation details (anything the
-  docs don't pin down, or mark as "implementer's choice"). Record every
-  non-obvious decision in `docs/DECISIONS.md` (create it) **at the moment you
-  make it**, not retroactively. One entry each: date, milestone, what you
-  decided, why, and a tag — `[choice]` for decisions within your latitude,
-  `[deviation]` for anything that changes what SPEC/ARCHITECTURE/PLAN
-  prescribe. For a `[deviation]`, also update the affected doc in the same
-  commit. The hard rules above and SPEC §6 (the cut list) are not deviatable —
-  if one seems wrong, stop and leave a question in DECISIONS.md instead of
-  proceeding. The owner reviews this file at the end.
-- Commit at least at every milestone boundary (smaller commits welcome), so
-  the decision log and git history line up for review.
-- M0 spike findings go into `docs/SPIKE_NOTES.md` (create it). Later milestones
-  depend on those findings; if a spike contradicts an assumption in the docs,
-  update the doc and note the change.
-- TypeScript strict mode everywhere. `npm run typecheck && npm run test` must
-  pass before a milestone is called done.
-- Keep it lean: no speculative abstractions beyond the interfaces the docs
-  explicitly define (`Adapter`, `Responder`). Deferred features (see SPEC §6)
-  must not leak into v1 code.
+- TypeScript strict mode. `npm run typecheck && npm run test` must pass before
+  a change is done.
+- Keep it lean: no speculative abstractions beyond `Adapter` and `Responder`.
+  Deferred features (SPEC §6) are not scaffolded "for later".
+- A fix in one adapter must not change another adapter's behaviour. If it has
+  to, say so in the PR.

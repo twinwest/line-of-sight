@@ -50,8 +50,8 @@ hooks required (pure file-tailing keeps us fail-open and version-independent).
   rendering: `react-markdown` + `rehype-highlight` (code highlighting).
   Sanitize rendered HTML (transcripts contain untrusted content —
   agent/webpage text must not become live HTML/scripts).
-- **CLI**: hand-rolled dispatch, no arg-parsing library (see DECISIONS.md
-  2026-08-24 M4 — wrapper passthrough safety + startup latency).
+- **CLI**: hand-rolled dispatch, no arg-parsing library (wrapper passthrough safety + startup
+  latency; decided 2026-08-24).
   Distributed as an npm bin (`npm link` during dogfood).
   Note: publish as npm package `line-of-sight` (name verified available
   2026-08-19) with `"bin": {"sight": ...}`. The npm package `sight` itself is
@@ -129,7 +129,7 @@ export type NormalizedEvent =
   | { kind: 'unknown'; id: string; ts: number; raw: unknown };             // defensive fallback
 
 // Session metadata revealed mid-file (titles, cwd); applied by ingest with
-// title precedence custom > ai > prompt (see DECISIONS.md 2026-08-24).
+// title precedence custom > ai > prompt (decided 2026-08-24).
 export interface SessionPatch {
   projectDir?: string;
   title?: string;
@@ -189,7 +189,7 @@ only `fork-context-ref` is new (dropped as bookkeeping). Workflow-tool runs
 put their agents one level down, `subagents/workflows/<wf_id>/agent-*.jsonl`,
 beside a `journal.jsonl` ledger (skipped); their meta.json has no
 `toolUseId`, so they title as `workflow-subagent · <wf_id>` and have no row
-link (DECISIONS 2026-08-28).
+link (decided 2026-08-28).
 
 `listSessions()` returns `parent_id IS NULL` only — children are reached from
 their parent, never from the session list. `/api/sessions/:id` carries
@@ -205,7 +205,7 @@ No process signal of its own: subagents have no `~/.claude/sessions/
 `<task-notification>` line (async Agent/Task and Workflow calls; the
 tool_result is only a spawn-ack) or a sync Task's tool_result — and stored
 as `ended_at`; a child without one is running while its parent process is
-(DECISIONS 2026-08-28).
+(decided 2026-08-28).
 
 ### Ingestion pipeline
 
@@ -307,7 +307,7 @@ claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
 ```
 
 (WebFetch removed from the M0-era flag set and mutating tools hard-blocked —
-see DECISIONS.md 2026-08-24 M3: --allowedTools alone only auto-denies, while
+decided 2026-08-24: --allowedTools alone only auto-denies, while
 --disallowedTools removes the tools structurally; WebFetch would allow
 prompt-injection exfiltration of transcript text.)
 
@@ -345,7 +345,7 @@ into `~/.codex/sessions`. `--json` has no token deltas: completed
 `agent_message` items are the answer (item-sized chunks); `item.started`
 command executions feed the progress line. `responderModel`/
 `responderEffort` are NOT applied — they are claude-cli settings; codex
-runs on the user's own config.toml model. Details: DECISIONS 2026-08-27.
+runs on the user's own config.toml model. Decided 2026-08-27.
 
 ### Engine config
 
@@ -356,7 +356,7 @@ runs on the user's own config.toml model. Details: DECISIONS 2026-08-27.
   grounding) existed through 2026-08-31 and was cut: it never ran (requires
   both CLIs absent plus a hand-configured key — contradicting "a session on
   disk implies its CLI is installed"), and its tool-less grounding forced
-  every grounding improvement to be built twice. See DECISIONS 2026-08-31;
+  every grounding improvement to be built twice. Decided 2026-08-31;
   the Responder interface is the seam to rebuild it against if a real user
   needs one.
 
@@ -376,7 +376,7 @@ candidate.
 GET  /api/sessions?project=&q=            → SessionMeta[]
 GET  /api/sessions/:id                    → SessionMeta + events (paginated: ?before_seq=&limit=200)
 GET  /api/sessions/:id/stream             → SSE: new NormalizedEvents as they ingest
-GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippet }]  (match ranges U+0001…U+0002-delimited, no HTML — DECISIONS 2026-08-24 M4)
+GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippet }]  (match ranges U+0001…U+0002-delimited, no HTML — decided 2026-08-24 M4)
 GET  /api/side-chats?sessionId=           → SideChat[] (for margin markers)
 POST /api/side-chats                      → create { sessionId, anchorMessageId, anchorText }
 POST /api/side-chats/:id/ask              → body { question }; response = SSE stream of chunks; persists turn on completion
@@ -395,7 +395,7 @@ Serve `web/dist` statically at `/`. SPA routes: `/` (session list),
 
 The `live` / `waiting` / `busySince` / `quietSince` fields on API session rows are never
 stored — they are derived per response across four layers (each rule decided
-separately, DECISIONS 2026-08-24 → 2026-09-01; this table is the whole
+separately, settled between 2026-08-24 and 2026-09-01; this table is the whole
 machine in one place). Fail-open at every layer: `liveSessions()` returns an
 empty map on any error, and an empty map makes `withLive` pass rows through
 undecorated — dots grey out, nothing breaks.
@@ -409,7 +409,7 @@ undecorated — dots grey out, nothing breaks.
 | 3b | server `withLive` | no live-map entry for the session | process gone or signal unavailable | row unchanged (not live) |
 | 3c | server `withLive` | `alive` AND `turnOpen === false` | process exists but the transcript says the turn ended — an open TUI sitting idle | row unchanged, grey immediately (`turnOpen: null` falls through to 3e instead) |
 | 3d | server `withLive` | `waiting` from the live map, or `alive` AND the stored tail parked on an unresultted blocking `tool_use` (`pendingBlockId` × `dialect.isBlockingUse`) | agents with a waiting vocabulary (claude) report it themselves; codex flushes pending calls, so its transcript can say so | `waiting: true` — and exempt from 3e: parked on the user is legitimately open-ended, and "waiting for you" is the signal the indicator exists to deliver |
-| 3e | server `withLive` — staleness backstop | `now − max(busySince, updatedAt) > STALE_BUSY_MS` (15 min) and not waiting | a `busy`/`alive` claim must be corroborated by something still moving — the CLI writes `status: busy` once at turn start and never refreshes it. Margin calibrated on claude's write batching (longest measured in-turn silence ~5.5 min) | `quietSince = max(busySince, updatedAt)`, not live: the process is verified alive (it is in the map) but nothing moves — rendered *unverifiable* with the silence length, never busy (forever-green) and never plain idle (silence is not evidence the turn ended; DECISIONS 2026-09-02) |
+| 3e | server `withLive` — staleness backstop | `now − max(busySince, updatedAt) > STALE_BUSY_MS` (15 min) and not waiting | a `busy`/`alive` claim must be corroborated by something still moving — the CLI writes `status: busy` once at turn start and never refreshes it. Margin calibrated on claude's write batching (longest measured in-turn silence ~5.5 min) | `quietSince = max(busySince, updatedAt)`, not live: the process is verified alive (it is in the map) but nothing moves — rendered *unverifiable* with the silence length, never busy (forever-green) and never plain idle (silence is not evidence the turn ended; decided 2026-09-02) |
 | 3f | server `withLive` | everything above passed | | `live: true, waiting, busySince` = `turnStartedAt` (alive) or the live-map `since` (busy/waiting) |
 | 4a | web `status.ts` `sessionStatus` | API `waiting` / `live`, `updatedAt`, per-browser `seen` stamps | `waiting` → **waiting**; `live` → **busy**; `quietSince` → **unverifiable** (dashed ring, "no update in 34m · process still alive"); updated < 10 min ago AND newer than `seen` → **done**; else **idle**. Deliberately no freshness→busy fallback: reaching the fallback means the probe said not-running and the user saw the tail, so "running" would lie in the common just-watched-it-finish case | one display status for list + switcher, ranked waiting > done > busy > unverifiable = idle (actionability; unverifiable ties with idle so it sorts by recency — a week-old abandoned process must not float above today's sessions — but stays in the switcher, which drops only idle) |
 | 4b | web `SessionView` `running` | `session.live` OR last real message row < 60 s old (`RUNNING_MS`; meta rows like `away_summary` excluded so they can't re-light the dot) | in-view freshness heuristic covers agents/versions with no live signal; long model turns write nothing, so `live` ORs in | trailing tool fold stays expanded (live-follow); view-header dot |
@@ -448,7 +448,7 @@ returns null/false/[] — an agent without a dialect renders at the defensive
 floor (plain folds, no cards). Deliberately NOT adapter-side semantic
 normalization: presentation semantics churn fast and stored semantics would
 tax every iteration with a re-ingest; promote a semantic into shared types
-only once it recurs in ≥2 agents with the same shape (see DECISIONS
+only once it recurs in ≥2 agents with the same shape (decided
 2026-08-27).
 
 - Layout: left = content (list or transcript), right = collapsible side-chat

@@ -92,7 +92,7 @@ better-sqlite3 (v12, SQLite 3.53.4): `tokenize='trigram'` available.
 - **Limitation**: queries with < 3 chars return nothing (trigram needs 3) —
   including 2-char CJK words, which are common.
 - Decision: trigram FTS for queries ≥ 3 chars; `LIKE '%q%'` scan on
-  `messages.text_content` for shorter queries (see DECISIONS.md).
+  `messages.text_content` for shorter queries.
 
 ## Addendum 2026-08-25 — transcript write granularity (no token streaming)
 
@@ -125,7 +125,7 @@ t=19s  11 lines      +4KB in one write
 Two fields in `~/.claude/sessions/<pid>.json` were not being used and now are:
 `procStart` (UTC wall clock, no zone marker — `ps -o lstart=` prints the same
 instant in local time) and `statusUpdatedAt` (turn start, epoch ms). See
-DECISIONS.md 2026-08-25.
+decided 2026-08-25.
 
 ## Addendum 2026-08-26 — writes are batched per assistant message; `status: waiting`
 
@@ -164,7 +164,7 @@ transcript's byte size at 300ms while parking the CLI on a question:
 
   `waiting` is the CLI's own parked-on-the-user signal and is live — note the
   frozen transcript beside it. This is the only usable source for "the CLI
-  needs you"; `liveSessions()` now reports it (DECISIONS.md 2026-08-26).
+  needs you"; `liveSessions()` now reports it (decided 2026-08-26).
   Unverified: whether `waiting` also covers permission prompts (harmless
   either way — both mean the CLI needs the user), and what `shell` marks
   exactly (treated as not-live).
@@ -184,7 +184,7 @@ of its own ("it will read the plan from the file you wrote").
 - **Consequence**: the "pending plan is structurally unreachable" rule has a
   side door — the plan *content* (not the approval state) is visible early by
   recognizing Writes into `~/.claude/plans/`. The viewer promotes those to a
-  draft plan card (DECISIONS.md 2026-08-26).
+  draft plan card (decided 2026-08-26).
 - Unverified: which CC versions do this (older ones pass the plan only in
   `ExitPlanMode.input.plan`), and whether follow-up revisions use `Edit`
   (deltas — not promotable to a full-text card). Both degrade safely: no

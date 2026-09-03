@@ -123,7 +123,7 @@ export const codexDialect: Dialect = {
   askQuestions,
   chosenAnswer,
   // codex's Plan item is already visible markdown prose (adapter decision,
-  // DECISIONS 2026-08-27) — there is no approval tool to card-ify
+  // decided 2026-08-27) — there is no approval tool to card-ify
   isPlanUse: () => false,
   planMarkdown: () => null,
   planDraft: () => null,

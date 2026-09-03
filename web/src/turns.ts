@@ -1,7 +1,7 @@
 import type { Dialect } from '../../src/shared/dialects';
 import type { RenderBlock, StoredEvent } from './api';
 
-// Step folding (SPEC C2, DECISIONS 2026-08-25): sight is a readable re-layout
+// Step folding (SPEC C2, decided 2026-08-25): sight is a readable re-layout
 // of the CLI — every piece of prose the CLI shows stays visible; what folds
 // is machine plumbing. Contiguous runs of non-prose events (tool calls and
 // results, thinking-only rows, meta, plumbing user messages) collapse into

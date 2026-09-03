@@ -4,8 +4,6 @@ web/dist/
 .idea/
 .DS_Store
 
-# local-only docs (also purged from history before open-sourcing; see docs/OPEN_SOURCE_PREP.md)
-docs/OPEN_SOURCE_PREP.md
-docs/RESEARCH_HN_MIDDLE_CLASS.md
-docs/TYPOGRAPHY.md
-docs/DOGFOOD_LOG.md
+# owner-only notes: decision log, plans, research (never published)
+docs/private/
+CLAUDE.local.md

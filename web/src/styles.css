@@ -41,7 +41,7 @@ html, body, #root { height: 100%; margin: 0; }
    px would override the reader's own browser font-size setting, which rem-based
    sizing otherwise inherits. 106.25% = 17px at the 16px default, which puts an
    x-height of 0.508em at ~0.20° from 50cm on a default-scaled MacBook Pro —
-   roughly a printed book's angular size. See docs/TYPOGRAPHY.md.
+   roughly a printed book's angular size.
    --font-scale is the reader's own multiplier on top (Aa control — set by
    TypeControls in App.tsx and the pre-paint script in index.html). */
 html { font-size: calc(106.25% * var(--font-scale, 1)); }
@@ -197,7 +197,7 @@ body {
    research measures linear reading of *unfamiliar* text, while a transcript is
    content the reader already has context for and mostly scans. The column also
    has to hold code, which at 16px mono gets ~77 columns here — an 80-column line
-   scrolls a little rather than fitting outright (see docs/TYPOGRAPHY.md §2.1).
+   scrolls a little rather than fitting outright.
    Kept in rem so characters-per-line survives a change to the root size —
    which also holds for --measure, the Aa control's override (TypeControls):
    it too is in rem, so the size slider never changes characters-per-line. */
@@ -530,7 +530,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 /* flow-root contains the answer markdown's paragraph margins, which would
    otherwise collapse out of the turn and fight .turn's own margin. (It also
    used to contain a floated per-answer Copy button — removed 2026-08-26, see
-   DECISIONS: code blocks carry their own Copy, prose is selection-copied.) */
+   code blocks carry their own Copy, prose is selection-copied.) */
 .turn.assistant { padding: 0 0.1rem; display: flow-root; }
 /* responder activity: same species as the main view's "generating…" —
    small, dim, one steady line (ellipsis, full text in title), pulse carries

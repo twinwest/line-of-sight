@@ -5,7 +5,7 @@ import type { StoredEvent } from '../src/shared/types.js';
 
 const { isQueueOp, queuedInputs } = claudeCodeDialect;
 
-// Line shapes lifted from real 2026-08 transcripts (see DECISIONS 2026-08-26).
+// Line shapes lifted from real 2026-08 transcripts (decided 2026-08-26).
 
 const adapter = claudeCodeAdapter();
 const ctx = { filePath: '/t.jsonl', byteOffset: 0 };
