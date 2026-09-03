@@ -269,6 +269,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.95em;
 }
 .tool > summary .tool-name { font-weight: 600; }
+.tool > summary .tool-arg { color: var(--fg-dim); }
 /* Task rows: the one place a fold summary carries a link out of the session.
    Accent-colored so it reads as navigation, not as more of the tool's name.
    The summary's own ellipsis would eat the link, so those rows lay out as a
@@ -376,6 +377,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .md code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 .md :not(pre) > code {
   background: var(--code-bg); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.85em;
+  color: var(--hl-fn); /* backticked identifiers read as code, like the CLI */
 }
 .md table { border-collapse: collapse; display: block; overflow-x: auto; }
 .md th, .md td { border: 1px solid var(--border); padding: 0.25rem 0.6rem; }
