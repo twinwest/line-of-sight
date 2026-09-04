@@ -20,9 +20,9 @@ const toolResult = (id: string): StoredEvent => ({
   id, seq: ++seq, kind: 'message', role: 'user', ts: 0,
   body: [{ type: 'tool_result', toolUseId: null, summary: 's', output: 'o', isError: false }],
 });
-const thinking = (id: string): StoredEvent => ({
+const thinking = (id: string, text = 'hmm'): StoredEvent => ({
   id, seq: ++seq, kind: 'message', role: 'assistant', ts: 0,
-  body: [{ type: 'thinking', text: 'hmm' }],
+  body: [{ type: 'thinking', text }],
 });
 const meta = (id: string): StoredEvent => ({
   id, seq: ++seq, kind: 'meta', role: null, ts: 0, body: { label: 'system: away_summary', raw: {} },
@@ -79,6 +79,12 @@ describe('buildTurns (step folding: prose always visible)', () => {
       plumbing('x1'), meta('m1'), narration('c1')];
     const fold = buildTurns(events, claudeCodeDialect, { foldTail: true }).find((i) => i.type === 'fold')!;
     expect(fold.type === 'fold' && fold.steps).toBe(5);
+  });
+
+  it('redacted (empty) thinking renders no row, so it is not a step', () => {
+    const events = [prompt('p1'), tool('t1'), toolResult('r1'), thinking('th1', ''), tool('t2'), narration('c1')];
+    const fold = buildTurns(events, claudeCodeDialect, { foldTail: true }).find((i) => i.type === 'fold')!;
+    expect(fold.type === 'fold' && fold.steps).toBe(2);
   });
 
   it('session preamble (meta before first prompt) folds', () => {

@@ -52,10 +52,12 @@ function countSteps(events: StoredEvent[]): number {
   for (const e of events) {
     if (e.kind !== 'message') { n += 1; continue; }   // meta/unknown → one raw fold
     const bs = blocks(e);
-    const rows = bs.filter((b) => b.type === 'tool_use' || b.type === 'thinking' || b.type === 'raw').length;
+    // empty thinking (redacted) renders no row — see Message.tsx
+    const rows = bs.filter((b) => b.type === 'tool_use' || b.type === 'raw'
+      || (b.type === 'thinking' && b.text.trim() !== '')).length;
     // 0 rows: a pure tool_result carrier renders nothing; anything else
     // (plumbing text, …) renders one fold line
-    n += rows > 0 ? rows : (bs.every((b) => b.type === 'tool_result') ? 0 : 1);
+    n += rows > 0 ? rows : (bs.every((b) => b.type === 'tool_result' || b.type === 'thinking') ? 0 : 1);
   }
   return n;
 }

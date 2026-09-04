@@ -209,6 +209,9 @@ body {
 }
 
 .event { margin-bottom: 0.75rem; position: relative; }
+/* a message whose only block rendered nothing (redacted thinking) would
+   otherwise leave its margin behind as a phantom gap */
+.event:empty { display: none; }
 .event.user {
   background: var(--user-bg); border-radius: 10px; padding: 0.5rem 0.9rem;
 }

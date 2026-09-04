@@ -201,11 +201,14 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
         </div>
       );
     case 'thinking': {
+      // Claude Code redacts thinking to a bare signature (text ""): nothing to
+      // read, so no row — a fold that opens onto nothing is a broken promise.
+      if (!block.text.trim()) return null;
       // first line as information scent; CSS ellipsis handles the length
       const preview = block.text.trimStart().split('\n', 1)[0] ?? '';
       return (
         <details className="fold thinking">
-          <summary>✻ {preview || 'Thinking…'}</summary>
+          <summary>⏵ {preview}</summary>
           <div className="fold-body pre-wrap">{block.text}</div>
         </details>
       );
