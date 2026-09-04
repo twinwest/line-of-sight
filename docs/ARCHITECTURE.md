@@ -465,8 +465,10 @@ only once it recurs in ≥2 agents with the same shape (decided
 - Margin marker: absolute-positioned dot in the message gutter when
   `/api/side-chats` reports anchors for that message.
 - Keep state simple: React Query or plain fetch+useState; no Redux.
-- Dark/light: follow `prefers-color-scheme`; both must be readable (developer
-  audience defaults to dark).
+- Theme: four dark palettes borrowed from terminal themes (Gruvbox Dark Hard
+  default, Catppuccin Mocha, Tokyo Night, Dracula) plus one light, picked in
+  the Aa popover. Dark by default because the reader sits next to a dark
+  terminal, and the palette's job is to make that hop painless.
 
 ## 10. Error handling & logging
 

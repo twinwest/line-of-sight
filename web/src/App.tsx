@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { SearchBox } from './SearchBox';
 import { SessionList } from './SessionList';
 import { SessionsPopover } from './SessionsPopover';
@@ -9,24 +9,31 @@ export function nav(path: string): void {
   dispatchEvent(new PopStateEvent('popstate'));
 }
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = 'gruvbox' | 'catppuccin' | 'tokyo-night' | 'dracula' | 'light';
 const THEME_KEY = 'sight:theme';
-const THEMES: { id: Theme; icon: string; label: string }[] = [
-  { id: 'light', icon: '☀', label: 'Light' },
-  { id: 'dark', icon: '☾', label: 'Dark' },
-  { id: 'system', icon: '◐', label: 'Follow system' },
+/** `bg`/`accent` only paint the chip's swatch; the palettes live in styles.css.
+ *  The name is a hover title, not a label: the chip is the theme's own ground
+ *  with its accent on it, which is what the reader recognises from their
+ *  terminal — the word is a confirmation, not the way in. */
+const THEMES: { id: Theme; label: string; bg: string; accent: string }[] = [
+  { id: 'gruvbox', label: 'Gruvbox Dark Hard', bg: '#1d2021', accent: '#83a598' },
+  { id: 'catppuccin', label: 'Catppuccin Mocha', bg: '#1e1e2e', accent: '#89b4fa' },
+  { id: 'tokyo-night', label: 'Tokyo Night', bg: '#1a1b26', accent: '#7aa2f7' },
+  { id: 'dracula', label: 'Dracula', bg: '#282a36', accent: '#bd93f9' },
+  { id: 'light', label: 'Light', bg: '#fbfaf8', accent: '#0969da' },
 ];
 
-/** Anything unrecognised (or absent) means "follow the OS". */
+/** Absent, garbage, or a pre-2026-09-04 value (dark/system) means the
+ *  default: the reader arrived from a terminal, so it is dark. */
 function storedTheme(): Theme {
   const t = localStorage.getItem(THEME_KEY);
-  return t === 'light' || t === 'dark' ? t : 'system';
+  return THEMES.some((x) => x.id === t) ? (t as Theme) : 'gruvbox';
 }
 
-/** Sets `data-theme` on <html>; styles.css turns that into a color-scheme
- *  override and light-dark() does the rest. The pre-paint script in
- *  index.html duplicates this — React mounts too late to avoid a flash of the
- *  wrong palette — so keep THEME_KEY and the attribute in sync with it. */
+/** Sets `data-theme` on <html>; styles.css keys a full palette off it. The
+ *  pre-paint script in index.html duplicates this — React mounts too late to
+ *  avoid a flash of the wrong palette — so keep THEME_KEY and the id list in
+ *  sync with it. */
 function ThemeRow({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
   return (
     <div className="row">
@@ -34,9 +41,9 @@ function ThemeRow({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => v
       <span className="theme-toggle">
         {THEMES.map((t) => (
           <button key={t.id} className={`chip ${t.id === theme ? 'active' : ''}`}
-            title={t.label} aria-pressed={t.id === theme} onClick={() => setTheme(t.id)}>
-            {t.icon}
-          </button>
+            style={{ '--sw-bg': t.bg, '--sw-accent': t.accent } as CSSProperties}
+            title={t.label} aria-label={t.label} aria-pressed={t.id === theme}
+            onClick={() => setTheme(t.id)} />
         ))}
       </span>
     </div>
@@ -65,8 +72,7 @@ function TypeControls() {
   const [size, setSize] = useState(() => storedNum(SIZE_KEY, SIZE));
   const [measure, setMeasure] = useState(() => storedNum(MEASURE_KEY, MEASURE));
   useEffect(() => {
-    if (theme === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
   useEffect(() => {
@@ -93,7 +99,7 @@ function TypeControls() {
             value={measure} onChange={(e) => setMeasure(e.currentTarget.valueAsNumber)} />
         </label>
         <button className="chip"
-          onClick={() => { setTheme('system'); setSize(SIZE.initial); setMeasure(MEASURE.initial); }}>
+          onClick={() => { setTheme('gruvbox'); setSize(SIZE.initial); setMeasure(MEASURE.initial); }}>
           Default
         </button>
       </div>

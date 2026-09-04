@@ -1,39 +1,68 @@
-/* Body text sits at ~12.2:1, not the 15.8:1 of #1f2328-on-white: past roughly
-   13:1 the extra contrast buys no legibility and starts to halate. --fg-dim is
-   held at ~5.9:1 (not the ~4.8:1 that pairs "naturally" with this bg) because
-   it colours .thinking, which is also italic — italic already spends the
-   readability budget once, the colour shouldn't spend it again. */
-/* One palette for both themes: light-dark() resolves against the *used*
-   color-scheme, so the theme picker is nothing but a color-scheme override —
-   no duplicated dark block, no media query to keep in sync. Setting
-   color-scheme also gets scrollbars and form controls themed for free. */
+/* Four dark palettes, all lifted from terminal themes, because the reader sits
+   next to a terminal and the cheapest way to make the hop painless is to look
+   like it — plus one light theme for daylight and the light-terminal minority.
+   The bare :root is Gruvbox Dark Hard, the default; the others override every
+   token, so a theme is one attribute on <html> and nothing else.
+   Contrast is held near 12:1 for --fg, not the ~15:1 of near-white on
+   near-black: past ~13:1 the extra buys no legibility and halates. --fg-dim
+   stays ≥ ~6.5:1 because it colours .thinking, which is also italic — italic
+   already spends the readability budget once, the colour shouldn't twice.
+   Gruvbox's --fg-dim is fg3 (#bdae93) not fg4 (#a89984, 5.9:1) for that reason. */
 :root {
-  color-scheme: light dark;
-  --bg:      light-dark(#fbfaf8, #16181c);
-  --bg2:     light-dark(#f3f2ef, #1c1f24);
-  --fg:      light-dark(#2e3338, #d6dae0);
-  --fg-dim:  light-dark(#5a6270, #949cab);
-  --border:  light-dark(#e6e3dd, #2b3038);
-  --accent:  light-dark(#4f6ef7, #7c93ff);
-  --user-bg: light-dark(#eef1fd, #1b2030);
-  --code-bg: light-dark(#f2f1ed, #1e2128);
-  --live:    light-dark(#2fb344, #3fd158);
+  color-scheme: dark;
+  --bg:      #1d2021;
+  --bg2:     #282828;
+  --fg:      #ebdbb2;
+  --fg-dim:  #bdae93;
+  --border:  #3c3836;
+  --accent:  #83a598;
+  --user-bg: #32302f;
+  --code-bg: #282828;
+  --live:    #b8bb26;
   /* Agent badges get their own hues so the badge stops competing with --accent,
      which already means "waiting for you" on the row's dot. */
-  --agent-claude-code: light-dark(#c2410c, #e88b6a);
-  --agent-codex:       light-dark(#4b5563, #9aa4b2);
-  --error:   light-dark(#d92d20, #f97066);
-  --hl-kw:   light-dark(#cf222e, #ff7b72);
-  --hl-str:  light-dark(#0a3069, #a5d6ff);
-  --hl-fn:   light-dark(#8250df, #d2a8ff);
-  --hl-cm:   light-dark(#6e7781, #8b949e);
-  --hl-num:  light-dark(#0550ae, #79c0ff);
+  --agent-claude-code: #fe8019;
+  --agent-codex:       #a89984;
+  --error:   #fb4934;
+  --hl-kw:   #fb4934;
+  --hl-str:  #b8bb26;
+  --hl-fn:   #d3869b;
+  --hl-cm:   #928374;
+  --hl-num:  #fabd2f;
 }
-/* An explicit pick beats the OS setting; "system" just removes the attribute. */
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"]  { color-scheme: dark; }
+:root[data-theme="catppuccin"] {
+  --bg: #1e1e2e; --bg2: #181825; --fg: #cdd6f4; --fg-dim: #a6adc8; --border: #313244;
+  --accent: #89b4fa; --user-bg: #2a2b3d; --code-bg: #181825; --live: #a6e3a1;
+  --agent-claude-code: #fab387; --agent-codex: #9399b2; --error: #f38ba8;
+  --hl-kw: #cba6f7; --hl-str: #a6e3a1; --hl-fn: #89b4fa; --hl-cm: #6c7086; --hl-num: #fab387;
+}
+:root[data-theme="tokyo-night"] {
+  --bg: #1a1b26; --bg2: #16161e; --fg: #c0caf5; --fg-dim: #9aa5ce; --border: #292e42;
+  --accent: #7aa2f7; --user-bg: #24283b; --code-bg: #16161e; --live: #9ece6a;
+  --agent-claude-code: #ff9e64; --agent-codex: #9aa5ce; --error: #f7768e;
+  --hl-kw: #bb9af7; --hl-str: #9ece6a; --hl-fn: #7aa2f7; --hl-cm: #565f89; --hl-num: #ff9e64;
+}
+:root[data-theme="dracula"] {
+  --bg: #282a36; --bg2: #21222c; --fg: #f8f8f2; --fg-dim: #a9afc4; --border: #44475a;
+  --accent: #bd93f9; --user-bg: #343746; --code-bg: #21222c; --live: #50fa7b;
+  --agent-claude-code: #ffb86c; --agent-codex: #a9afc4; --error: #ff5555;
+  --hl-kw: #ff79c6; --hl-str: #f1fa8c; --hl-fn: #50fa7b; --hl-cm: #6272a4; --hl-num: #bd93f9;
+}
+/* GitHub Light's syntax colours on warm neutrals, --fg held at 12.2:1 rather
+   than GitHub's 15.8:1 on pure white — the same no-halation rule as the dark
+   themes. --accent and --hl-cm are GitHub's own (5.2:1 / 5.7:1): the "waiting
+   for you" dot and comments need the extra contrast on a light ground. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fbfaf8; --bg2: #f3f2ef; --fg: #2e3338; --fg-dim: #5a6270; --border: #e6e3dd;
+  --accent: #0969da; --user-bg: #eef1fd; --code-bg: #f2f1ed; --live: #2fb344;
+  --agent-claude-code: #c2410c; --agent-codex: #4b5563; --error: #d92d20;
+  --hl-kw: #cf222e; --hl-str: #0a3069; --hl-fn: #8250df; --hl-cm: #59636e; --hl-num: #0550ae;
+}
 
 * { box-sizing: border-box; }
+/* JetBrains Mono ships ligatures (=> -> !=); code readers want the glyphs they typed. */
+code, pre, .tool-name, .tool-arg, .sh-id, .row-id { font-variant-ligatures: none; }
 html, body, #root { height: 100%; margin: 0; }
 
 /* Single source of truth for the whole type scale — every font-size below is in
@@ -84,7 +113,7 @@ body {
   border-radius: 6px; cursor: pointer; overflow-wrap: break-word;
 }
 .search-hit:hover { background: var(--bg2); }
-.search-hit mark { background: var(--accent); color: #fff; border-radius: 2px; padding: 0 1px; }
+.search-hit mark { background: var(--accent); color: var(--bg); border-radius: 2px; padding: 0 1px; }
 
 .jump-latest {
   position: fixed; bottom: 1.2rem; right: 1.5rem; z-index: 15;
@@ -130,7 +159,7 @@ body {
 .event.flash { animation: flash-bg 2.5s ease-out; }
 /* keyword marks on search landing — same look as the snippet's <mark>, so the
    eye carries one visual from result list to transcript */
-::highlight(search-hit) { background: var(--accent); color: #fff; }
+::highlight(search-hit) { background: var(--accent); color: var(--bg); }
 @keyframes flash-bg {
   0%, 40% { box-shadow: 0 0 0 3px var(--accent); border-radius: 8px; }
   100% { box-shadow: 0 0 0 3px transparent; }
@@ -161,7 +190,7 @@ body {
    high-entropy hex competing with title/dir; full strength on the hovered row */
 .row-id { opacity: 0.35; transition: opacity 0.15s; }
 .session-row:hover .row-id { opacity: 1; }
-.row-id .copy-btn { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.row-id .copy-btn { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 /* Bare .badge is the unknown-adapter fallback — neutral, not accent-blue. */
 .badge {
   font-size: 0.7rem; color: var(--fg-dim); border: 1px solid currentColor;
@@ -187,7 +216,7 @@ body {
 .sh-dir { color: var(--fg-dim); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; flex: 1; }
 .sh-time { color: var(--fg-dim); font-size: 0.8rem; flex: none; }
-.sh-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.sh-id { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 /* left padding must exceed .margin-marker's -1.1rem offset, or the marker
    (the only way back into a closed side chat) gets clipped on narrow widths */
@@ -269,7 +298,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
    carries the distinction, not color. The name takes the weight so it pops
    from the arg. 0.95em because mono runs visually large at equal size. */
 .tool > summary .tool-name, .tool > summary .tool-arg {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.95em;
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.95em;
 }
 .tool > summary .tool-name { font-weight: 600; }
 .tool > summary .tool-arg { color: var(--fg-dim); }
@@ -377,7 +406,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   background: var(--code-bg); border-radius: 8px; padding: 0.6rem 0.8rem;
   overflow-x: auto; font-size: 0.94rem; line-height: 1.45;
 }
-.md code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.md code { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 .md :not(pre) > code {
   background: var(--code-bg); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.85em;
   color: var(--hl-fn); /* backticked identifiers read as code, like the CLI */
@@ -401,7 +430,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 
 .ask-btn {
   position: fixed; transform: translate(-50%, -130%); z-index: 20;
-  background: var(--accent); color: #fff; border: none; border-radius: 6px;
+  background: var(--accent); color: var(--bg); border: none; border-radius: 6px;
   padding: 0.2rem 0.8rem; font: inherit; font-size: 0.82rem; cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
@@ -441,6 +470,15 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 /* reuses .chip / .chip.active from below; margin-left pins the group to the topbar's end */
 .topbar-tools { display: flex; gap: 0.25rem; margin-left: auto; flex: none; }
 .theme-toggle { display: flex; gap: 0.25rem; }
+/* A theme chip is a swatch, no text: the theme's own ground with its accent on
+   it (--sw-* set inline from THEMES); the name is the hover title. */
+.theme-toggle .chip {
+  width: 1.6rem; height: 1.3rem; padding: 0; background: var(--sw-bg);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.theme-toggle .chip::before {
+  content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--sw-accent);
+}
 .chip {
   border: 1px solid var(--border); background: none; color: var(--fg-dim);
   border-radius: 5px; font-size: 0.75rem; padding: 0 0.45rem; cursor: pointer;
@@ -502,7 +540,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   padding: 0.35rem 0.5rem; font-size: 0.8rem;
 }
 .fact-label { font-size: 0.68rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.06em; }
-.fact code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: break-word; }
+.fact code { font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: break-word; }
 
 /* Sessions switcher — an .asks-list hung off the topbar instead of the session
    header, so it shares .type-controls' offset (both chips sit in .topbar-tools). */
@@ -593,7 +631,7 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .input-foot button {
   margin-left: auto; flex: none;
   width: 1.6rem; height: 1.6rem; border-radius: 50%;
-  background: var(--accent); color: #fff; border: none;
+  background: var(--accent); color: var(--bg); border: none;
   font: inherit; font-size: 0.9rem; line-height: 1; cursor: pointer;
   display: grid; place-items: center;
 }
