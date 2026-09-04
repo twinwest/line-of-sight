@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
     "test": "vitest run",
     "dev": "vite web",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "preversion": "npm run typecheck && npm run test",
+    "postversion": "git push --follow-tags"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
