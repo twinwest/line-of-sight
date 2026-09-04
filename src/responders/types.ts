@@ -20,6 +20,11 @@ export interface Responder {
    *  e.g. "gpt-5.6-sol (medium)" from ~/.codex/config.toml. */
   label?(): string;
   available(): Promise<boolean>;
+  /** Optional: spawn the engine when the side chat opens, before the reader
+   *  has typed anything, so its startup overlaps the typing. Best-effort —
+   *  answer() must work identically whether or not this ran, and must never
+   *  surface a failed pre-spawn. */
+  prewarm?(chatId: string, projectDir: string | null): void;
   /** Streamed answer. MUST be read-only (per-engine enforcement).
    *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */
   answer(req: ResponderRequest, onChunk: (s: string) => void,
@@ -27,6 +32,9 @@ export interface Responder {
 }
 
 export interface ResponderRequest {
+  /** The side chat this question belongs to — an engine that pre-spawned for
+   *  it (Responder.prewarm) matches its standby process by this. */
+  chatId: string;
   question: string;
   anchorText: string;
   sessionFilePath: string;   // pointer — engine reads it itself when it has tools

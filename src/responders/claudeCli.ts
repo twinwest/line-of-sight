@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { type ChildProcess, type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { readConfig } from '../shared/config.js';
@@ -16,8 +16,11 @@ const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,W
 
 // Flags verified in M0 (SPIKE_NOTES S2): stream-json needs --verbose;
 // answer text arrives as stream_event/content_block_delta/text_delta lines.
-export const CLAUDE_ARGS = (prompt: string, opts: { model?: string; effort?: string } = {}): string[] => [
-  '-p', prompt,
+// prompt === null: the process is pre-spawned before the reader has typed the
+// question and reads it from stdin later (SPIKE_NOTES S2, 2026-09-04). Same
+// cage, same output format either way — only where the prompt comes from.
+export const CLAUDE_ARGS = (prompt: string | null, opts: { model?: string; effort?: string } = {}): string[] => [
+  '-p', ...(prompt === null ? ['--input-format', 'stream-json'] : [prompt]),
   '--allowedTools', ALLOWED_TOOLS,
   '--disallowedTools', DISALLOWED_TOOLS,
   // responder runs must not appear as sessions: the Q&A already lives in
@@ -98,6 +101,73 @@ export function statusFromStreamLine(line: string,
   return '';
 }
 
+// ── Pre-spawn ──────────────────────────────────────────────────────────────
+// A `claude -p` process spends ~1s booting node before it reads its prompt,
+// and the API handshake only starts once the prompt arrives (measured
+// 2026-09-04). So spawn when the side chat opens and hand the prompt over
+// when the reader has finished typing: 1.3s to a trivial answer instead of
+// 2.4s, on every first ask.
+//
+// ponytail: ONE slot, not a pool — the reader asks in the chat they just
+// opened. A second chat evicts the first; per-chat processes if that ever
+// stops being true.
+const WARM_IDLE_MS = 60_000;
+
+interface Warm { chatId: string; child: ChildProcessWithoutNullStreams; key: string; timer: NodeJS.Timeout }
+let warm: Warm | null = null;
+
+/** Model/effort at spawn time — a warm process pinned to stale settings must
+ *  not answer a question asked after the reader changed them. */
+function configKey(opts: { model?: string; effort?: string }): string {
+  return `${opts.model ?? ''}|${opts.effort ?? ''}`;
+}
+
+/** Release the slot without killing: the process is already gone. */
+function forget(child: ChildProcess): void {
+  if (warm?.child !== child) return;   // a newer prewarm already took the slot
+  clearTimeout(warm.timer);
+  warm = null;
+}
+
+function dropWarm(): void {
+  if (!warm) return;
+  const { child, timer } = warm;
+  warm = null;
+  clearTimeout(timer);
+  child.kill();
+}
+
+// the daemon exits via process.exit(), which does not reap children — without
+// this a stopped daemon leaves a `claude` process waiting on a stdin nobody
+// will ever write to
+process.on('exit', () => { warm?.child.kill(); });
+
+/** The warm process for this chat, or null — stale slot, dead process, or a
+ *  config change since it spawned all mean "spawn cold instead". */
+function takeWarm(chatId: string, key: string): ChildProcessWithoutNullStreams | null {
+  if (!warm || warm.chatId !== chatId || warm.key !== key) return null;
+  const { child, timer } = warm;
+  if (child.exitCode !== null || child.signalCode !== null) return null;
+  warm = null;
+  clearTimeout(timer);
+  return child;
+}
+
+/** Hand the prompt to a pre-spawned process as one stream-json user message.
+ *  Returns null if it won't take it — the caller then spawns cold (fail-open:
+ *  a broken standby is never a user-visible error). */
+function feed(child: ChildProcessWithoutNullStreams | null, prompt: string):
+    ChildProcessWithoutNullStreams | null {
+  if (!child) return null;
+  try {
+    child.stdin.end(`${JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } })}\n`);
+    return child;
+  } catch {
+    child.kill();
+    return null;
+  }
+}
+
 export const claudeCliResponder: Responder = {
   id: 'claude-cli',
   options: ANTHROPIC_OPTIONS,
@@ -108,17 +178,43 @@ export const claudeCliResponder: Responder = {
     });
   },
 
+  /** Spawn ahead of the question so node's boot happens while the reader
+   *  types; the prompt goes in over stdin. Best-effort by construction — a
+   *  failure here is silent and the ask spawns cold, as it always did. */
+  prewarm(chatId: string, projectDir: string | null): void {
+    dropWarm();
+    const { responderModel, responderEffort } = readConfig();
+    const opts = { model: responderModel, effort: responderEffort };
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      // default stdio is pipe on all three — stdin is the point of this spawn
+      child = spawn('claude', CLAUDE_ARGS(null, opts), { cwd: projectDir ?? os.homedir() });
+    } catch {
+      return;
+    }
+    child.on('error', () => forget(child));   // claude missing or unspawnable
+    child.on('exit', () => forget(child));
+    child.stdin.on('error', () => {});        // a broken pipe must not reach the daemon
+    const timer = setTimeout(dropWarm, WARM_IDLE_MS);
+    timer.unref();
+    warm = { chatId, child, key: configKey(opts), timer };
+  },
+
   answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal,
          onStatus?: (s: string) => void): Promise<string> {
     const { responderModel, responderEffort } = readConfig();
+    const opts = { model: responderModel, effort: responderEffort };
+    const prompt = composePrompt(req);
+    const hot = feed(takeWarm(req.chatId, configKey(opts)), prompt);
+    const child = hot ?? spawn('claude', CLAUDE_ARGS(prompt, opts), {
+      cwd: req.projectDir ?? os.homedir(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal,
+    });
+    // cancel kills either way: the cold path gets it from spawn's `signal`,
+    // but the warm process predates this AbortSignal
+    if (hot) signal.addEventListener('abort', () => hot.kill(), { once: true });
     return new Promise((resolve, reject) => {
-      const child = spawn('claude', CLAUDE_ARGS(composePrompt(req), {
-        model: responderModel, effort: responderEffort,
-      }), {
-        cwd: req.projectDir ?? os.homedir(),
-        stdio: ['ignore', 'pipe', 'pipe'],
-        signal,
-      });
       let answer = '';
       let stderr = '';
       let buf = '';

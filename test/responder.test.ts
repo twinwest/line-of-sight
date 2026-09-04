@@ -5,6 +5,7 @@ import { composePrompt } from '../src/responders/prompt.js';
 import { Store } from '../src/store/store.js';
 
 const REQ = {
+  chatId: 'chat-1',
   question: 'What is the evidence for this?',
   anchorText: 'the parser is incremental',
   sessionFilePath: '/home/u/.claude/projects/-p/abc.jsonl',
@@ -91,6 +92,13 @@ describe('claude-cli command construction', () => {
       expect(allowed).not.toContain(banned);
       expect(disallowed).toContain(banned);
     }
+  });
+
+  it('the pre-spawned variant differs only in where the prompt comes from', () => {
+    // null prompt = the process is spawned before the reader has typed and
+    // reads the question from stdin (#12); the cage must be identical
+    expect(CLAUDE_ARGS(null)).toEqual(
+      ['-p', '--input-format', 'stream-json', ...CLAUDE_ARGS('PROMPT').slice(2)]);
   });
 
   it('appends --model/--effort only when configured', () => {

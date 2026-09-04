@@ -435,3 +435,36 @@ folding, expandable. Abandoned branches are also the "alternatives ruled out"
 data the thesis presets want. Fixture: `test/fixtures/claude-code/
 rewind-branch.jsonl` (fork + nested fork + late-appended live branch,
 modeled on observed anatomy).
+
+## Addendum 2026-09-04 — `claude -p` cold start: the API handshake is lazy (issue #12)
+
+Measured on 2.1.260, to decide what a pre-spawned responder process can
+actually save. `--input-format stream-json` (with `--print`) makes `-p` read
+its prompt from stdin as `{"type":"user","message":{"role":"user","content":"…"}}`
+lines instead of argv, so the process can be started before the question
+exists.
+
+- **The process emits nothing until the first stdin message.** The
+  `{"type":"system","subtype":"init"}` line appears 30ms after the message is
+  written, whether that is at t=0 or t=3s. So the auth/init round trip does
+  not start at spawn — starting early cannot overlap it.
+- What *does* overlap is node's boot, ~1s. Trivial question, no tools:
+
+  | | send → answer |
+  |---|---|
+  | write immediately (equivalent to today's cold start) | 1.9–2.4s |
+  | process spawned 3s earlier | 1.3s |
+
+  Through the shipped responder, 4 trials each, same question: cold median
+  2.55s, pre-spawned median 1.73s.
+- On a real transcript-grounded question the saving is inside the noise:
+  6–18s answers, where model and network time dominate and vary by more than
+  the second saved.
+- The cage is unchanged on this path: same `--allowedTools`,
+  `--disallowedTools`, `--no-session-persistence`, `--setting-sources ''`.
+  Verified no new transcript appears in `~/.claude/projects/` after warm and
+  cold answers.
+- **Codex has nothing to warm.** `codex exec` reads its prompt from stdin when
+  stdin is piped (`Reading prompt from stdin...`), and the process is ready in
+  60–240ms — it is a Rust binary. Its ~3.5s is all after the prompt arrives
+  (auth, thread, model). Pre-spawning 3s early: 3.2–3.5s, i.e. ~0.3s.

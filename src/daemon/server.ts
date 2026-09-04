@@ -219,8 +219,16 @@ export function buildServer(store: Store, hub: SseHub,
       if (!sessionId || !anchorMessageId || !anchorText) {
         return reply.code(400).send({ error: 'sessionId, anchorMessageId, anchorText required' });
       }
-      if (!store.getSession(sessionId)) return reply.code(404).send({ error: 'session not found' });
-      return store.createSideChat(sessionId, anchorMessageId, anchorText);
+      const session = store.getSession(sessionId);
+      if (!session) return reply.code(404).send({ error: 'session not found' });
+      const chat = store.createSideChat(sessionId, anchorMessageId, anchorText);
+      // Spawn the engine while the reader types the question: node's ~1s boot
+      // is the part of a cold start that can be overlapped (measured
+      // 2026-09-04). Fire-and-forget — if it fails, the ask spawns cold.
+      void resolveResponder(session.adapter)
+        .then((engine) => engine?.prewarm?.(chat.id, session.projectDir))
+        .catch(() => {});
+      return chat;
     });
 
   // one in-flight answer per side chat
@@ -262,6 +270,7 @@ export function buildServer(store: Store, hub: SseHub,
       store.incrementStat('question_asked');
 
       const request: ResponderRequest = {
+        chatId: chat.id,
         question,
         anchorText: chat.anchorText,
         sessionFilePath: session.filePath,
