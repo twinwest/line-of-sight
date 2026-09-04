@@ -44,7 +44,10 @@
     "vitest": "^3.0.0"
   },
   "author": "Ray Qian",
-  "repository": "github:twinwest/line-of-sight",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/twinwest/line-of-sight.git"
+  },
   "homepage": "https://github.com/twinwest/line-of-sight#readme",
   "files": [
     "dist",
