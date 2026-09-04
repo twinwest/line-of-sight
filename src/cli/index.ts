@@ -7,13 +7,12 @@ import { PID_FILE, PORT, SIGHT_DIR } from '../shared/paths.js';
 
 const DAEMON_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'daemon', 'main.js');
 const URL_BASE = `http://127.0.0.1:${PORT}`;
-const OPEN_COOLDOWN_MS = 6 * 3600 * 1000;
 
-type Health = { ok: boolean; pid?: number; startedAt?: number; lastViewerOpen?: number };
+type Health = { ok: boolean; pid?: number; startedAt?: number; viewers?: number; viewerSeen?: number };
 
-async function health(timeoutMs = 500, includeLastOpen = false): Promise<Health> {
+async function health(timeoutMs = 500): Promise<Health> {
   try {
-    const res = await fetch(`${URL_BASE}/api/health${includeLastOpen ? '?includeLastOpen=1' : ''}`, {
+    const res = await fetch(`${URL_BASE}/api/health`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
     return res.ok ? ((await res.json()) as Health) : { ok: false };
@@ -88,7 +87,7 @@ async function wrap(agent: string, args: string[]): Promise<never> {
   try {
     const budget = new Promise<null>((r) => setTimeout(r, 1000, null));
     await Promise.race([budget, (async () => {
-      let h = await health(300, true);
+      let h = await health(300);
       if (h.ok && stale(h)) { await retire(h, 500); h = { ok: false }; }
       if (!h.ok) {
         spawnDaemon();
@@ -96,10 +95,13 @@ async function wrap(agent: string, args: string[]): Promise<never> {
         // daemon isn't healthy in time, open nothing (a dead tab is worse)
         for (let i = 0; i < 4 && !h.ok; i++) {
           await new Promise((r) => setTimeout(r, 150));
-          h = await health(200, true);
+          h = await health(200);
         }
       }
-      if (h.ok) openBrowserMaybe(h.lastViewerOpen ?? 0);
+      if (h.ok) {
+        if (process.stderr.isTTY) process.stderr.write(`sight: ${URL_BASE}\n`);
+        if (!viewerPresent(h)) openBrowser();
+      }
     })()]);
   } catch { /* fail-open: never block the agent */ }
 
@@ -118,8 +120,12 @@ async function wrap(agent: string, args: string[]): Promise<never> {
   });
 }
 
-function openBrowserMaybe(lastViewerOpen: number): void {
-  if (Date.now() - lastViewerOpen > OPEN_COOLDOWN_MS) openBrowser();
+/** A tab is open if a stream is connected or a viewer page asked for
+ *  anything recently. The list page polls every 10s, but a hidden tab's
+ *  timers get aligned to 1 min after a few minutes — hence the margin. */
+const VIEWER_SEEN_MS = 90_000;
+function viewerPresent(h: Health): boolean {
+  return (h.viewers ?? 0) > 0 || Date.now() - (h.viewerSeen ?? 0) < VIEWER_SEEN_MS;
 }
 
 async function cmdStart(): Promise<void> {

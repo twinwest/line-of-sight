@@ -168,6 +168,16 @@ describe('subagent liveness follows the parent, bounded', () => {
   });
 });
 
+describe('viewer presence', () => {
+  it('health counts viewer requests, not the CLI\'s own probes', async () => {
+    const app = serverWith(0, new Map());
+    const probe = async () => (await app.inject({ method: 'GET', url: '/api/health' })).json() as { viewers: number; viewerSeen: number };
+    expect(await probe()).toMatchObject({ viewers: 0, viewerSeen: 0 });
+    await app.inject({ method: 'GET', url: '/api/sessions' });
+    expect((await probe()).viewerSeen).toBeGreaterThan(0);
+  });
+});
+
 describe('CSP', () => {
   it('every response forbids remote images (exfiltration channel)', async () => {
     const app = serverWith(0, new Map());

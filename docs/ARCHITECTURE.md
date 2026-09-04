@@ -248,9 +248,11 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
 
 - FTS kept in sync with triggers or explicit insert-after-write (implementer's
   choice; test it).
-- The DB is derived data **except** `side_chats` and `stats` (user-owned;
-  never wiped by a re-index; `sight reindex` may drop/rebuild sessions +
-  messages only).
+- The DB is derived data **except** `side_chats`, `stats` and `kv` (user-owned;
+  never wiped). `sessions`, `messages` and the FTS index are dropped and
+  rebuilt from the transcripts whenever `SCHEMA_VERSION` changes (tracked in
+  `PRAGMA user_version`): an upgrade's first daemon start re-runs the initial
+  scan — seconds per hundred MB of transcripts. No column-level migrations.
 
 ## 6. Responder (the answering engine) — pluggable, decoupled from the viewed agent
 
@@ -422,10 +424,11 @@ undecorated — dots grey out, nothing breaks.
    `dist/daemon/main.js` was last written (`/api/health.startedAt`), in which
    case SIGTERM it first — spawn detached
    (`child_process.spawn(node daemonEntry, { detached: true, stdio: 'ignore' })`).
-2. Best-effort: open browser to `http://localhost:4989` **only if** no viewer
-   opened in the last 6h (daemon tracks last `viewer_open`; ask
-   `/api/health?includeLastOpen=1`); use `open` (macOS) via a small
-   cross-platform helper.
+2. Best-effort: print `sight: http://127.0.0.1:4989` (stderr, TTY only) and
+   open the browser **only if no viewer is open right now**. `/api/health`
+   reports open SSE streams (exact) and the time of the last viewer request
+   (the list page polls every 10s; hidden tabs get their timers aligned to
+   1 min, so a request within 90s counts). `open` (macOS) / `xdg-open`.
 3. Always: `spawn('claude', args, { stdio: 'inherit' })`; forward SIGINT/SIGTERM;
    `process.exit(childCode)`.
 Steps 1–2 failing must not delay step 3 by more than ~1s and must never abort it.

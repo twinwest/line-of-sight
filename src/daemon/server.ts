@@ -24,6 +24,12 @@ export class SseHub {
     res.on('close', () => { set.delete(res); });
   }
 
+  clientCount(): number {
+    let n = 0;
+    for (const set of this.clients.values()) n += set.size;
+    return n;
+  }
+
   broadcast(sessionId: string, events: StoredEvent[]): void {
     const set = this.clients.get(sessionId);
     if (!set?.size) return;
@@ -72,13 +78,18 @@ export function buildServer(store: Store, hub: SseHub,
     });
   }
 
-  app.get<{ Querystring: { includeLastOpen?: string } }>('/api/health', (req) => {
-    const base = { ok: true, pid: process.pid, startedAt };
-    if (req.query.includeLastOpen) {
-      return { ...base, lastViewerOpen: Number(store.getKv('last_viewer_open') ?? 0) };
+  // "Is a viewer open right now?" is what `sight claude` asks before opening
+  // a tab. Open streams are exact; the list page only polls, so its requests
+  // are stamped and the CLI applies a window. CLI probes don't count.
+  let viewerSeen = 0;
+  app.addHook('onRequest', (req, _reply, done) => {
+    const url = req.raw.url ?? '';
+    if (url.startsWith('/api/') && !url.startsWith('/api/health') && !url.endsWith('/reingest')) {
+      viewerSeen = Date.now();
     }
-    return base;
+    done();
   });
+  app.get('/api/health', () => ({ ok: true, pid: process.pid, startedAt, viewers: hub.clientCount(), viewerSeen }));
 
   /** Mark sessions whose agent process is active (see AgentAdapter.liveSessions).
    *  A `busy` claim also has to be corroborated by something still moving —
@@ -327,7 +338,6 @@ export function buildServer(store: Store, hub: SseHub,
   app.post<{ Params: { event: string } }>('/api/stats/:event', (req, reply) => {
     if (!STAT_EVENTS.has(req.params.event)) return reply.code(400).send({ error: 'unknown event' });
     store.incrementStat(req.params.event);
-    if (req.params.event === 'viewer_open') store.setKv('last_viewer_open', String(Date.now()));
     return { ok: true };
   });
 
