@@ -3,8 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // SPEC B6: no network except responder invocations. This test makes the
-// promise auditable — a grep
-// over src/, so a stray fetch() can't ship silently.
+// promise auditable — a grep over src/, so a stray fetch() can't ship silently.
 const SRC = path.join(__dirname, '..', 'src');
 const NET = /\bfetch\(|https?\.request\(|https?\.get\(|net\.connect\(|new WebSocket\(|from ['"](undici|axios|node-fetch|ws)['"]/;
 // The CLI's localhost health probe is the only sanctioned call site — the
