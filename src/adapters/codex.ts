@@ -33,7 +33,8 @@ const DROP_EVENTS = new Set(['token_count', 'thread_settings_applied']);
 // response_item types fully echoed by their item_completed projection
 // (verified over every local session: reasoning 33/33, messages/commands
 // covered with richer fields on the item side).
-const ECHOED = new Set(['message', 'reasoning', 'custom_tool_call', 'custom_tool_call_output']);
+// custom_tool_call is echoed too, except the escalation prompt (see parseLine).
+const ECHOED = new Set(['message', 'reasoning', 'custom_tool_call_output']);
 
 type Json = Record<string, unknown>;
 
@@ -42,6 +43,20 @@ function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content.map((c) => str((c as Json).text) ?? '').filter(Boolean).join('\n');
+}
+
+/** One JSON string literal out of code-mode exec text —
+ *  `tools.exec_command({cmd:"…","justification":"…"})` is JS with keys only
+ *  sometimes quoted, so the object can't be JSON.parsed whole. */
+function codeModeArg(input: string, key: string): string | null {
+  const m = new RegExp(`"?${key}"?:("(?:[^"\\\\]|\\\\.)*")`).exec(input);
+  if (!m) return null;
+  try {
+    const v: unknown = JSON.parse(m[1]!);
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The human-readable command: ["/bin/zsh","-lc",cmd] → cmd. */
@@ -258,6 +273,22 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       if (type === 'response_item') {
         const sub = str(payload.type);
         if (sub && ECHOED.has(sub)) return [];
+        if (sub === 'custom_tool_call') {
+          // exec with sandbox_permissions:require_escalated is the approval
+          // prompt: codex parks on the user until the output line lands
+          // (minutes, observed 2026-09-05), and the CommandExecution item
+          // echoes the call only after the run — this line is the one
+          // sighting of the prompt while it is on screen. Plain execs stay
+          // dropped, echoed by their item. The answer never reaches the
+          // transcript; the tail moving on is what clears the waiting state.
+          const input = str(payload.input) ?? '';
+          if (!input.includes('"sandbox_permissions":"require_escalated"')) return [];
+          const command = codeModeArg(input, 'cmd') ?? '';
+          return [{ kind: 'message', id: str(payload.id) ?? fallbackId, ts, role: 'assistant',
+            blocks: [{ type: 'tool_use', id: str(payload.call_id), toolName: 'approval',
+              summary: truncate(`approval ${command}`.trim(), 100),
+              input: { command, justification: codeModeArg(input, 'justification') ?? '' } }] }];
+        }
         if (sub === 'function_call') {
           // request_user_input & friends; arguments is a JSON string
           const name = str(payload.name) ?? 'tool';

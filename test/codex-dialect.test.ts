@@ -38,6 +38,12 @@ describe('codexDialect.askQuestions', () => {
     expect(codexDialect.askQuestions(use('exec', ASK_ARGS))).toBeNull();
     expect(codexDialect.isBlockingUse(use('exec', {}))).toBe(false);
   });
+
+  it('approval (sandbox escalation) blocks but is not a question card', () => {
+    const b = use('approval', { command: 'npm run test', justification: 'why' });
+    expect(codexDialect.isBlockingUse(b)).toBe(true);
+    expect(codexDialect.askQuestions(b)).toBeNull();
+  });
 });
 
 describe('codexDialect.chosenAnswer', () => {

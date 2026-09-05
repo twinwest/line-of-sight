@@ -148,6 +148,22 @@ describe('codexAdapter.parseLine', () => {
     }
   });
 
+  it('escalated exec custom_tool_call → approval use (the prompt codex parks on); plain exec dropped', () => {
+    // code-mode text, not JSON: unquoted cmd key, quoted rest (0.153.4, 2026-09-05)
+    const esc = 'text(await tools.exec_command({cmd:"npm run test","sandbox_permissions":"require_escalated",'
+      + '"justification":"沙箱阻止了 \\"ps\\"；是否允许在沙箱外重跑？","prefix_rule":["npm","run","test"]}));\n';
+    const [ev] = adapter.parseLine(line('response_item', { type: 'custom_tool_call', id: 'ctc1',
+      call_id: 'call_1', name: 'exec', input: esc }), ctx);
+    expect(ev).toMatchObject({ kind: 'message', id: 'ctc1', role: 'assistant' });
+    if (ev?.kind !== 'message') throw new Error('unreachable');
+    expect(ev.blocks[0]).toMatchObject({ type: 'tool_use', id: 'call_1', toolName: 'approval',
+      summary: 'approval npm run test',
+      input: { command: 'npm run test', justification: '沙箱阻止了 "ps"；是否允许在沙箱外重跑？' } });
+    const plain = 'const r = await tools.exec_command({cmd:"ls","workdir":"/repo"}); text(r.output);\n';
+    expect(adapter.parseLine(line('response_item', { type: 'custom_tool_call', id: 'ctc2',
+      call_id: 'call_2', name: 'exec', input: plain }), ctx)).toEqual([]);
+  });
+
   it('Extension/web.search → web_search use + result listing title and url', () => {
     const [ev] = adapter.parseLine(line('event_msg', { type: 'item_completed',
       item: { type: 'Extension', kind: 'web.search', id: 'exec-1', query: 'readme conventions',

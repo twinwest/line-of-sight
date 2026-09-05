@@ -492,3 +492,27 @@ Fixture: both shapes appended to `test/fixtures/codex/entries.jsonl`.
 Drift is handled reactively (an `unknown` row is the trigger, not a version
 bump); issues #13 (per-version fixture corpus) and #14 (census script) cut
 the triage cost.
+
+## Addendum 2026-09-05 (later) — the sandbox-escalation prompt is visible, as an unanswered `custom_tool_call`
+
+A TUI session with `approval_policy: on-request` was watched while parked on
+"是否允许在沙箱外运行…" three times (42s, 71s, 4.5min):
+
+- No dedicated event: nothing like `exec_approval_request` appears in any
+  local rollout, and the user's allow/deny is never written.
+- The `response_item/custom_tool_call` for the command IS flushed before
+  the prompt is answered. Its `input` is code-mode JS text, not JSON —
+  `text(await tools.exec_command({cmd:"npm run test","sandbox_permissions":
+  "require_escalated","justification":"…","prefix_rule":[…],…}));` — with
+  `cmd` unquoted and the rest quoted, so the object can't be `JSON.parse`d
+  whole; the individual string literals can.
+- The `custom_tool_call_output` (`Script running with cell ID N …`) and the
+  `item_completed/CommandExecution` echo land only after the run, so during
+  the wait the escalated call line is the transcript's only sighting of the
+  prompt.
+- `request_user_input` returns "unavailable in Default mode" on 0.153.4 (it
+  is a collaboration/plan-mode tool), so on the default path this prompt is
+  the main "waiting for you" state codex has.
+
+Adapter: escalated calls → `approval` tool_use (blocking in the dialect);
+plain calls stay dropped. Fixture line appended.

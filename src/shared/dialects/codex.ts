@@ -7,8 +7,11 @@ import type { AskOption, AskQuestion, Dialect, EditPair, Plumbing } from './type
 // its id-keyed answers, and apply_patch diffs. Defensive throughout: drift
 // degrades to the generic fold, never a crash.
 
+// approval = the sandbox-escalation prompt (adapter-synthesised from the
+// escalated custom_tool_call, decided 2026-09-05): no result ever pairs with
+// it, so pendingBlockId clears it once the next message lands.
 function isBlockingUse(b: RenderBlock): boolean {
-  return b.type === 'tool_use' && b.toolName === 'request_user_input';
+  return b.type === 'tool_use' && (b.toolName === 'request_user_input' || b.toolName === 'approval');
 }
 
 /** request_user_input input.questions:
