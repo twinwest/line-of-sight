@@ -47,8 +47,9 @@ describe('codexAdapter.parseLine', () => {
       sessionPatch: { projectDir: '/repo' } });
   });
 
-  it('bookkeeping drops: world_state, turn_context, token/settings event_msgs', () => {
+  it('bookkeeping drops: world_state, turn_context, token_usage_record, token/settings event_msgs', () => {
     expect(adapter.parseLine(line('world_state', {}), ctx)).toEqual([]);
+    expect(adapter.parseLine(line('token_usage_record', { usage: { total_tokens: 1 } }), ctx)).toEqual([]);
     expect(adapter.parseLine(line('turn_context', { cwd: '/x' }), ctx)).toEqual([]);
     for (const sub of ['token_count', 'thread_settings_applied']) {
       expect(adapter.parseLine(line('event_msg', { type: sub }), ctx)).toEqual([]);
@@ -145,6 +146,24 @@ describe('codexAdapter.parseLine', () => {
     for (const sub of ['message', 'reasoning', 'custom_tool_call', 'custom_tool_call_output']) {
       expect(adapter.parseLine(line('response_item', { type: sub, id: 'x' }), ctx)).toEqual([]);
     }
+  });
+
+  it('Extension/web.search → web_search use + result listing title and url', () => {
+    const [ev] = adapter.parseLine(line('event_msg', { type: 'item_completed',
+      item: { type: 'Extension', kind: 'web.search', id: 'exec-1', query: 'readme conventions',
+        results: [{ title: 'About READMEs', url: 'https://docs.github.com/readmes', snippet: 's' },
+          { title: 'Second', url: 'https://example.com/2' }] } }), ctx);
+    expect(ev).toMatchObject({ kind: 'message', id: 'exec-1', role: 'assistant' });
+    if (ev?.kind !== 'message') throw new Error('unreachable');
+    expect(ev.blocks[0]).toMatchObject({ type: 'tool_use', id: 'exec-1', toolName: 'web_search',
+      summary: 'web_search readme conventions', input: { query: 'readme conventions' } });
+    expect(ev.blocks[1]).toMatchObject({ type: 'tool_result', toolUseId: 'exec-1',
+      summary: '2 results', isError: false,
+      output: 'About READMEs\n  https://docs.github.com/readmes\nSecond\n  https://example.com/2' });
+    // an unobserved Extension kind is still unknown, not a bogus search
+    expect(adapter.parseLine(line('event_msg', { type: 'item_completed',
+      item: { type: 'Extension', kind: 'future.kind', id: 'e2' } }), ctx)[0])
+      .toMatchObject({ kind: 'unknown' });
   });
 
   it('unknown shapes fall through to unknown, never crash', () => {

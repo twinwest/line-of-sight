@@ -468,3 +468,27 @@ exists.
   stdin is piped (`Reading prompt from stdin...`), and the process is ready in
   60–240ms — it is a Rust binary. Its ~3.5s is all after the prompt arrives
   (auth, thread, model). Pre-spawning 3s early: 3.2–3.5s, i.e. ~0.3s.
+
+## Addendum 2026-09-05 — codex 0.153.4: `token_usage_record` + `Extension/web.search`
+
+One real session on 0.153.4 (44 lines) plus the five 0.150.1 sessions from
+before, censused by `(type, payload.type, item.type)` and filtered to what
+fell through to `unknown`:
+
+- **`token_usage_record`** (top-level, 6 lines, one per model response;
+  absent from every 0.150.1 file). Payload: thread/turn/response ids and
+  `usage`/`turn_token_usage`/`thread_token_usage` counters. Same substance as
+  `event_msg/token_count`, promoted to its own line. → `DROP_TYPES`.
+- **`event_msg/item_completed` with `item.type: "Extension"`**, always
+  `kind: "web.search"`: `{id: "exec-…", query, action: {type: "search",
+  query, queries}, results: [{type: "text_result", domain, ref_id, title,
+  url, snippet}]}`. Not new — one 0.150.1 session has three, missed in the
+  08-27 census. No `response_item` echo (that session's response_item
+  subtypes were only message/reasoning/custom_tool_call(_output)), so no
+  dedupe. → rendered as a `web_search` tool_use / tool_result pair listing
+  title + url; other `kind`s stay `unknown`.
+
+Fixture: both shapes appended to `test/fixtures/codex/entries.jsonl`.
+Drift is handled reactively (an `unknown` row is the trigger, not a version
+bump); issues #13 (per-version fixture corpus) and #14 (census script) cut
+the triage cost.

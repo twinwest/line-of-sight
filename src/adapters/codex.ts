@@ -6,7 +6,8 @@ import type { LiveSession, NormalizedEvent, RenderBlock, SessionPatch } from '..
 import type { AgentAdapter } from './types.js';
 import { parseTs, str, truncate } from './util.js';
 
-// Codex CLI rollout transcripts (0.150.x, SPIKE_NOTES 2026-08-27):
+// Codex CLI rollout transcripts (0.150.x–0.153.x, SPIKE_NOTES 2026-08-27 and
+// 2026-09-05):
 // ~/.codex/sessions/YYYY/MM/DD/rollout-<iso-ts>-<uuid>.jsonl, envelope
 // {timestamp, ordinal, type, payload}. Two parallel streams share the file:
 // raw model-API `response_item` lines and the TUI-level
@@ -26,7 +27,8 @@ const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.js
 // task_started/task_complete are NOT here: they are turn-boundary markers,
 // ingested as patch-only carriers (see parseLine) so liveness can tell a
 // generating session from an open-but-idle TUI.
-const DROP_TYPES = new Set(['world_state', 'turn_context']);
+// token_usage_record (0.153+) is token_count promoted to a top-level line.
+const DROP_TYPES = new Set(['world_state', 'turn_context', 'token_usage_record']);
 const DROP_EVENTS = new Set(['token_count', 'thread_settings_applied']);
 // response_item types fully echoed by their item_completed projection
 // (verified over every local session: reasoning 33/33, messages/commands
@@ -115,6 +117,23 @@ function itemToEvents(item: Json, ts: number, fallbackId: string): NormalizedEve
       if (!text?.trim()) return [{ kind: 'unknown', id, ts, raw: item }];
       return [{ kind: 'message', id, ts, role: 'assistant',
         blocks: [{ type: 'text', markdown: text }] }];
+    }
+    case 'Extension': {
+      // web search is the only observed kind: {query, results: [{title, url,
+      // snippet}]}; no response_item echo, so nothing to dedupe. Other kinds
+      // stay unknown until seen.
+      if (item.kind !== 'web.search') return [{ kind: 'unknown', id, ts, raw: item }];
+      const query = str(item.query) ?? '';
+      const results = (Array.isArray(item.results) ? item.results : []) as Json[];
+      const output = results
+        .map((r) => `${str(r.title) ?? ''}\n  ${str(r.url) ?? ''}`.trim()).filter(Boolean).join('\n');
+      const blocks: RenderBlock[] = [
+        { type: 'tool_use', id, toolName: 'web_search',
+          summary: truncate(`web_search ${query}`.trim(), 100), input: { query } },
+        { type: 'tool_result', toolUseId: id,
+          summary: `${results.length} results`, output, isError: false },
+      ];
+      return [{ kind: 'message', id, ts, role: 'assistant', blocks }];
     }
     default:
       return [{ kind: 'unknown', id, ts, raw: item }];
