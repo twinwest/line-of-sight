@@ -1,6 +1,6 @@
 {
   "name": "line-of-sight",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Your Claude Code and Codex sessions as a readable local page. Select any line and ask — the agent's context stays untouched.",
   "type": "module",
   "license": "MIT",
