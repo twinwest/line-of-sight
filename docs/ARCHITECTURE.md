@@ -19,7 +19,7 @@ doc and record the finding in `docs/SPIKE_NOTES.md`.
                 ▼                            │ Daemon (Node/TS, single │
  ┌──────────────────────────────┐  HTTP/SSE  │ process)                │
  │ Browser: http://localhost:   │◀──────────▶│  · Adapters (ingestion) │
- │ 4989  (React SPA)            │            │  · SQLite store + FTS5  │
+ │ 5120  (React SPA)            │            │  · SQLite store + FTS5  │
  │  · session list  · viewer    │            │  · HTTP API + SSE       │
  │  · select-to-ask · search    │            │  · Responder runner     │
  └──────────────────────────────┘            └───────────┬─────────────┘
@@ -383,7 +383,7 @@ runs on the user's own config.toml model. Decided 2026-08-27.
 If an engine cannot guarantee read-only, it must not be offered as a
 candidate.
 
-## 7. HTTP API (daemon, port 4989 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
+## 7. HTTP API (daemon, port 5120 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
 
 ```
 GET  /api/sessions?project=&q=            → SessionMeta[]
@@ -435,11 +435,15 @@ undecorated — dots grey out, nothing breaks.
    `dist/daemon/main.js` was last written (`/api/health.startedAt`), in which
    case SIGTERM it first — spawn detached
    (`child_process.spawn(node daemonEntry, { detached: true, stdio: 'ignore' })`).
-2. Best-effort: print `sight: http://127.0.0.1:4989` (stderr, TTY only) and
+2. Best-effort: print `sight: http://127.0.0.1:5120` (stderr, TTY only) and
    open the browser **only if no viewer is open right now**. `/api/health`
    reports open SSE streams (exact) and the time of the last viewer request
    (the list page polls every 10s; hidden tabs get their timers aligned to
    1 min, so a request within 90s counts). `open` (macOS) / `xdg-open`.
+   If the probes answer and the daemon is not there (port taken, crashed),
+   print one line pointing at `daemon.log` and `SIGHT_PORT`; a timed-out
+   probe (slow cold start) prints nothing. A foreign `/api/health` on the
+   port is not ours unless it carries `startedAt`.
 3. Always: `spawn('claude', args, { stdio: 'inherit' })`; forward SIGINT/SIGTERM;
    `process.exit(childCode)`.
 Steps 1–2 failing must not delay step 3 by more than ~1s and must never abort it.

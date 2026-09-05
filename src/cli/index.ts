@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PID_FILE, PORT, SIGHT_DIR } from '../shared/paths.js';
+import { LOG_FILE, PID_FILE, PORT, SIGHT_DIR } from '../shared/paths.js';
 
 const DAEMON_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'daemon', 'main.js');
 const URL_BASE = `http://127.0.0.1:${PORT}`;
@@ -15,7 +15,10 @@ async function health(timeoutMs = 500): Promise<Health> {
     const res = await fetch(`${URL_BASE}/api/health`, {
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.ok ? ((await res.json()) as Health) : { ok: false };
+    if (!res.ok) return { ok: false };
+    // another app on this port may answer /api/health too — only trust ours
+    const h = (await res.json()) as Health;
+    return h.ok === true && typeof h.startedAt === 'number' ? h : { ok: false };
   } catch {
     return { ok: false };
   }
@@ -101,6 +104,10 @@ async function wrap(agent: string, args: string[]): Promise<never> {
       if (h.ok) {
         if (process.stderr.isTTY) process.stderr.write(`sight: ${URL_BASE}\n`);
         if (!viewerPresent(h)) openBrowser();
+      } else if (process.stderr.isTTY) {
+        // probes came back (not timed out) and the daemon is not there — say
+        // so in one line; a viewer that silently never appears is worse
+        process.stderr.write(`sight: viewer unavailable (see ${LOG_FILE}; port ${PORT} taken? SIGHT_PORT overrides)\n`);
       }
     })()]);
   } catch { /* fail-open: never block the agent */ }

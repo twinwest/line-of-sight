@@ -4,12 +4,11 @@ Your Claude Code and Codex sessions as a local web page you can actually read.
 Select any line and ask about it. The answer comes from a second, read-only run
 of your own CLI, so the agent's context stays untouched.
 
-<!-- TODO(#11): docs/demo.gif — select a line, ask, answer streams in -->
 ![demo](docs/demo.gif)
 
 ```sh
 npm i -g line-of-sight
-sight claude    # instead of `claude` — same terminal, plus a viewer at localhost:4989
+sight claude    # instead of `claude` — same terminal, plus a viewer at localhost:5120
 sight codex     # same for Codex
 ```
 
