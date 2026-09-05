@@ -288,12 +288,9 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
 .diff-line.add { background: rgba(47, 179, 68, 0.12); color: var(--live); }
 .diff-line.skip { color: var(--fg-dim); font-style: italic; }
 .pre-wrap { white-space: pre-wrap; }
-/* Thinking is skimmed, not read closely — italic marks it as a different
-   register from the assistant's actual prose. The summary needs it too: the
-   fold is closed by default, so styling only the body leaves the row you
-   actually see in the transcript looking like every other fold. */
-.thinking > summary { font-style: italic; }
-.thinking .fold-body { color: var(--fg-dim); font-style: italic; }
+/* Thinking is skimmed, not read closely — italic + dim marks it as a
+   different register from the assistant's actual prose. */
+.thinking { font-size: 0.85rem; margin: 0.15rem 0; padding: 0.1rem 0.3rem; color: var(--fg-dim); font-style: italic; }
 /* Tool titles are code, thinking is prose — the register (mono vs italic)
    carries the distinction, not color. The name takes the weight so it pops
    from the arg. 0.95em because mono runs visually large at equal size. */

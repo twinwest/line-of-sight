@@ -58,7 +58,8 @@ a viewer.
   - Tool calls collapsed by default to a one-line summary
     (`⏵ Read src/foo.ts`, `⏵ Bash npm test — exit 0`); click to expand full
     input/output. Long outputs scroll within the block.
-  - Thinking blocks (if present in transcript) collapsed by default.
+  - Thinking blocks (if present in transcript) render inline as dim italic
+    prose; redacted (empty) ones render nothing.
   - **Step folding**: every piece of prose the CLI shows stays visible —
     user prompts and all assistant text. Contiguous runs of non-prose
     events (tool calls/results, thinking-only rows, meta, CLI-plumbing

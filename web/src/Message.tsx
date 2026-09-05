@@ -202,16 +202,12 @@ function Block({ block, eventId }: { block: RenderBlock; eventId: string }) {
       );
     case 'thinking': {
       // Claude Code redacts thinking to a bare signature (text ""): nothing to
-      // read, so no row — a fold that opens onto nothing is a broken promise.
+      // read, so no row.
       if (!block.text.trim()) return null;
-      // first line as information scent; CSS ellipsis handles the length
-      const preview = block.text.trimStart().split('\n', 1)[0] ?? '';
-      return (
-        <details className="fold thinking">
-          <summary>⏵ {preview}</summary>
-          <div className="fold-body pre-wrap">{block.text}</div>
-        </details>
-      );
+      // Not a fold (owner call, 2026-09-04): what survives redaction is a
+      // short, readable summary — folding it hid the one thought the reader
+      // came for behind a click.
+      return <div className="thinking pre-wrap">{block.text}</div>;
     }
     case 'tool_use': {
       // agent-specific cards (questions, plans, drafts) come from the
