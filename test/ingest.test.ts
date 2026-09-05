@@ -82,6 +82,32 @@ describe('incremental ingest', () => {
     upgraded.close();
   });
 
+  it('a transcript that leaves the disk takes its session with it', () => {
+    fs.writeFileSync(file, line('u1', 'first prompt'));
+    ingester.ingestFile(adapter(), file);
+    const chat = store.createSideChat(SESSION, 'u1', 'first');
+    fs.rmSync(file);
+    ingester.ingestFile(adapter(), file);              // what the unlink watcher enqueues
+    expect(store.getSession(SESSION)).toBeNull();
+    expect(store.getSideChat(chat.id)).toBeNull();
+    expect(store.search('first prompt')).toHaveLength(0);
+  });
+
+  it('start-up prune: gone transcripts, their children, orphaned side chats', () => {
+    fs.writeFileSync(file, line('u1', 'first prompt'));
+    ingester.ingestFile(adapter(), file);
+    const childFile = path.join(root, 'child.jsonl');
+    fs.writeFileSync(childFile, '');
+    store.upsertSession({ id: 'child', adapter: 'claude-code', filePath: childFile, projectDir: '/tmp/proj',
+      title: '', startedAt: 1, updatedAt: 1, messageCount: 0, parentId: SESSION });
+    store.createSideChat('ghost', 'm1', 'left behind by a rebuild');
+    fs.rmSync(file);
+    store.prune();
+    expect(store.getSession(SESSION)).toBeNull();
+    expect(store.getSession('child')).toBeNull();      // reached only via its parent
+    expect(store.listSideChats('ghost')).toHaveLength(0);
+  });
+
   it('a partial last line is not consumed until the newline arrives', () => {
     fs.writeFileSync(file, line('u1', 'hello') + '{"type":"user","uuid":"u2"');
     ingester.ingestFile(adapter(), file);

@@ -29,6 +29,7 @@ a viewer.
 | B6 | **Data local, persisted, portable** | Q&A records and usage stats live in `~/.sight/` (SQLite). Transcripts are read in place, never copied wholesale or uploaded. No telemetry. |
 | B7 | **Agent-agnostic, CLI-first** | Ingestion via per-agent adapters over local transcript files. v1 ships the Claude Code adapter; the adapter interface must make a Codex adapter a pure-addition change. |
 | B8 | Retention is the north-star metric | v1 validates one question: does the builder still use it daily after 2 weeks? Learning-outcome metrics come later. |
+| B9 | **Mirror the disk, don't archive it** | Sight renders the transcripts on disk and nothing else. When one goes away (the CLI's own retention cleanup, an `rm`), its session leaves Sight — subagent runs, side chats and all. No archive, no soft delete, no retention of our own. |
 
 ## 5. v1 features (complete list — nothing else)
 

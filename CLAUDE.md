@@ -15,6 +15,8 @@ parse; `docs/SPEC.md` is what v1 is and, just as important, is not.
 - **All user data stays local.** No network calls except the responder
   invocations, which go through the user's own agent CLI. No telemetry.
 - **Zero push.** The UI never interrupts, pops up, or prompts on its own.
+- **Mirror the disk, don't archive it.** A session whose transcript is gone
+  leaves Sight, side chats included. No soft delete, no retention of our own.
 - **Parse transcripts defensively.** Schemas are undocumented and change between
   CLI versions. Unknown entry types render as a raw fallback, never crash
   ingestion.

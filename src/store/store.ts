@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { toString as mdastToString } from 'mdast-util-to-string';
 import remarkGfm from 'remark-gfm';
@@ -216,6 +217,26 @@ export class Store {
     for (const k of keys) this.setKv(`ended:${parentId}:${k}`, String(ts));
     this.db.prepare(`UPDATE sessions SET ended_at = ? WHERE parent_id = ? AND ended_at IS NULL
       AND (tool_use_id = ? OR workflow_id = ?)`).run(ts, parentId, toolUseId, runId ?? '');
+  }
+
+  /** A transcript that left the disk takes its session with it: children,
+   *  side chats and the parent-recorded facts (SPEC B9). */
+  deleteSession = this.txn((id: string): void => {
+    const ids = [id, ...this.listChildren(id).map((c) => c.id)];
+    const ph = ids.map(() => '?').join(',');
+    this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...ids);
+    this.db.prepare(`DELETE FROM side_chats WHERE session_id IN (${ph})`).run(...ids);
+    this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...ids);
+    this.db.prepare(`DELETE FROM kv WHERE key LIKE 'ended:' || ? || ':%'
+      OR key LIKE 'wfrun:' || ? || ':%' OR key LIKE 'wfname:' || ? || ':%'`).run(id, id, id);
+  });
+
+  /** After a scan: sessions whose transcript is gone, and side chats a
+   *  schema rebuild left without a session. */
+  prune(): void {
+    const rows = this.db.prepare('SELECT id, file_path FROM sessions').all() as { id: string; file_path: string }[];
+    for (const r of rows) if (!fs.existsSync(r.file_path)) this.deleteSession(r.id);
+    this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
   }
 
   resetSession(sessionId: string): void {

@@ -256,7 +256,11 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
   opens it read-only: the constructor's rebuild must never run underneath a
   running daemon.
 - The DB is derived data **except** `side_chats`, `stats` and `kv` (user-owned;
-  never wiped). `sessions`, `messages` and the FTS index are dropped and
+  a rebuild never wipes them). A side chat leaves only with its session.
+- Sessions mirror the disk (SPEC B9): when a transcript file disappears, the
+  ingester deletes its session — subagent children, side chats and the
+  parent-recorded facts in `kv` — on the watcher's `unlink`, and by a prune
+  after the start-up scan. `sessions`, `messages` and the FTS index are dropped and
   rebuilt from the transcripts whenever `SCHEMA_VERSION` changes (tracked in
   `PRAGMA user_version`): an upgrade's first daemon start re-runs the initial
   scan — seconds per hundred MB of transcripts. No column-level migrations.

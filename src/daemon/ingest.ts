@@ -53,11 +53,12 @@ export class Ingester {
             this.enqueue(() => this.ingestFile(adapter, p));
           }, 1000));
         };
-        watcher.on('add', onFile).on('change', onFile);
+        watcher.on('add', onFile).on('change', onFile).on('unlink', onFile);
         watcher.on('error', (err) => this.log(`watcher error: ${String(err)}`));
         this.watchers.push(watcher);
       }
     }
+    this.store.prune();
   }
 
   async stop(): Promise<void> {
@@ -87,6 +88,14 @@ export class Ingester {
   }
 
   private ingestFileInner(adapter: AgentAdapter, filePath: string): void {
+    if (!fs.existsSync(filePath)) {
+      // the viewer renders what is on disk (SPEC B9): a transcript that went
+      // away takes its session with it. Reached from the unlink watcher, and
+      // from a reingest of a session whose file has since gone.
+      const gone = this.store.getSessionByPath(filePath);
+      if (gone) this.store.deleteSession(gone.id);
+      return;
+    }
     if (adapter.patchFile?.(filePath)) return this.ingestPatchFile(adapter, filePath);
     const size = fs.statSync(filePath).size;
     let session = this.store.getSessionByPath(filePath);
