@@ -1,51 +1,55 @@
 # Line of Sight
 
-A local viewer for your coding-agent sessions. `sight claude` runs Claude Code exactly as before and opens the live transcript on localhost, where you can read it, copy from it, search across every session you've run, and select any text to ask about it.
+Your Claude Code and Codex sessions as a local web page you can actually read.
+Select any line and ask about it. The answer comes from a second, read-only run
+of your own CLI, so the agent's context stays untouched.
 
-<!-- TODO: 30s GIF — select-to-ask, then the same viewer on a codex session -->
+<!-- TODO(#11): docs/demo.gif — select a line, ask, answer streams in -->
 ![demo](docs/demo.gif)
 
-## What it adds to the terminal
-
-- **A readable, live transcript.** Finished turns fold their tool calls and narration away; conclusions stay visible.
-- **Clean copy.** Any message, as Markdown, one click.
-- **Select any text and ask.** A side chat about that exact passage, answered by a separate read-only invocation of your own agent CLI that reads the transcript and the repo. The working agent's context stays untouched, and the answer is kept.
-- **Search across sessions.** Full-text, over everything you and the agent said, in any language.
-- **A session list.** Every session by project, with what is running right now.
-
-Works with Claude Code and Codex CLI. Subagent transcripts show up as child sessions of the turn that launched them.
-
-## Install
-
-Requires Node 20+ and `claude` and/or `codex` on your PATH.
-
 ```sh
-npm install -g line-of-sight
-sight claude        # instead of: claude
-sight codex         # instead of: codex
-sight open          # the viewer, at http://localhost:4989
+npm i -g line-of-sight
+sight claude    # instead of `claude` — same terminal, plus a viewer at localhost:4989
+sight codex     # same for Codex
 ```
 
-`sight claude` passes every argument through untouched. If the viewer or its daemon is broken, the agent still runs. Line of Sight is never in the critical path.
+## Why
 
-## What it promises
+Terminal scrollback is where understanding goes to die. Last week's session is
+unsearchable, copy comes out mangled by the TUI, and asking "why did you do
+that?" costs the agent the context it is working with. Line of Sight reads the
+transcript files the CLI already writes and gives you:
 
-- **Read-only.** It never writes to your repo and never touches the agent's state. The ask feature spawns your agent CLI with read-only tools only. There is no setting that changes this.
-- **Local.** Transcripts are read in place from the files your CLI already writes. Questions and answers live in `~/.sight/sight.db`. No telemetry. The daemon makes no network calls; the only outbound traffic is the ask feature going through your own agent CLI. Every spawn and fetch site is in a handful of files, so you can check.
-- **Zero push.** It never pops up, notifies, or interrupts. You open it.
+- **Ask.** Select text, ask a question. A separate read-only run of your CLI
+  reads the transcript and the repo and answers. The question is anchored to
+  that message and kept.
+- **Search.** Full text across every session, in any language.
+- **Copy.** Any message as Markdown.
+- **Read.** Finished turns fold their tool calls away; conclusions stay.
+  Subagents open from the task that launched them.
 
-## What it is not
+## Guarantees
 
-Not a mission-control dashboard, not a cost tracker, not a multi-agent orchestrator, not a cloud service, not an IDE plugin. Those exist elsewhere. This is the thing you look at when you have to sign off on what the agent did.
+- **Read-only.** Never writes to your repo, never touches agent state. The
+  asking process gets read-only tools, and there is no switch.
+- **Local.** Transcripts are read in place. Questions and answers live in
+  `~/.sight`. The daemon makes no network calls — a test greps `src/` to keep
+  it that way.
+- **Quiet.** Never notifies, never pops up. You open it.
 
-## Configuration
+## Not
 
-`~/.sight/config.json`: `responder` (`claude-cli` or `codex-cli`), `responderModel`, `responderEffort`. The ask panel can set the same values. `SIGHT_PORT` overrides the port.
+A dashboard, a cost tracker, an orchestrator, a cloud service, an IDE plugin.
 
-## Status
+## Notes
 
-Built and used daily by one person for their own Claude Code and Codex sessions. Transcript formats are undocumented and change between CLI versions; an entry the parser doesn't recognize renders raw instead of breaking ingestion. Issues welcome, especially a transcript line that renders wrong: `sight inspect <file.jsonl>` shows how it was parsed.
+macOS, Node 20+, `claude` and/or `codex` on your PATH. Linux untested.
+`sight claude` passes every argument through; if the viewer is broken, the
+agent still runs. Transcript formats are undocumented and change between CLI
+versions: unknown entries render raw, never crash. `sight inspect file.jsonl`
+shows how a line parsed — attach that to a bug report. `sight open` shows the
+viewer without starting an agent; `sight stop` kills the background daemon,
+and the next `sight` command starts it again. Config in `~/.sight/config.json`
+(`responder`, `responderModel`, `responderEffort`); `SIGHT_PORT` for the port.
 
-## License
-
-MIT. Made by [Ray](https://github.com/twinwest) at twinwest.
+MIT · [Ray](https://github.com/twinwest) @ twinwest
