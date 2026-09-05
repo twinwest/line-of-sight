@@ -46,10 +46,10 @@ A dashboard, a cost tracker, an orchestrator, a cloud service, an IDE plugin.
 macOS, Node 20+, `claude` and/or `codex` on your PATH. Linux untested.
 `sight claude` passes every argument through; if the viewer is broken, the
 agent still runs. Transcript formats are undocumented and change between CLI
-versions: unknown entries render raw, never crash. `sight inspect file.jsonl`
+versions: unknown entries render raw, never crash. `sight inspect <transcript.jsonl>`
 shows how a line parsed — attach that to a bug report. `sight open` shows the
 viewer without starting an agent; `sight stop` kills the background daemon,
 and the next `sight` command starts it again. Config in `~/.sight/config.json`
 (`responder`, `responderModel`, `responderEffort`); `SIGHT_PORT` for the port.
 
-MIT · [Ray](https://github.com/twinwest) @ twinwest
+MIT

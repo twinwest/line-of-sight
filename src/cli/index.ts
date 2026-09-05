@@ -209,6 +209,7 @@ async function cmdInspect(file: string | undefined): Promise<void> {
   const { claudeCodeAdapter } = await import('../adapters/claudeCode.js');
   const { codexAdapter } = await import('../adapters/codex.js');
   const abs = path.resolve(file);
+  if (!fs.existsSync(abs)) { console.error(`sight inspect: no such file: ${abs}`); process.exitCode = 1; return; }
   const lines = fs.readFileSync(abs, 'utf8').split('\n').filter(Boolean);
   // a file outside the usual roots matches no adapter: take whichever
   // understands the most lines
