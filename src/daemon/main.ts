@@ -15,7 +15,15 @@ try {
 const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 const log = (msg: string) => logStream.write(`${new Date().toISOString()} ${msg}\n`);
 
-const store = new Store(DB_FILE);
+let store: Store;
+try {
+  store = new Store(DB_FILE);
+} catch (e) {
+  // before the uncaughtException handler exists and with stdio ignored, this
+  // would otherwise die without a trace
+  log(`cannot open ${DB_FILE}: ${String(e)}`);
+  process.exit(1);
+}
 const adapters = [claudeCodeAdapter(), codexAdapter()];
 const ingester = new Ingester(store, adapters, log);
 const hub = new SseHub();

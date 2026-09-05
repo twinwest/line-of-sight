@@ -224,19 +224,25 @@ as `ended_at`; a child without one is running while its parent process is
 ```sql
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY, adapter TEXT, file_path TEXT UNIQUE, project_dir TEXT,
-  title TEXT DEFAULT '', title_source TEXT,
-  started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
-  byte_offset INTEGER DEFAULT 0   -- always at a line boundary; partial tails re-read
+  title TEXT DEFAULT '', title_source TEXT,   -- prompt | ai | custom; higher wins
+  started_at INTEGER, updated_at INTEGER,
+  message_count INTEGER DEFAULT 0,            -- user + assistant rows, recounted per append
+  byte_offset INTEGER DEFAULT 0,  -- always at a line boundary; partial tails re-read
+  parent_id TEXT, tool_use_id TEXT, workflow_id TEXT, ended_at INTEGER,  -- subagent runs (§4)
+  turn_open INTEGER, turn_started_at INTEGER  -- agents with turn markers; NULL otherwise
 );
 CREATE TABLE messages (
-  id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
-  blocks_json TEXT,               -- serialized RenderBlock[]
-  text_content TEXT,              -- concatenated searchable text
+  id TEXT, session_id TEXT, seq INTEGER,
+  role TEXT,                      -- user | assistant | meta | unknown
+  ts INTEGER,
+  blocks_json TEXT,               -- serialized RenderBlock[] (meta: {label, raw}; unknown: raw)
+  text_content TEXT,              -- search text: dialog only, markdown stripped
+  parent_id TEXT,                 -- transcript tree; a fork marks the abandoned branch
   PRIMARY KEY (session_id, id)
 );
 CREATE VIRTUAL TABLE messages_fts USING fts5(
   text_content, content='messages', tokenize='trigram'
-);
+);  -- external content; AFTER INSERT/UPDATE/DELETE triggers on messages keep it in sync
 CREATE TABLE side_chats (
   id TEXT PRIMARY KEY, session_id TEXT, anchor_message_id TEXT,
   anchor_text TEXT, created_at INTEGER,
@@ -246,8 +252,9 @@ CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event
 CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
 ```
 
-- FTS kept in sync with triggers or explicit insert-after-write (implementer's
-  choice; test it).
+- Only the daemon opens the DB through `Store`. Anything else (`sight stats`)
+  opens it read-only: the constructor's rebuild must never run underneath a
+  running daemon.
 - The DB is derived data **except** `side_chats`, `stats` and `kv` (user-owned;
   never wiped). `sessions`, `messages` and the FTS index are dropped and
   rebuilt from the transcripts whenever `SCHEMA_VERSION` changes (tracked in

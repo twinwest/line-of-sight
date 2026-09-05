@@ -53,6 +53,35 @@ describe('incremental ingest', () => {
     });
   });
 
+  it('a re-read from byte 0 upserts in place and keeps message_count exact', () => {
+    fs.writeFileSync(file, line('u1', 'first') + line('u2', 'second'));
+    ingester.ingestFile(adapter(), file);
+    expect(store.getSession(SESSION)!.messageCount).toBe(2);
+    // what a schema backfill does: rewind the checkpoint, ingest the same
+    // rows again — every insert lands on ON CONFLICT DO UPDATE
+    store.db.exec('UPDATE sessions SET byte_offset = 0');
+    ingester.ingestFile(adapter(), file);
+    expect(store.getEvents(SESSION)).toHaveLength(2);
+    expect(store.getSession(SESSION)!.messageCount).toBe(2);
+  });
+
+  it('an older schema version is rebuilt from the transcripts; side chats survive', () => {
+    const dbPath = path.join(root, 'sight.db');
+    fs.writeFileSync(file, line('u1', 'first') + line('u2', 'second'));
+    const old = new Store(dbPath);
+    new Ingester(old, [adapter()]).ingestFile(adapter(), file);
+    const chat = old.createSideChat(SESSION, 'u2', 'second');
+    old.db.pragma('user_version = 0');            // what a shipped schema change looks like
+    old.close();
+    const upgraded = new Store(dbPath);
+    expect(upgraded.getSession(SESSION)).toBeNull();          // derived rows gone
+    expect(upgraded.getSideChat(chat.id)).toMatchObject({ anchorMessageId: 'u2' });
+    new Ingester(upgraded, [adapter()]).ingestFile(adapter(), file);
+    expect(upgraded.getSession(SESSION)!.messageCount).toBe(2);
+    expect(upgraded.getMessageSeq(SESSION, 'u2')).toBe(2);    // the anchor resolves again
+    upgraded.close();
+  });
+
   it('a partial last line is not consumed until the newline arrives', () => {
     fs.writeFileSync(file, line('u1', 'hello') + '{"type":"user","uuid":"u2"');
     ingester.ingestFile(adapter(), file);

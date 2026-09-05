@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MARK_START, Store } from '../src/store/store.js';
 
@@ -89,25 +86,4 @@ describe('search', () => {
     expect(makeStore().search('  ')).toHaveLength(0);
   });
 
-  it('reindexes pre-v3 rows once on open', () => {
-    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sight-')), 'test.db');
-    const store = new Store(dbPath);
-    store.upsertSession({
-      id: 's1', adapter: 'claude-code', filePath: '/f1', projectDir: '/p',
-      title: 'test session', startedAt: 1, updatedAt: 1, messageCount: 0,
-    });
-    store.appendEvents('s1', [
-      { kind: 'message', id: 'm1', role: 'assistant', ts: 1,
-        blocks: [{ type: 'tool_result', toolUseId: 't1', summary: 'ok',
-          output: 'kaleidoscope', isError: false }] },
-    ], 100);
-    // simulate a pre-v3 db: tool output in the index, no migration flag
-    store.db.prepare("UPDATE messages SET text_content = 'kaleidoscope'").run();
-    store.db.prepare("DELETE FROM kv WHERE key = 'text_content_v3'").run();
-    expect(store.search('kaleidoscope')).toHaveLength(1);
-    store.close();
-    const reopened = new Store(dbPath);
-    expect(reopened.search('kaleidoscope')).toHaveLength(0);
-    reopened.close();
-  });
 });

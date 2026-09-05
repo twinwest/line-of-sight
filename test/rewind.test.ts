@@ -101,28 +101,6 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     expect(abandoned(events)).toEqual(['u2']);
   });
 
-  it('a db written before parent_id existed re-reads its transcripts once', () => {
-    const dbPath = path.join(root, 'sight.db');
-    const head = line('u1', null, 'first') + line('a1', 'u1', 'answer', 'assistant');
-    fs.writeFileSync(file, head + line('u2', 'a1', 'dead') + line('u3', 'a1', 'live'));
-    // an old store: same schema minus the column the feature needs
-    const old = new Store(dbPath);
-    new Ingester(old, [adapter()]).ingestFile(adapter(), file);
-    old.db.exec(`CREATE TABLE m2 (
-      id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
-      blocks_json TEXT, text_content TEXT, PRIMARY KEY (session_id, id));
-      INSERT INTO m2 SELECT id, session_id, seq, role, ts, blocks_json, text_content FROM messages;
-      DROP TABLE messages; ALTER TABLE m2 RENAME TO messages;`);
-    const stored = old.db.prepare('SELECT COUNT(*) n FROM messages').get() as { n: number };
-    expect(stored.n).toBeGreaterThan(0);        // rows are there, the tree is not
-    old.close();
-
-    const upgraded = new Store(dbPath);
-    new Ingester(upgraded, [adapter()]).ingestFile(adapter(), file);
-    expect(abandonedIn(upgraded.getEvents(SESSION))).toEqual(['u2']);
-    upgraded.close();
-  });
-
   it('askContext branches: null without forks, else which side the anchor is on', () => {
     const head = line('u1', null, 'first') + line('a1', 'u1', 'answer', 'assistant');
     ingest(head + line('u2', 'a1', 'follow-up'));

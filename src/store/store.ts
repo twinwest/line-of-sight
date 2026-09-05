@@ -8,6 +8,9 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 
 export type { SideChat, StoredEvent };
 
+/** Bump when sessions/messages/messages_fts change shape (see constructor). */
+const SCHEMA_VERSION = 1;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, adapter TEXT, file_path TEXT UNIQUE, project_dir TEXT,
@@ -49,6 +52,10 @@ CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
 /** Snippet match delimiters — control chars that can't collide with content. */
 export const MARK_START = '\u0001';
 export const MARK_END = '\u0002';
+
+/** Correlated on sessions.id — dialog rows only, matching the search index. */
+const MESSAGE_COUNT = `(SELECT count(*) FROM messages m
+  WHERE m.session_id = sessions.id AND m.role IN ('user','assistant'))`;
 
 const TITLE_PRIORITY: Record<TitleSource, number> = { prompt: 1, ai: 2, custom: 3 };
 
@@ -127,36 +134,19 @@ export class Store {
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
-    this.db.exec(SCHEMA);
-    // columns added after the tables shipped — CREATE TABLE IF NOT EXISTS
-    // leaves an existing db untouched, so add them here (throws once they are
-    // already there, which is the fresh-db case)
-    for (const col of ['parent_id TEXT', 'tool_use_id TEXT', 'workflow_id TEXT', 'ended_at INTEGER',
-      'turn_open INTEGER', 'turn_started_at INTEGER']) {
-      try { this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`); } catch { /* present */ }
+    // Derived tables are rebuilt from the transcripts whenever their shape
+    // changes: bump SCHEMA_VERSION, nothing else. side_chats, stats and kv are
+    // kept. The rebuild is the first-run scan again. VACUUM is safe here
+    // because the FTS table it must stay rowid-aligned with is empty.
+    const rebuild = this.db.pragma('user_version', { simple: true }) !== SCHEMA_VERSION;
+    if (rebuild) {
+      this.db.exec('DROP TABLE IF EXISTS messages_fts; DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions');
+      this.db.exec('VACUUM');
     }
-    try {
-      this.db.exec('ALTER TABLE messages ADD COLUMN parent_id TEXT');
-      // the ALTER only succeeds on a db that predates the column, i.e. one
-      // whose rows all have parent_id NULL — no tree, so no rewind branch
-      // could ever be found. Rewind the checkpoints once so the next ingest
-      // re-reads the transcripts and backfills (rows update in place; ids and
-      // seqs are stable, so side-chat anchors survive).
-      this.db.exec('UPDATE sessions SET byte_offset = 0');
-    } catch { /* already there: nothing to backfill */ }
-    // search index v3 (dialog only, markdown stripped): recompute existing
-    // rows once — the UPDATE trigger keeps the FTS table in sync
-    if (!this.getKv('text_content_v3')) {
-      const upd = this.db.prepare('UPDATE messages SET text_content = ? WHERE rowid = ?');
-      this.db.transaction(() => {
-        const rows = this.db.prepare(
-          `SELECT rowid, blocks_json FROM messages WHERE role IN ('user','assistant')`,
-        ).all() as { rowid: number; blocks_json: string }[];
-        for (const r of rows) {
-          upd.run(dialogText(JSON.parse(r.blocks_json) as RenderBlock[]), r.rowid);
-        }
-        this.setKv('text_content_v3', '1');
-      })();
+    this.db.exec(SCHEMA);
+    if (rebuild) {
+      this.db.exec(`DELETE FROM kv WHERE key LIKE 'text_content_v%' OR key = 'repair_v1'`);
+      this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
     }
   }
 
@@ -246,7 +236,6 @@ export class Store {
         text_content = excluded.text_content, ts = excluded.ts, parent_id = excluded.parent_id
     `);
     let seq = maxSeq;
-    let newMessages = 0;
     let lastTs = 0;
     const stored: StoredEvent[] = [];
     for (const ev of events) {
@@ -262,8 +251,7 @@ export class Store {
         : ev.kind === 'meta' ? { label: ev.label, raw: ev.raw }
         : ev.raw;
       const parentId = ev.kind === 'unknown' ? null : ev.parentId ?? null;
-      const r = insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev), parentId);
-      if (ev.kind === 'message' && r.changes > 0) newMessages++;
+      insert.run(ev.id, sessionId, ++seq, role, ev.ts, JSON.stringify(body ?? null), textContent(ev), parentId);
       // only real messages count as activity — trailing bookkeeping writes
       // (away_summary etc.) must not make an idle session look running
       if (ev.kind === 'message' && ev.ts > lastTs) lastTs = ev.ts;
@@ -274,12 +262,14 @@ export class Store {
         body: body ?? null,
       });
     }
+    // recount rather than add: a re-read from byte 0 (schema backfill) lands
+    // every row on DO UPDATE, which reports changes=1 just like an insert
     this.db.prepare(`
-      UPDATE sessions SET byte_offset = ?, message_count = message_count + ?,
+      UPDATE sessions SET byte_offset = ?, message_count = ${MESSAGE_COUNT},
         updated_at = MAX(updated_at, ?),
         started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END
       WHERE id = ?
-    `).run(newByteOffset, newMessages, lastTs, events[0]?.ts ?? 0, sessionId);
+    `).run(newByteOffset, lastTs, events[0]?.ts ?? 0, sessionId);
     return stored;
   });
 
@@ -562,12 +552,6 @@ export class Store {
   getKv(key: string): string | null {
     const r = this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined;
     return r?.value ?? null;
-  }
-
-  getStats(days: number): { day: string; event: string; count: number }[] {
-    return this.db.prepare(`
-      SELECT day, event, count FROM stats WHERE day >= date('now', ?) ORDER BY day
-    `).all(`-${days} days`) as { day: string; event: string; count: number }[];
   }
 
   private txn<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {

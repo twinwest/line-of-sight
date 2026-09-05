@@ -179,12 +179,18 @@ async function cmdReingest(id: string | undefined): Promise<void> {
 }
 
 async function cmdStats(): Promise<void> {
-  // read the DB directly so stats work even with the daemon down
-  const { Store } = await import('../store/store.js');
+  // read the DB directly so stats work even with the daemon down — read-only
+  // and without Store, whose constructor rebuilds the schema on a version
+  // change and must never do that underneath a running daemon
+  const { default: Database } = await import('better-sqlite3');
   const { DB_FILE } = await import('../shared/paths.js');
-  const store = new Store(DB_FILE);
-  const rows = store.getStats(14);
-  store.close();
+  let rows: { day: string; event: string; count: number }[] = [];
+  if (fs.existsSync(DB_FILE)) {
+    const db = new Database(DB_FILE, { readonly: true });
+    rows = db.prepare(`SELECT day, event, count FROM stats WHERE day >= date('now', '-14 days') ORDER BY day`)
+      .all() as typeof rows;
+    db.close();
+  }
   if (!rows.length) { console.log('no stats recorded in the last 14 days'); return; }
   const days = [...new Set(rows.map((r) => r.day))].sort();
   console.log('day         viewer_open  question_asked');
