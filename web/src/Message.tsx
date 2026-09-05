@@ -307,12 +307,21 @@ export function hasEventHead(event: StoredEvent, dialect: Dialect): boolean {
     && !plumbingOf(event, dialect);
 }
 
+/** `unknown: <type chain>` so a fold can be triaged without opening it —
+ *  the common envelope keys of both transcript formats, not adapter logic. */
+function unknownLabel(raw: unknown): string {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, any>;
+  const chain = [r.type, r.kind, r.payload?.type, r.payload?.item?.type, r.payload?.item?.kind]
+    .filter((s): s is string => typeof s === 'string');
+  return chain.length ? `unknown: ${chain.join('/')}` : 'unknown entry';
+}
+
 export const EventRow = memo(function EventRow({ event, showRole = true }:
     { event: StoredEvent; showRole?: boolean }) {
   const dialect = useContext(DialectCtx);
   if (event.kind !== 'message') {
     const body = event.body as { label?: string; raw?: unknown } | null;
-    const label = event.kind === 'meta' ? (body?.label ?? 'meta') : 'unknown entry';
+    const label = event.kind === 'meta' ? (body?.label ?? 'meta') : unknownLabel(event.body);
     const payload = event.kind === 'meta' && body && 'raw' in body ? body.raw : event.body;
     return (
       <div className="event meta-event" data-mid={event.id}>

@@ -10,7 +10,7 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 export type { SideChat, StoredEvent };
 
 /** Bump when sessions/messages/messages_fts change shape (see constructor). */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;  // 2: codex 0.153 parse output (token_usage_record dropped, web.search rendered)
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
