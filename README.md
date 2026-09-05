@@ -23,9 +23,14 @@ even if the viewer fails to start.
 
 Sight opens <http://127.0.0.1:2020> when no viewer tab is detected. Open a session in the viewer, select text, and click **Ask**.
 
-Use `sight open` to browse
-existing sessions without starting an agent, including those from before
-you installed Sight.
+Prefer your usual commands? Start the viewer:
+
+```sh
+sight open
+```
+
+Then use `claude` or `codex` as usual. While Sight's background service is
+running, new sessions appear automatically. Existing sessions are available too.
 
 ## Understand what your agent did
 
