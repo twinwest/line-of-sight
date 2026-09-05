@@ -19,7 +19,7 @@ doc and record the finding in `docs/SPIKE_NOTES.md`.
                 ▼                            │ Daemon (Node/TS, single │
  ┌──────────────────────────────┐  HTTP/SSE  │ process)                │
  │ Browser: http://localhost:   │◀──────────▶│  · Adapters (ingestion) │
- │ 5120  (React SPA)            │            │  · SQLite store + FTS5  │
+ │ 2020  (React SPA)            │            │  · SQLite store + FTS5  │
  │  · session list  · viewer    │            │  · HTTP API + SSE       │
  │  · select-to-ask · search    │            │  · Responder runner     │
  └──────────────────────────────┘            └───────────┬─────────────┘
@@ -383,7 +383,7 @@ runs on the user's own config.toml model. Decided 2026-08-27.
 If an engine cannot guarantee read-only, it must not be offered as a
 candidate.
 
-## 7. HTTP API (daemon, port 5120 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
+## 7. HTTP API (daemon, port 2020 default, `SIGHT_PORT` to override; bind 127.0.0.1 only)
 
 ```
 GET  /api/sessions?project=&q=            → SessionMeta[]
@@ -435,7 +435,7 @@ undecorated — dots grey out, nothing breaks.
    `dist/daemon/main.js` was last written (`/api/health.startedAt`), in which
    case SIGTERM it first — spawn detached
    (`child_process.spawn(node daemonEntry, { detached: true, stdio: 'ignore' })`).
-2. Best-effort: print `sight: http://127.0.0.1:5120` (stderr, TTY only) and
+2. Best-effort: print `sight: http://127.0.0.1:2020` (stderr, TTY only) and
    open the browser **only if no viewer is open right now**. `/api/health`
    reports open SSE streams (exact) and the time of the last viewer request
    (the list page polls every 10s; hidden tabs get their timers aligned to

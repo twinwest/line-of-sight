@@ -21,7 +21,7 @@ sight codex     # use in place of codex
 Your agent runs in the same terminal, with all arguments passed through,
 even if the viewer fails to start.
 
-Sight opens <http://127.0.0.1:5120> when no viewer tab is detected. Open a session in the viewer, select text, and click **Ask**.
+Sight opens <http://127.0.0.1:2020> when no viewer tab is detected. Open a session in the viewer, select text, and click **Ask**.
 
 Use `sight open` to browse
 existing sessions without starting an agent, including those from before
