@@ -15,10 +15,11 @@ sight codex     # same for Codex
 
 ## Why
 
-Terminal scrollback is where understanding goes to die. Last week's session is
-unsearchable, copy comes out mangled by the TUI, and asking "why did you do
-that?" costs the agent the context it is working with. Line of Sight reads the
-transcript files the CLI already writes and gives you:
+The change was cheap to make; knowing what it did is not. The reasoning sits
+in terminal scrollback: unsearchable next week, never as memorable as code you
+wrote yourself, mangled when you copy it, and off-limits to questions — asking
+"why did you do that?" costs the agent the context it is working with. Line of
+Sight reads the transcript files the CLI already writes and gives you:
 
 - **Ask.** Select text, ask a question. A separate read-only run of your CLI
   reads the transcript and the repo and answers. The question is anchored to
