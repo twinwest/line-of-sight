@@ -36,7 +36,7 @@ running, new sessions appear automatically. Existing sessions are available too.
 
 Coding agents make code easier to produce. Engineers still need to understand
 the changes they sign off on. Sight helps you follow the work, question the
-decisions, and revisit the context without polluting the main agent context.
+decisions, and revisit the context.
 
 - **Ask.** Get answers grounded in the session transcript and project files.
   Follow up in a saved side chat anchored to the selected message.
