@@ -1,8 +1,9 @@
 # Line of Sight
 
 Read your Claude Code and Codex sessions in a local web viewer.
-Select text and ask about it right in the viewer. A separate, read-only agent
-answers without adding to your main agent's conversation.
+Ask questions in a separate viewer while keeping your Claude Code or Codex
+terminal available.
+A separate, read-only agent answers without changing the main conversation.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
@@ -18,29 +19,28 @@ sight claude    # use in place of claude
 sight codex     # use in place of codex
 ```
 
-Your agent runs in the same terminal, with all arguments passed through,
-even if the viewer fails to start.
+Sight runs in the background; Claude or Codex stays in your terminal with
+all arguments passed through. The wrapper waits up to one second for viewer
+startup, then launches your agent even if the viewer is unavailable.
 
-Sight opens <http://127.0.0.1:2020> when no viewer tab is detected. Open a session in the viewer, select text, and click **Ask**.
+Sight opens <http://127.0.0.1:2020> when no viewer tab is detected.
+Choose a session, select text, and click **Ask**.
 
-Prefer your usual commands? Start the viewer:
+To keep using `claude` or `codex` directly, start the viewer once:
 
 ```sh
 sight open
 ```
 
-Then use `claude` or `codex` as usual. While Sight's background service is
-running, new sessions appear automatically. Existing sessions are available too.
+Existing and new sessions appear automatically while Sight is running.
 
 ## Understand what your agent did
 
-Coding agents make code easier to produce. Engineers still need to understand
-the changes they sign off on. Sight helps you follow the work, question the
-decisions, and revisit the context.
+Follow the work, question decisions, and revisit context before signing off.
 
 - **Ask.** Get answers grounded in the session transcript and project files.
   Follow up in a saved side chat anchored to the selected message.
-- **Search.** Find conversation text across sessions.
+- **Search.** Find conversation text across Claude Code and Codex sessions.
 - **Copy.** Copy messages as Markdown or code blocks as plain code.
 - **Read.** Follow live updates with dialogue visible and tool steps folded
   away. Expand steps for details; browse Claude Code subagent transcripts
