@@ -34,7 +34,7 @@ Existing and new sessions appear automatically while Sight is running.
 ## Read, search, and ask
 
 - **Browse.** Follow live sessions or revisit past conversations from
-  Claude Code and Codex in one place, with tool steps folded away.
+  Claude Code and Codex in one place.
 - **Search.** Find conversation text across sessions from both CLIs.
 - **Ask.** Select text and get answers grounded in the session and project
   files. Follow up in a saved side chat anchored to the selected message.
