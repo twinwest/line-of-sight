@@ -155,6 +155,9 @@ Rules:
   the previous.
 - While the responder is running, show a streaming/typing indicator; a Cancel
   button kills the responder process.
+- The Ask input shows the answering model and effort when the responder
+  supports them. Codex changes are saved before the next question can be sent
+  and never alter the working agent's session configuration.
 - If no responder engine is available (no agent CLI detected), the Ask
   button still appears but the panel shows a one-time setup hint (install a
   CLI), never a dead end.

@@ -348,7 +348,9 @@ skip them but breaks OAuth auth).
 ### codex-cli responder **[SHIPPED 2026-08-27 — verified on codex-cli 0.150.1]**
 
 ```
-codex exec --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
+codex exec --model <codexResponderModel> \
+  --config 'model_reasoning_effort="<codexResponderEffort>"' \
+  --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
 ```
 
 Same prompt template, spawned with stdin IGNORED (a piped stdin makes
@@ -357,14 +359,19 @@ Same prompt template, spawned with stdin IGNORED (a piped stdin makes
 into `~/.codex/sessions`. `--json` has no token deltas: completed
 `agent_message` items are the answer (item-sized chunks); `item.started`
 command executions feed the progress line. `responderModel`/
-`responderEffort` are NOT applied — they are claude-cli settings; codex
-runs on the user's own config.toml model. Decided 2026-08-27.
+`responderEffort` remain claude-cli settings. Codex uses the separate
+`codexResponderModel`/`codexResponderEffort` settings, defaulting to
+`gpt-5.6-terra`/`medium`; both are supplied explicitly so the viewed Codex
+session's defaults cannot affect Ask. Updated 2026-09-08.
 
 ### Engine config
 
-- Optional for any engine: `"responderModel"` (claude-cli `--model`; CLI
-  default otherwise) and `"responderEffort"` (low|medium|high|xhigh|max).
-  Read per-ask — no daemon restart needed.
+- Claude: optional `"responderModel"` and `"responderEffort"`; its CLI
+  defaults apply when unset.
+- Codex: optional `"codexResponderModel"` and `"codexResponderEffort"`;
+  Sight defaults to `gpt-5.6-terra` and `medium`. The panel shows the
+  effective values and saves changes before enabling the next Ask.
+- Settings are read per Ask — no daemon restart is needed.
 - A BYOK api engine (direct Messages API, no tools, inline excerpt as its
   grounding) existed through 2026-08-31 and was cut: it never ran (requires
   both CLIs absent plus a hand-configured key — contradicting "a session on
@@ -396,8 +403,8 @@ POST /api/side-chats/:id/ask              → body { question }; response = SSE 
 POST /api/side-chats/:id/cancel
 DELETE /api/side-chats/:id
 POST /api/stats/:event                    → increment (viewer_open | question_asked)
-GET  /api/responder/status                → { engine, responderModel, responderEffort } (never apiKey)
-PUT  /api/responder/config                → { responderModel?, responderEffort? } → ~/.sight/config.json
+GET  /api/responder/status                → { engine, options, responderModel, responderEffort } (effective engine values)
+PUT  /api/responder/config                → { engine, responderModel?, responderEffort? } → engine-specific keys in ~/.sight/config.json
 GET  /api/health
 ```
 

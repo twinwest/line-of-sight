@@ -8,6 +8,45 @@ export interface SightConfig {
   responderModel?: string;
   /** Effort for responder invocations: low | medium | high | xhigh | max. Engine default if unset. */
   responderEffort?: string;
+  /** Model used only for Codex Ask invocations. Sight defaults to Terra. */
+  codexResponderModel?: string;
+  /** Effort used only for Codex Ask invocations. Sight defaults to medium. */
+  codexResponderEffort?: string;
+}
+
+export type ResponderEngine = NonNullable<SightConfig['responder']>;
+
+export const CODEX_ASK_DEFAULTS = { model: 'gpt-5.6-terra', effort: 'medium' } as const;
+
+/** Settings shown by the panel and used by the next Ask invocation. Keeping
+ * this mapping here prevents either responder from reading the other one's
+ * model names. */
+export function responderSettings(engine: ResponderEngine, config: SightConfig):
+    { model: string; effort: string } {
+  if (engine === 'codex-cli') {
+    return {
+      model: config.codexResponderModel || CODEX_ASK_DEFAULTS.model,
+      effort: config.codexResponderEffort || CODEX_ASK_DEFAULTS.effort,
+    };
+  }
+  return {
+    model: config.responderModel ?? '',
+    effort: config.responderEffort ?? '',
+  };
+}
+
+/** Translate the panel's engine-neutral field names to their persisted keys. */
+export function responderConfigPatch(engine: ResponderEngine,
+    selection: Partial<{ model: string; effort: string }>): Partial<SightConfig> {
+  const patch: Partial<SightConfig> = {};
+  if (engine === 'codex-cli') {
+    if (selection.model !== undefined) patch.codexResponderModel = selection.model;
+    if (selection.effort !== undefined) patch.codexResponderEffort = selection.effort;
+  } else {
+    if (selection.model !== undefined) patch.responderModel = selection.model;
+    if (selection.effort !== undefined) patch.responderEffort = selection.effort;
+  }
+  return patch;
 }
 
 const CONFIG_FILE = path.join(SIGHT_DIR, 'config.json');

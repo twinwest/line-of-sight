@@ -3,9 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { readConfig, writeConfig } from '../shared/config.js';
+import {
+  readConfig, responderConfigPatch, responderSettings, type ResponderEngine, writeConfig,
+} from '../shared/config.js';
 import { ANTHROPIC_OPTIONS, resolveResponder } from '../responders/index.js';
-import type { ResponderRequest } from '../responders/types.js';
+import { CODEX_OPTIONS, type ResponderRequest } from '../responders/types.js';
 import { dialectFor } from '../shared/dialects/index.js';
 import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
 import type { LiveSession, SessionMeta } from '../shared/types.js';
@@ -197,26 +199,32 @@ export function buildServer(store: Store, hub: SseHub,
   app.get<{ Querystring: { adapter?: string } }>('/api/responder/status', async (req) => {
     // candidates() ignores unknown adapter strings, so pass the raw value through
     const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
-    const { responderModel, responderEffort } = readConfig();
+    const settings = engine ? responderSettings(engine.id, readConfig()) : { model: '', effort: '' };
     return {
       engine: engine?.id ?? null,
       label: engine ? engine.label?.() ?? engine.id : null,
       options: engine?.options ?? null,
-      responderModel: responderModel ?? '',
-      responderEffort: responderEffort ?? '',
+      responderModel: settings.model,
+      responderEffort: settings.effort,
     };
   });
 
-  const EFFORTS = new Set(['', ...ANTHROPIC_OPTIONS.efforts]);
+  const EFFORTS = new Set(['', ...ANTHROPIC_OPTIONS.efforts, ...CODEX_OPTIONS.efforts]);
 
-  app.put<{ Body: { responderModel?: string; responderEffort?: string } }>(
+  app.put<{ Body: { engine?: ResponderEngine; responderModel?: string; responderEffort?: string } }>(
     '/api/responder/config', (req, reply) => {
-      const { responderModel, responderEffort } = req.body ?? {};
+      const { engine, responderModel, responderEffort } = req.body ?? {};
+      if (engine !== 'claude-cli' && engine !== 'codex-cli') {
+        return reply.code(400).send({ error: 'valid engine required' });
+      }
       if (responderEffort !== undefined && !EFFORTS.has(responderEffort)) {
         return reply.code(400).send({ error: 'invalid effort' });
       }
-      writeConfig({ responderModel, responderEffort });
-      return { ok: true };
+      const config = writeConfig(responderConfigPatch(engine, {
+        model: responderModel,
+        effort: responderEffort,
+      }));
+      return { ok: true, ...responderSettings(engine, config) };
     });
 
   app.get<{ Querystring: { sessionId?: string } }>('/api/side-chats', (req, reply) => {

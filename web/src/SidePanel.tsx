@@ -34,6 +34,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const lastQuestion = live?.question ?? '';
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<ResponderStatus | null | undefined>(undefined);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configError, setConfigError] = useState('');
   const [width, setWidth] = useState(() => {
     const w = parseFloat(localStorage.getItem(WIDTH_KEY) ?? '');
     return Number.isFinite(w) ? Math.min(700, Math.max(280, w)) : 400;
@@ -56,7 +58,15 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
     }, remote ? 2000 : 0);
     return () => clearTimeout(t);
   }, [chat, live, remote, onChanged]);
-  useEffect(() => { void fetchResponderStatus(adapter).then(setStatus); }, [adapter]);
+  useEffect(() => {
+    let canceled = false;
+    setConfigError('');
+    setStatus(undefined);
+    void fetchResponderStatus(adapter).then((next) => {
+      if (!canceled) setStatus(next);
+    });
+    return () => { canceled = true; };
+  }, [adapter]);
   // sticky auto-scroll: follow the streaming answer only if already at the
   // bottom, so scrolling up to re-read isn't yanked back by every chunk
   useEffect(() => {
@@ -85,10 +95,37 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const busy = streaming !== null || (remote?.answering ?? false);
 
   const ask = (question: string) => {
-    if (busy || !question.trim()) return;
+    if (busy || savingConfig || !question.trim()) return;
     atBottom.current = true;   // asking re-arms the follow
     void runAsk(chat.id, question, chat.turns).then(onChanged);
     setInput('');
+  };
+
+  const saveResponderConfig = async (patch: {
+    responderModel?: string;
+    responderEffort?: string;
+  }) => {
+    if (!status?.engine || savingConfig) return;
+    const engine = status.engine;
+    // Preserve Claude's existing optimistic picker behavior. Codex waits for
+    // persistence because its next Ask must use the newly selected override.
+    if (engine === 'claude-cli') {
+      setStatus((current) => current?.engine === engine ? { ...current, ...patch } : current);
+      void putResponderConfig(engine, patch).catch(() => {});
+      return;
+    }
+    setSavingConfig(true);
+    setConfigError('');
+    try {
+      const saved = await putResponderConfig(engine, patch);
+      setStatus((current) => current?.engine === engine
+        ? { ...current, responderModel: saved.model, responderEffort: saved.effort }
+        : current);
+    } catch {
+      setConfigError('Could not save the Ask model setting.');
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   const startDrag = (e: React.PointerEvent) => {
@@ -163,11 +200,13 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             )}
           </div>
         )}
+        {configError && <div className="panel-error">{configError}</div>}
       </div>
       {turns.length === 0 && !busy && (
         <div className="presets">
           {PRESETS.map((p) => (
-            <button key={p} className="preset" onClick={() => ask(p)}>{p}</button>
+            <button key={p} className="preset" disabled={savingConfig}
+              onClick={() => ask(p)}>{p}</button>
           ))}
         </div>
       )}
@@ -184,33 +223,35 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             e.preventDefault();
             ask(input);
           }}
-          placeholder="Ask about the selection…" disabled={busy} autoFocus />
+          placeholder="Ask about the selection…" disabled={busy || savingConfig} autoFocus />
         <div className="input-foot">
-          {/* engines with dropdowns need no text label — the selectors say
-              what answers; label-only engines (codex) show their model */}
+          {/* Engines with dropdowns need no text label: the selectors say
+              what answers. */}
           {status?.engine && !status.options &&
             <span className="engine-label">{status.label ?? status.engine}</span>}
           {status?.engine && status.options && <>
           <select
             title="responder model"
+            disabled={savingConfig}
             value={status.responderModel}
             onChange={(e) => {
-              putResponderConfig({ responderModel: e.target.value });
-              setStatus({ ...status, responderModel: e.target.value });
+              void saveResponderConfig({ responderModel: e.target.value });
             }}>
-            {['', ...status.options.models].map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
+            {(status.engine === 'codex-cli' ? status.options.models : ['', ...status.options.models])
+              .map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
           </select>
           <select
             title="responder effort"
+            disabled={savingConfig}
             value={status.responderEffort}
             onChange={(e) => {
-              putResponderConfig({ responderEffort: e.target.value });
-              setStatus({ ...status, responderEffort: e.target.value });
+              void saveResponderConfig({ responderEffort: e.target.value });
             }}>
-            {['', ...status.options.efforts].map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
+            {(status.engine === 'codex-cli' ? status.options.efforts : ['', ...status.options.efforts])
+              .map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
           </select>
           </>}
-          <button type="submit" disabled={busy || !input.trim()} title="Ask (Enter)">↑</button>
+          <button type="submit" disabled={busy || savingConfig || !input.trim()} title="Ask (Enter)">↑</button>
         </div>
       </form>
     </aside>

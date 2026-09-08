@@ -84,9 +84,8 @@ export function cancelAsk(id: string): void {
 }
 
 export interface ResponderStatus {
-  engine: string | null;
-  /** display name for the engine row (codex: the config.toml model); falls
-   *  back to the engine id server-side */
+  engine: 'claude-cli' | 'codex-cli' | null;
+  /** Display name for engines that do not expose selectors. */
   label: string | null;
   /** engine-declared model/effort choices; null = engine takes neither */
   options: { models: string[]; efforts: string[] } | null;
@@ -100,12 +99,15 @@ export async function fetchResponderStatus(adapter?: SessionMeta['adapter']): Pr
   return res.json() as Promise<ResponderStatus>;
 }
 
-export function putResponderConfig(cfg: { responderModel?: string; responderEffort?: string }): void {
-  void fetch('/api/responder/config', {
+export async function putResponderConfig(engine: NonNullable<ResponderStatus['engine']>,
+    cfg: { responderModel?: string; responderEffort?: string }): Promise<{ model: string; effort: string }> {
+  const res = await fetch('/api/responder/config', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(cfg),
-  }).catch(() => {});
+    body: JSON.stringify({ engine, ...cfg }),
+  });
+  if (!res.ok) throw new Error(`save responder config: ${res.status}`);
+  return res.json() as Promise<{ model: string; effort: string }>;
 }
 
 /** An in-flight (and then finished) ask lives here rather than in the panel, so

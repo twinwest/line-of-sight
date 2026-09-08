@@ -72,8 +72,12 @@ Optional settings in `~/.sight/config.json`:
 | `responder` | Pin Ask to `claude-cli` or `codex-cli`, with no fallback. |
 | `responderModel` | Claude Ask model; also selectable in the Ask panel. |
 | `responderEffort` | Claude Ask effort; also selectable in the Ask panel. |
+| `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |
+| `codexResponderEffort` | Codex Ask effort; defaults to `medium`. |
 
-Codex Ask uses Codex's own model and effort configuration.
+Codex Ask model and effort are selectable in the Ask panel and stay separate
+from the active Codex session and Claude Ask settings. A change applies to the
+next question.
 Set `SIGHT_PORT` to use a different port, for example `SIGHT_PORT=5121 sight open`.
 
 ## Help

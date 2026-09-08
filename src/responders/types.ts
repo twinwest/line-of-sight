@@ -3,21 +3,21 @@ export interface ResponderOptions {
   efforts: string[];
 }
 
-/** claude-cli and api both honor the shared responderModel/responderEffort
- *  config, so they declare the same choice lists. */
 export const ANTHROPIC_OPTIONS: ResponderOptions = {
   models: ['claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'],
   efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 };
 
+export const CODEX_OPTIONS: ResponderOptions = {
+  models: ['gpt-5.6-terra', 'gpt-5.6-luna'],
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+};
+
 export interface Responder {
   id: 'claude-cli' | 'codex-cli';
-  /** Model/effort choices this engine honors (rendered by the panel);
-   *  null = the engine runs on its own config and nothing here applies. */
+  /** Model/effort choices this engine honors (rendered by the panel). */
   options: ResponderOptions | null;
-  /** Display name for the panel's engine row; omit = the id. Lets an engine
-   *  that runs on its own config (options: null) say what actually answers,
-   *  e.g. "gpt-5.6-sol (medium)" from ~/.codex/config.toml. */
+  /** Display name for the panel's engine row when it has no selectors. */
   label?(): string;
   available(): Promise<boolean>;
   /** Optional: spawn the engine when the side chat opens, before the reader

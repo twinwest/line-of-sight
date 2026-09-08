@@ -1,19 +1,22 @@
 import { execFile, spawn } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
+import { CODEX_ASK_DEFAULTS, readConfig, responderSettings } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
-import type { Responder, ResponderRequest } from './types.js';
+import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js';
 
 // Read-only cage (product promise B5): --sandbox read-only is enforced by
 // codex's own sandbox — verified via a forced write attempt (blocked, file
 // not created; SPIKE_NOTES 2026-08-27). --ephemeral keeps responder runs
 // out of ~/.codex/sessions — the --no-session-persistence analog (without
 // it every ask would appear as a session, the M5 pollution lesson).
-// --json streams item-level events on stdout. options: null — codex runs on
-// the user's own config.toml model; responderModel/responderEffort don't apply.
-export const CODEX_ARGS = (prompt: string): string[] => [
+// --json streams item-level events on stdout. Model and effort are always
+// supplied from Sight's Codex-only Ask settings so the main session's config
+// cannot leak into the side channel.
+export const CODEX_ARGS = (prompt: string,
+    opts: { model?: string; effort?: string } = {}): string[] => [
   'exec',
+  '--model', opts.model ?? CODEX_ASK_DEFAULTS.model,
+  '--config', `model_reasoning_effort="${opts.effort ?? CODEX_ASK_DEFAULTS.effort}"`,
   '--sandbox', 'read-only',
   '--ephemeral',
   '--json',
@@ -58,28 +61,9 @@ export function statusFromJsonLine(line: string): string {
   return s.length > 80 ? s.slice(0, 79) + '…' : s;
 }
 
-/** Engine row label: what actually answers is codex on the user's own
- *  config.toml model. The keys are top-level simple strings, so a line scan
- *  (stopping at the first [section]) beats pulling in a toml parser. */
-export function codexEngineLabel(configPath = path.join(os.homedir(), '.codex', 'config.toml')): string {
-  let model = '';
-  let effort = '';
-  try {
-    for (const line of fs.readFileSync(configPath, 'utf8').split('\n')) {
-      if (line.trimStart().startsWith('[')) break;
-      const m = /^\s*(model|model_reasoning_effort)\s*=\s*"([^"]*)"/.exec(line);
-      if (m?.[1] === 'model') model = m[2]!;
-      else if (m?.[1] === 'model_reasoning_effort') effort = m[2]!;
-    }
-  } catch { /* no config → codex's own default model */ }
-  if (!model) return 'codex';   // model unset → codex's own default, name unknown
-  return effort ? `${model} (${effort})` : model;
-}
-
 export const codexCliResponder: Responder = {
   id: 'codex-cli',
-  options: null,
-  label: () => codexEngineLabel(),
+  options: CODEX_OPTIONS,
 
   available(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -89,8 +73,9 @@ export const codexCliResponder: Responder = {
 
   answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal,
          onStatus?: (s: string) => void): Promise<string> {
+    const { model, effort } = responderSettings('codex-cli', readConfig());
     return new Promise((resolve, reject) => {
-      const child = spawn('codex', CODEX_ARGS(composePrompt(req)), {
+      const child = spawn('codex', CODEX_ARGS(composePrompt(req), { model, effort }), {
         cwd: req.projectDir ?? os.homedir(),
         // stdin MUST be ignored: with a piped stdin, `codex exec` waits for
         // EOF to append it to the prompt and never starts (measured)
