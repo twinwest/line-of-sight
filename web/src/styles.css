@@ -245,8 +245,13 @@ body {
   background: var(--user-bg); border-radius: 10px; padding: 0.5rem 0.9rem;
 }
 .event.tool-flow, .meta-event { margin: 0.15rem auto; }
+/* user-select: none — a drag that releases a few px below a message lands
+   its caret in the next message's head, so the copy would carry "AGENT",
+   the (opacity: 0) Copy Markdown label and the timestamp. Chrome and Safari
+   drop unselectable nodes from the copied text. Same for every copy button. */
 .event-head {
   display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.15rem;
+  user-select: none;
 }
 .role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-dim); }
 .event-actions { margin-left: auto; display: flex; gap: 0.4rem; align-items: baseline;
@@ -254,7 +259,7 @@ body {
 .event:hover .event-actions { opacity: 1; }
 .event-ts { color: var(--fg-dim); font-size: 0.75rem; }
 .copy-btn {
-  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  user-select: none; background: none; border: 1px solid var(--border); color: var(--fg-dim);
   border-radius: 5px; font-size: 0.72rem; padding: 0.05rem 0.45rem; cursor: pointer;
 }
 .copy-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
