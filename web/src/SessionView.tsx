@@ -7,7 +7,7 @@ import {
 } from './api';
 import { dialectFor, genericDialect, resumeCommand, type Dialect } from '../../src/shared/dialects';
 import { pendingBlockId, toolOutcomes, toolUseIds } from '../../src/shared/outcomes';
-import { CopyButton, DialectCtx, EventRow, hasEventHead, OutcomesCtx } from './Message';
+import { CopyButton, DialectCtx, EventRow, OutcomesCtx } from './Message';
 import { markSeen } from './seen';
 import { shortDir } from './SessionList';
 import { dotTitle, RUNNING_MS, sessionStatus } from './status';
@@ -385,7 +385,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
     return [...groups.entries()].sort(([a], [b]) => Number(a !== null) - Number(b !== null));
   }, [children]);
 
-  const renderEvent = (e: StoredEvent, showRole: boolean) => (
+  const renderEvent = (e: StoredEvent) => (
     <div className="event-wrap" key={e.id}>
       {chatsByMessage.has(e.id) && (
         <button
@@ -394,24 +394,19 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
           onClick={() => setOpenChatId(chatsByMessage.get(e.id)!.at(-1)!.id)}
         />
       )}
-      <EventRow event={e} showRole={showRole} />
+      <EventRow event={e} />
     </div>
   );
 
-  /** Render a run of events, labeling the role only when it changes.
-   *  Headless rows (tool flows, tool_use/thinking-only) don't interrupt it. */
+  /** Render a run of events, seaming idle stretches. */
   const renderRun = (evs: StoredEvent[]) => {
-    let prevRole: string | null = null;
     let prevTs = 0;
     return evs.flatMap((e) => {
-      const headed = hasEventHead(e, dialect);
-      const showRole = headed && e.role !== prevRole;
-      if (headed) prevRole = e.role;
       // an idle stretch (you walked away, the CLI sat) reads as a seam, not
       // one continuous exchange — ambient, so a thin rule with the gap
       const gap = prevTs && e.ts ? e.ts - prevTs : 0;
       if (e.ts) prevTs = e.ts;
-      const row = renderEvent(e, showRole);
+      const row = renderEvent(e);
       return gap >= IDLE_GAP_MS
         ? [<div className="idle-gap" key={`gap-${e.id}`}>{formatGap(gap)} idle</div>, row]
         : [row];

@@ -296,9 +296,9 @@ function plumbingOf(event: StoredEvent, dialect: Dialect): Plumbing | null {
   return first?.type === 'text' ? dialect.plumbing(first.markdown) : null;
 }
 
-/** Only prose messages get a head (role label, Copy Markdown, timestamp):
- *  tool_use/thinking-only rows have nothing to copy — a hover head there is
- *  a lie (and an empty spacer line). Plumbing is not the user speaking. */
+/** Only prose messages get a head (Copy Markdown, timestamp): tool_use/
+ *  thinking-only rows have nothing to copy — a hover head there is a lie.
+ *  Plumbing is not the user speaking. */
 export function hasEventHead(event: StoredEvent, dialect: Dialect): boolean {
   if (event.kind !== 'message' || !Array.isArray(event.body)) return false;
   const blocks = event.body as RenderBlock[];
@@ -316,8 +316,7 @@ function unknownLabel(raw: unknown): string {
   return chain.length ? `unknown: ${chain.join('/')}` : 'unknown entry';
 }
 
-export const EventRow = memo(function EventRow({ event, showRole = true }:
-    { event: StoredEvent; showRole?: boolean }) {
+export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }) {
   const dialect = useContext(DialectCtx);
   if (event.kind !== 'message') {
     const body = event.body as { label?: string; raw?: unknown } | null;
@@ -365,8 +364,7 @@ export const EventRow = memo(function EventRow({ event, showRole = true }:
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
       {hasEventHead(event, dialect) && (
         <div className="event-head">
-          {/* display-only: "assistant" is the wire-format role; this product's word is agent */}
-          <span className="role">{showRole ? (event.role === 'assistant' ? 'agent' : event.role) : ''}</span>
+          {/* no role label: the tinted card already says "you", bare prose says "agent" */}
           <span className="event-actions">
             {/* user input isn't markdown — it's what they typed; selection-copy covers it */}
             {event.role !== 'user' && <CopyButton text={md} label="Copy Markdown" />}

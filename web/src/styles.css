@@ -243,19 +243,22 @@ body {
 .event:empty { display: none; }
 .event.user {
   background: var(--user-bg); border-radius: 10px; padding: 0.5rem 0.9rem;
+  /* a prompt opens a turn: more air above it than between the rows inside
+     one, so the session reads as chapters rather than one even stack */
+  margin-top: 1.75rem;
 }
 .event.tool-flow, .meta-event { margin: 0.15rem auto; }
 /* user-select: none — a drag that releases a few px below a message lands
-   its caret in the next message's head, so the copy would carry "AGENT",
-   the (opacity: 0) Copy Markdown label and the timestamp. Chrome and Safari
-   drop unselectable nodes from the copied text. Same for every copy button. */
-.event-head {
-  display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.15rem;
-  user-select: none;
-}
-.role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-dim); }
-.event-actions { margin-left: auto; display: flex; gap: 0.4rem; align-items: baseline;
-  opacity: 0; transition: opacity 0.15s; }
+   its caret in the next message's head, so the copy would carry the
+   (opacity: 0) Copy Markdown label and the timestamp. Chrome and Safari
+   drop unselectable nodes from the copied text. Same for every copy button.
+   The head floats in the corner (no label, so no line of its own); it may
+   sit over a long first line, hence the backdrop, and only while hovered. */
+.event-head { position: absolute; top: 0; right: 0; user-select: none; }
+.event.user .event-head { top: 0.45rem; right: 0.6rem; }
+.event-actions { display: flex; gap: 0.4rem; align-items: center; padding: 0.15rem 0 0.25rem 0.5rem;
+  background: var(--bg); opacity: 0; transition: opacity 0.15s; }
+.event.user .event-actions { background: var(--user-bg); }
 .event:hover .event-actions { opacity: 1; }
 .event-ts { color: var(--fg-dim); font-size: 0.75rem; }
 .copy-btn {
