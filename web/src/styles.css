@@ -254,18 +254,22 @@ body {
 }
 .event.tool-flow, .meta-event { margin: 0.15rem auto; }
 /* user-select: none — a drag that releases a few px below a message lands
-   its caret in the next message's head, so the copy would carry the
-   (opacity: 0) Copy Markdown label and the timestamp. Chrome and Safari
-   drop unselectable nodes from the copied text. Same for every copy button.
-   The head floats in the corner (no label, so no line of its own); it may
-   sit over a long first line, hence the backdrop, and only while hovered. */
-.event-head { position: absolute; top: 0; right: 0; user-select: none; }
-.event.user .event-head { top: 0.45rem; right: 0.6rem; }
-.event-actions { display: flex; gap: 0.4rem; align-items: center; padding: 0.15rem 0 0.25rem 0.5rem;
-  background: var(--bg); opacity: 0; transition: opacity 0.15s; }
-.event.user .event-actions { background: var(--user-bg); }
-.event:hover .event-actions { opacity: 1; }
-.event-ts { color: var(--fg-dim); font-size: 0.75rem; }
+   its caret in the next message's head, so the copy would carry the Copy
+   glyph and the timestamp. Chrome and Safari drop unselectable nodes from
+   the copied text. Same for every copy button.
+   The head lives in the right gutter, beside the column, like the margin
+   marker on the left: it never covers a line and never costs one. A prompt
+   shows its time (the turn's start, always on, faint); an agent message
+   shows Copy Markdown on hover. Below ~53rem there is no gutter: hidden. */
+.event-head {
+  position: absolute; left: 100%; top: 0.2rem; margin-left: 0.6rem;
+  user-select: none; white-space: nowrap;
+}
+.event.user .event-head { top: 0.65rem; }
+.event-ts { color: var(--fg-dim); font-size: 0.72rem; opacity: 0.7; }
+.event-head .copy-btn { opacity: 0; transition: opacity 0.15s; }
+.event:hover .event-head .copy-btn { opacity: 1; }
+@media (max-width: 53rem) { .event-head { display: none; } }
 .copy-btn {
   user-select: none; background: none; border: 1px solid var(--border); color: var(--fg-dim);
   border-radius: 5px; font-size: 0.72rem; padding: 0.05rem 0.45rem; cursor: pointer;

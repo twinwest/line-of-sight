@@ -32,11 +32,11 @@ function copy(text: string): void {
   void navigator.clipboard.writeText(text);
 }
 
-export function CopyButton({ text, label = 'Copy', doneLabel = '✓', onCopied }:
-    { text: () => string; label?: string; doneLabel?: string; onCopied?: () => void }) {
+export function CopyButton({ text, label = 'Copy', doneLabel = '✓', title, onCopied }:
+    { text: () => string; label?: string; doneLabel?: string; title?: string; onCopied?: () => void }) {
   const [done, setDone] = useState(false);
   return (
-    <button className="copy-btn" onClick={() => {
+    <button className="copy-btn" title={title} onClick={() => {
       copy(text());
       setDone(true);
       setTimeout(() => setDone(false), 1200);
@@ -364,14 +364,14 @@ export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }
     <div className={`event ${roleClass ?? ''}`} data-mid={event.id}>
       {hasEventHead(event, dialect) && (
         <div className="event-head">
-          {/* no role label: the tinted card already says "you", bare prose says "agent" */}
-          <span className="event-actions">
-            {/* user input isn't markdown — it's what they typed; selection-copy covers it */}
-            {event.role !== 'user' && <CopyButton text={md} label="Copy Markdown" />}
-            {event.ts > 0 && <span className="event-ts">
-              {new Date(event.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-            </span>}
-          </span>
+          {/* no role label: the tinted card already says "you", bare prose says "agent".
+              A prompt carries the turn's time; user input isn't markdown — it's what
+              they typed — so only agent messages get Copy Markdown. */}
+          {event.role === 'user'
+            ? event.ts > 0 && <span className="event-ts">
+                {new Date(event.ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            : <CopyButton text={md} label="⧉" title="Copy Markdown" />}
         </div>
       )}
       {blocks.map((b, i) => <Block key={i} block={b} eventId={event.id} />)}
