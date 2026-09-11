@@ -42,13 +42,13 @@ Existing and new sessions appear automatically while Sight is running.
 
 ## Privacy and behavior
 
-- **Read-only questions.** Ask cannot edit your project or send replies to
+- **Read-only questions.** Sight cannot edit your project or send replies to
   the working agent. Claude Code uses restricted tools; Codex uses a
   read-only sandbox.
 - **Local storage.** The viewer listens only on `127.0.0.1`. Transcripts are
   read from disk; indexed content and saved Q&A live in `~/.sight`.
   There is no telemetry.
-- **Model access.** Ask uses your CLI's authentication and model service.
+- **Model access.** Sight uses your CLI's authentication and model service.
   Questions, transcript context, and project content read by the responder
   are sent to that service, using your account's quota or billing.
 - **Retention.** Sight mirrors the transcripts on disk. If a transcript is
