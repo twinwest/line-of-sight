@@ -291,7 +291,8 @@ export interface ResponderRequest {
   projectDir: string | null;
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   branches?: { anchorAbandoned: boolean } | null;  // rewind branches exist; which side the anchor is on
-  excerpt?: string;  // anchor-centered clean excerpt (store-built) — spares the locate/orient tool rounds
+  excerpt?: string;  // anchor-centered clean excerpt (store-built) — spares the locate/orient tool rounds;
+                     // rows carry their timestamp (a Grep coordinate into the file), tool output is cut to its head
 }
 ```
 

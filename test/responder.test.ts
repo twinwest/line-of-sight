@@ -29,6 +29,8 @@ describe('composePrompt', () => {
     const p = composePrompt({ ...REQ, excerpt: '[user]\nhello world' });
     expect(p).toContain('[user]\nhello world');
     expect(p).toContain('source of truth');
+    // #21: the timestamp on each row is the way back into the file
+    expect(p).toContain("Grep the transcript file for that row's timestamp");
     expect(p.indexOf(REQ.sessionFilePath)).toBeLessThan(p.indexOf('hello world'));
     expect(p.indexOf('hello world')).toBeLessThan(p.indexOf('ANCHOR (user-selected text)'));
     // empty excerpt (unknown anchor): no stray framing paragraph
