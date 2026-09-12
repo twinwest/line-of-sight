@@ -516,3 +516,36 @@ A TUI session with `approval_policy: on-request` was watched while parked on
 
 Adapter: escalated calls → `approval` tool_use (blocking in the dialect);
 plain calls stay dropped. Fixture line appended.
+
+## Addendum 2026-09-12 — transcript-only turn boundary for Claude Code: validated, shelved (issue #20)
+
+Question: can the transcript alone say whether a turn is open, as a fallback
+if `~/.claude/sessions/<pid>.json` ever goes away? Census over 290 local
+transcripts (109 top-level, 181 subagent), CLI 2.1.2xx:
+
+- **`message.stop_reason` on assistant rows is the signal.** Values seen:
+  `tool_use` 11740, `end_turn` 1489, `stop_sequence` 32, `null` 6 (streaming
+  rows for a message that never completed). Rule: last non-null value is
+  `end_turn` or `stop_sequence` ⇒ turn closed; `tool_use` ⇒ still open.
+  Against the 10 sessions with a pid file it agrees 10/10 (9 `idle` ⇒
+  `end_turn`, 1 `busy` ⇒ `tool_use`).
+- **The interrupt marker is required, not optional.** Esc leaves the last
+  `stop_reason` at `tool_use` forever; the CLI then writes a user row whose
+  text starts `[Request interrupted by user` (variants: `…]`, `… for tool
+  use]`). 3 of the 4 dead sessions ending on `tool_use` are exactly this; the
+  4th is a genuine mid-turn kill. Treat the marker as closing the turn.
+- **`turn_duration` is not a turn counter.** It is `type: system, subtype:
+  turn_duration, durationMs, messageCount, pendingBackgroundAgentCount`; 88 of
+  97 sessions have fewer of them than `end_turn` rows. Ignore it.
+- **Useless for subagents.** Their assistant rows are `null` 4348 / `tool_use`
+  1794 / `end_turn` 37: the run ends without a terminal stop_reason. Subagent
+  liveness stays parent-derived (2026-08-28).
+
+Shelved rather than built: the pid file already carries this for Claude Code
+and is faster, and in the one state where the indicator is uncertain
+(`unverifiable`: process alive, `busy` stamp, nothing written for 15 min)
+the transcript also reads `tool_use`, so it cannot tell a hung process from
+a long tool call either. Right now: 0 `unverifiable` sessions, 10/10 pid
+files backed by live processes. If a CLI version stops writing pid files, the
+rule above is the implementation; the schema already has `turn_open` /
+`turn_started_at` for it.
