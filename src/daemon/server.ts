@@ -42,6 +42,16 @@ export class SseHub {
 
 const STAT_EVENTS = new Set(['viewer_open', 'question_asked']);
 
+/** `Host` / `Origin` header → is it one of our own loopback names? Port is
+ *  ignored: it adds nothing against rebinding and would break `inject()`. */
+function isLoopback(header: string | undefined): boolean {
+  if (!header) return false;
+  try {
+    const { hostname } = new URL(header.includes('://') ? header : `http://${header}`);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch { return false; }
+}
+
 /** How long a `busy` claim is trusted with nothing moving behind it.
  *  The CLI writes `status: busy` once at turn start and never refreshes it, so
  *  a process that stops without writing `idle` — hung, suspended, crashed
@@ -61,6 +71,19 @@ export function buildServer(store: Store, hub: SseHub,
   const app = Fastify({ logger: false });
   // so the CLI can tell a daemon that predates the current build
   const startedAt = Date.now();
+
+  // Loopback-only is not origin-only: a page whose DNS flips to 127.0.0.1
+  // is same-origin with this API in the browser's eyes and would read every
+  // transcript. The Host header still names the attacker's domain, so refuse
+  // any Host that is not the loopback we listen on; Origin (sent on every
+  // cross-site POST/PUT/DELETE) closes the no-preflight form-post case.
+  app.addHook('onRequest', (req, reply, done) => {
+    if (!isLoopback(req.headers.host) ||
+        (req.method !== 'GET' && req.headers.origin !== undefined && !isLoopback(req.headers.origin))) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+    done();
+  });
 
   // The viewer renders untrusted markdown (transcripts, responder answers);
   // a remote image in it would auto-fetch on view — an exfiltration channel

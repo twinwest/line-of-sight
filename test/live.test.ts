@@ -185,3 +185,26 @@ describe('CSP', () => {
     expect(res.headers['content-security-policy']).toBe("img-src 'self' data:");
   });
 });
+
+describe('origin guard: only our own loopback names may talk to the API', () => {
+  const app = () => serverWith(0, new Map());
+  const get = (headers: Record<string, string>) =>
+    app().inject({ method: 'GET', url: '/api/sessions', headers });
+
+  it('rejects a foreign Host (DNS rebinding) and a cross-site Origin on a POST', async () => {
+    expect((await get({ host: 'evil.example' })).statusCode).toBe(403);
+    expect((await get({ host: 'evil.example:2020' })).statusCode).toBe(403);
+    const post = await app().inject({ method: 'POST', url: '/api/stats/viewer_open',
+      headers: { host: 'localhost:2020', origin: 'https://evil.example' } });
+    expect(post.statusCode).toBe(403);
+  });
+
+  it('accepts our own names, with or without port, and a same-origin POST', async () => {
+    for (const host of ['localhost', 'localhost:2020', '127.0.0.1:2020', '[::1]:2020']) {
+      expect((await get({ host })).statusCode).toBe(200);
+    }
+    const post = await app().inject({ method: 'POST', url: '/api/stats/viewer_open',
+      headers: { host: '127.0.0.1:2020', origin: 'http://127.0.0.1:2020' } });
+    expect(post.statusCode).not.toBe(403);
+  });
+});
