@@ -99,6 +99,30 @@ describe('side chat snapshot (#15)', () => {
     upgraded.close();
   });
 
+  it('keepSideChats: the transcript leaves, the session leaves, the chat and its snapshot stay', () => {
+    const keeping = new Ingester(store, [adapter()], () => {}, () => true);
+    ingest(keeping, HEAD);
+    const chat = store.createSideChat(SESSION, 'a1', 'the answer');
+    fs.rmSync(file);
+    keeping.ingestFile(adapter(), file);                  // what the unlink watcher enqueues
+    expect(store.getSession(SESSION)).toBeNull();
+    expect(store.getSideChat(chat.id)).toMatchObject({ anchorMessageId: 'a1' });
+    expect(store.getSideChatSnapshot(chat.id)!.rows.map((r) => r.id)).toEqual(['u1', 'a1']);
+    store.prune(true);                                    // start-up prune keeps them too
+    expect(store.getSideChat(chat.id)).not.toBeNull();
+    store.prune(false);                                   // the setting turned off: cleared on the next scan
+    expect(store.getSideChat(chat.id)).toBeNull();
+  });
+
+  it('off (the default): unchanged — the chat goes with the session', () => {
+    const ingester = new Ingester(store, [adapter()], () => {}, () => false);
+    ingest(ingester, HEAD);
+    const chat = store.createSideChat(SESSION, 'a1', 'the answer');
+    fs.rmSync(file);
+    ingester.ingestFile(adapter(), file);
+    expect(store.getSideChat(chat.id)).toBeNull();
+  });
+
   it('an ask is answered against the snapshot, not the live session', async () => {
     const ingester = new Ingester(store, [adapter()]);
     ingest(ingester, HEAD);

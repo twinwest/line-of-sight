@@ -32,11 +32,33 @@ Optional settings in `~/.sight/config.json`:
 | `responderEffort` | Claude Ask effort; also selectable in the Ask panel. |
 | `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |
 | `codexResponderEffort` | Codex Ask effort; defaults to `medium`. |
+| `keepSideChats` | `true` keeps side chats after their transcript is gone (default: off, they go with the session). |
 
 Codex Ask model and effort are selectable in the Ask panel and stay separate
 from the active Codex session and Claude Ask settings. A change applies to the
 next question.
 Set `SIGHT_PORT` to use a different port, for example `SIGHT_PORT=5121 sight open`.
+
+## Your side chats
+
+Every question you ask is saved with its answers and a snapshot of the
+conversation around the selected text, taken when you asked. Follow-ups in
+the same side chat are answered against that same snapshot.
+
+By default a side chat is removed when its transcript leaves the disk.
+Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default,
+in `~/.claude/settings.json`). Set `keepSideChats` to `true` to keep them;
+they will not appear in the viewer once the session is gone, but the data
+is yours to read:
+
+```sh
+sqlite3 -readonly ~/.sight/sight.db \
+  "select anchor_text, turns_json, excerpt_json from side_chats"
+```
+
+`turns_json` is the questions and answers; `excerpt_json` is the snapshot
+(`rows[]` of `{role, ts, text}` plus the session's path and title). Turning
+the setting off again clears the kept side chats on the next start.
 
 ## Help
 

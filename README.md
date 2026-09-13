@@ -53,6 +53,9 @@ Existing and new sessions appear automatically while Sight is running.
   are sent to that service, using your account's quota or billing.
 - **Retention.** Sight mirrors the transcripts on disk. If a transcript is
   deleted, its session and saved side chats are removed from Sight too.
+  Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
+  default). To keep your questions, answers and their conversation
+  snapshot after that, set `keepSideChats` — see the usage guide.
 
 ## Help
 

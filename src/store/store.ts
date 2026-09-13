@@ -262,23 +262,29 @@ export class Store {
   }
 
   /** A transcript that left the disk takes its session with it: children,
-   *  side chats and the parent-recorded facts (SPEC B9). */
-  deleteSession = this.txn((id: string): void => {
+   *  side chats and the parent-recorded facts (SPEC B9). `keepSideChats`
+   *  (config) is the one opt-in exception: the side chats stay, snapshot
+   *  and all; nothing else does. */
+  deleteSession = this.txn((id: string, keepSideChats = false): void => {
     const ids = [id, ...this.listChildren(id).map((c) => c.id)];
     const ph = ids.map(() => '?').join(',');
     this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...ids);
-    this.db.prepare(`DELETE FROM side_chats WHERE session_id IN (${ph})`).run(...ids);
+    if (!keepSideChats) this.db.prepare(`DELETE FROM side_chats WHERE session_id IN (${ph})`).run(...ids);
     this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...ids);
     this.db.prepare(`DELETE FROM kv WHERE key LIKE 'ended:' || ? || ':%'
       OR key LIKE 'wfrun:' || ? || ':%' OR key LIKE 'wfname:' || ? || ':%'`).run(id, id, id);
   });
 
   /** After a scan: sessions whose transcript is gone, and side chats a
-   *  schema rebuild left without a session. */
-  prune(): void {
+   *  schema rebuild left without a session. With `keepSideChats` the
+   *  orphans are the point and stay; turning it off clears them here on the
+   *  next scan. */
+  prune(keepSideChats = false): void {
     const rows = this.db.prepare('SELECT id, file_path FROM sessions').all() as { id: string; file_path: string }[];
-    for (const r of rows) if (!fs.existsSync(r.file_path)) this.deleteSession(r.id);
-    this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
+    for (const r of rows) if (!fs.existsSync(r.file_path)) this.deleteSession(r.id, keepSideChats);
+    if (!keepSideChats) {
+      this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
+    }
   }
 
   resetSession(sessionId: string): void {
@@ -583,7 +589,8 @@ export class Store {
 
   /** Freeze the conversation around the anchor as it is right now. Taken
    *  once, when the side chat is created: every follow-up in the chat is
-   *  asked against this same context (decided 2026-09-12). No session or no anchor
+   *  asked against this same context (decided 2026-09-12), and it is what
+   *  outlives the transcript under `keepSideChats`. No session or no anchor
    *  (a test's ghost chat, a rebuild in progress): nothing stored. */
   snapshotSideChat(id: string): AskSnapshot | null {
     const chat = this.getSideChat(id);
