@@ -12,6 +12,10 @@ export interface SightConfig {
   codexResponderModel?: string;
   /** Effort used only for Codex Ask invocations. Sight defaults to medium. */
   codexResponderEffort?: string;
+  /** Keep side chats (question, answers, and the conversation snapshot taken
+   *  when the question was asked) after their transcript leaves the disk.
+   *  Off = SPEC B9 as written: they go with the session. */
+  keepSideChats?: boolean;
 }
 
 export type ResponderEngine = NonNullable<SightConfig['responder']>;

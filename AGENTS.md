@@ -17,6 +17,9 @@ parse; `docs/SPEC.md` is what v1 is and, just as important, is not.
 - **Zero push.** The UI never interrupts, pops up, or prompts on its own.
 - **Mirror the disk, don't archive it.** A session whose transcript is gone
   leaves Sight, side chats included. No soft delete, no retention of our own.
+  The one opt-in exception is `keepSideChats`: the user's own side chats
+  (question, answers, and the conversation snapshot taken when the question
+  was asked) stay; nothing else does, and nothing does by default.
 - **Parse transcripts defensively.** Schemas are undocumented and change between
   CLI versions. Unknown entry types render as a raw fallback, never crash
   ingestion.

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { AgentAdapter } from '../adapters/types.js';
+import { readConfig } from '../shared/config.js';
 import type { NormalizedEvent } from '../shared/types.js';
 import type { Store, StoredEvent } from '../store/store.js';
 
@@ -20,6 +21,8 @@ export class Ingester {
     private store: Store,
     private adapters: AgentAdapter[],
     private log: (msg: string) => void = () => {},
+    // read per event, like the responder settings: no daemon restart to flip it
+    private keepSideChats: () => boolean = () => readConfig().keepSideChats === true,
   ) {}
 
   onEvents(fn: IngestListener): void { this.listeners.push(fn); }
@@ -58,7 +61,7 @@ export class Ingester {
         this.watchers.push(watcher);
       }
     }
-    this.store.prune();
+    this.store.prune(this.keepSideChats());
   }
 
   async stop(): Promise<void> {
@@ -93,7 +96,7 @@ export class Ingester {
       // away takes its session with it. Reached from the unlink watcher, and
       // from a reingest of a session whose file has since gone.
       const gone = this.store.getSessionByPath(filePath);
-      if (gone) this.store.deleteSession(gone.id);
+      if (gone) this.store.deleteSession(gone.id, this.keepSideChats());
       return;
     }
     if (adapter.patchFile?.(filePath)) return this.ingestPatchFile(adapter, filePath);

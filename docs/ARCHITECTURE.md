@@ -246,7 +246,8 @@ CREATE VIRTUAL TABLE messages_fts USING fts5(
 CREATE TABLE side_chats (
   id TEXT PRIMARY KEY, session_id TEXT, anchor_message_id TEXT,
   anchor_text TEXT, created_at INTEGER,
-  turns_json TEXT                 -- [{role:'user'|'assistant', text, ts}]
+  turns_json TEXT,                -- [{role:'user'|'assistant', text, ts}]
+  excerpt_json TEXT               -- AskSnapshot: the excerpt rows frozen at creation (store.ts)
 );
 CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
 CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
@@ -256,14 +257,17 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
   opens it read-only: the constructor's rebuild must never run underneath a
   running daemon.
 - The DB is derived data **except** `side_chats`, `stats` and `kv` (user-owned;
-  a rebuild never wipes them). A side chat leaves only with its session.
+  a rebuild never wipes them). A side chat leaves only with its session —
+  unless `keepSideChats` (config), the single opt-in exception to B9.
 - Sessions mirror the disk (SPEC B9): when a transcript file disappears, the
   ingester deletes its session — subagent children, side chats and the
   parent-recorded facts in `kv` — on the watcher's `unlink`, and by a prune
   after the start-up scan. `sessions`, `messages` and the FTS index are dropped and
   rebuilt from the transcripts whenever `SCHEMA_VERSION` changes (tracked in
   `PRAGMA user_version`): an upgrade's first daemon start re-runs the initial
-  scan — seconds per hundred MB of transcripts. No column-level migrations.
+  scan — seconds per hundred MB of transcripts. No column-level migrations
+  on derived tables; the user-owned ones take additive columns, checked with
+  `PRAGMA table_info` on open.
 
 ## 6. Responder (the answering engine) — pluggable, decoupled from the viewed agent
 
@@ -292,7 +296,8 @@ export interface ResponderRequest {
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   branches?: { anchorAbandoned: boolean } | null;  // rewind branches exist; which side the anchor is on
   excerpt?: string;  // anchor-centered clean excerpt (store-built) — spares the locate/orient tool rounds;
-                     // rows carry their timestamp (a Grep coordinate into the file), tool output is cut to its head
+                     // rows carry their timestamp (a Grep coordinate into the file), tool output is cut to its head;
+                     // frozen when the side chat is created and reused by every follow-up (side_chats.excerpt_json)
 }
 ```
 
