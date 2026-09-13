@@ -21,8 +21,8 @@ const DROP_TYPES = new Set([
   'atis-latch', 'agent-name', 'fork-context-ref',
 ]);
 
-// Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES +
-// dogfood): dropped like DROP_TYPES. Hook outputs, edited_text_file, and
+// Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES and
+// observed in use): dropped like DROP_TYPES. Hook outputs, edited_text_file, and
 // unknown subtypes keep rendering as meta.
 const ATTACHMENT_DROP = new Set([
   'total_tokens_reminder', 'task_reminder', 'deferred_tools_delta',

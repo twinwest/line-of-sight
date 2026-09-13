@@ -52,7 +52,7 @@ hooks required (pure file-tailing keeps us fail-open and version-independent).
   agent/webpage text must not become live HTML/scripts).
 - **CLI**: hand-rolled dispatch, no arg-parsing library (wrapper passthrough safety + startup
   latency; decided 2026-08-24).
-  Distributed as an npm bin (`npm link` during dogfood).
+  Distributed as an npm bin (`npm link` during development).
   Note: publish as npm package `line-of-sight` (name verified available
   2026-08-19) with `"bin": {"sight": ...}`. The npm package `sight` itself is
   taken by a stale 2022 lib — irrelevant, since only the bin name is `sight`.
