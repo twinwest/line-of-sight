@@ -46,13 +46,16 @@ Existing and new sessions appear automatically while Sight is running.
   the working agent. Claude Code uses restricted tools; Codex uses a
   read-only sandbox.
 - **Local storage.** The viewer listens only on `127.0.0.1`. Transcripts are
-  read from disk; indexed content and saved Q&A live in `~/.sight`.
-  There is no telemetry.
+  read from disk; indexed content, saved Q&A and, per question, a snapshot
+  of the conversation around it live in `~/.sight`. There is no telemetry.
 - **Model access.** Sight uses your CLI's authentication and model service.
   Questions, transcript context, and project content read by the responder
   are sent to that service, using your account's quota or billing.
 - **Retention.** Sight mirrors the transcripts on disk. If a transcript is
   deleted, its session and saved side chats are removed from Sight too.
+  Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
+  default). To keep your questions, answers and their conversation
+  snapshot after that, set `keepSideChats` — see the usage guide.
 
 ## Help
 
