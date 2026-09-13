@@ -129,7 +129,7 @@ decided 2026-08-25.
 
 ## Addendum 2026-08-26 — writes are batched per assistant message; `status: waiting`
 
-Triggered by a dogfood report: an answer ending in an AskUserQuestion did not
+Triggered by a field report: an answer ending in an AskUserQuestion did not
 appear in the viewer until the question was answered. Watched a live
 transcript's byte size at 300ms while parking the CLI on a question:
 
@@ -294,7 +294,7 @@ SIGKILL, an `exec resume`). Fixtures: `test/fixtures/codex/entries.jsonl`
   create a file → replied BLOCKED, file not created; reads worked;
   **`--ephemeral` wrote no rollout** — it is the `--no-session-persistence`
   analog, and without it `codex exec` DOES pollute `~/.codex/sessions` (the
-  M5 dogfood lesson repeats). Also available: `--json` (JSONL events on
+  M5 lesson repeats). Also available: `--json` (JSONL events on
   stdout — streaming, shape unverified), `-C <dir>` (workdir),
   `--skip-git-repo-check`, `--ignore-user-config` (the `--setting-sources
   ""` analog), `-o <file>` (last message). Caveat observed: exec runs

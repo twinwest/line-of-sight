@@ -66,7 +66,7 @@ a viewer.
     user messages) collapse into one "⏵ N steps · M tool calls" row. The
     trailing run stays expanded while the session is running (live-follow)
     and folds once it goes idle (same running signal as the indicator).
-    (Evolved during dogfood from turn-level folding — decided
+    (Evolved after real use from turn-level folding — decided
     2026-08-25.)
   - Unknown/unparseable entries render as a collapsed raw-JSON block (never
     crash, never silently drop).
@@ -99,7 +99,7 @@ a viewer.
   auto-clears in its uncopied form. Manual clear = empty the textarea.
   Deliberately not chat-shaped (no pinned input,
   Enter is a newline) so it cannot be confused with select-to-ask, which
-  addresses the responder, not the agent. (Added during dogfood — see
+  addresses the responder, not the agent. (Added after real use — see
   decided 2026-08-26.)
 
 ### 5.3 C3 — Clean copy

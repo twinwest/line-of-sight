@@ -269,7 +269,7 @@ switch (cmd) {
   sight codex [args...]    run codex with the viewer alongside
   sight start|stop|status  daemon lifecycle
   sight open               open the viewer in the browser
-  sight stats              dogfood usage stats (last 14 days)
+  sight stats              local usage stats (last 14 days)
   sight inspect <jsonl>    parse one transcript headlessly (format debugging)
   sight reingest <id>      re-parse a session and its subagents from scratch`);
     if (cmd !== undefined && cmd !== 'help' && cmd !== '--help' && cmd !== '-h') process.exitCode = 1;
