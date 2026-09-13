@@ -46,6 +46,8 @@ export interface ResponderRequest {
   branches?: { anchorAbandoned: boolean } | null;
   /** Clean anchor-centered conversation excerpt (Store.askContext) — spares
    *  the engine the locate/orient tool rounds; the transcript file stays the
-   *  source of truth for anything beyond it. */
+   *  source of truth for anything beyond it. Rows carry their timestamp,
+   *  which Greps straight to the message's line in the file; tool output is
+   *  cut to its head, the anchor's own message excepted. */
   excerpt?: string;
 }

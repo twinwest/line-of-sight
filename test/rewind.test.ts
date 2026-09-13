@@ -14,12 +14,13 @@ const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'claude-code', 'rewin
 
 /** `<parentUuid>` → a line, so a test can describe a shape in a few calls. */
 function line(uuid: string, parentUuid: string | null, content: unknown,
-    role: 'user' | 'assistant' = 'user'): string {
+    role: 'user' | 'assistant' = 'user', timestamp = TS): string {
   return JSON.stringify({
-    type: role, uuid, parentUuid, timestamp: '2026-08-31T00:00:00.000Z',
+    type: role, uuid, parentUuid, timestamp,
     cwd: '/tmp/proj', message: { role, content },
   }) + '\n';
 }
+const TS = '2026-08-31T00:00:00.000Z';
 const result = (id: string) => [{ type: 'tool_result', tool_use_id: id, content: 'out' }];
 const abandonedIn = (evs: StoredEvent[]) => evs.filter((e) => e.abandoned).map((e) => e.id);
 
@@ -118,10 +119,10 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     const head = line('u1', null, 'first question') + line('a1', 'u1', 'first answer', 'assistant');
     ingest(head + line('u2', 'a1', 'dead wording') + line('u3', 'a1', 'live wording'));
     const { excerpt } = store.askContext(SESSION, 'u3');
-    expect(excerpt).toContain('[user]\nfirst question');
-    expect(excerpt).toContain('[assistant]\nfirst answer');
-    expect(excerpt).toContain('[user, abandoned branch]\ndead wording');
-    expect(excerpt).toContain('[user, contains the ANCHOR]\nlive wording');
+    expect(excerpt).toContain(`[user, ${TS}]\nfirst question`);
+    expect(excerpt).toContain(`[assistant, ${TS}]\nfirst answer`);
+    expect(excerpt).toContain(`[user, ${TS}, abandoned branch]\ndead wording`);
+    expect(excerpt).toContain(`[user, ${TS}, contains the ANCHOR]\nlive wording`);
     // reading order preserved
     expect(excerpt.indexOf('first question')).toBeLessThan(excerpt.indexOf('dead wording'));
 
@@ -129,14 +130,50 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
 
   it('askContext excerpt: per-message truncation; a fat message cannot squeeze the anchor out', () => {
     const head = line('u1', null, 'first question') + line('a1', 'u1', 'first answer', 'assistant');
-    ingest(head + line('u2', 'a1', 'y'.repeat(3000)));
+    ingest(head + line('u2', 'a1', 'y'.repeat(5000)));
     expect(store.askContext(SESSION, 'u2').excerpt).toContain('…[truncated]');
+    // 4000 is the cap: a 3000-char answer (8% of real ones sit in 2000-4000) is whole
+    ingest(head + line('u2', 'a1', 'y'.repeat(3000)));
+    expect(store.askContext(SESSION, 'u2').excerpt).not.toContain('…[truncated]');
     // smaller rewrite → shrink guard reparses from 0 (rewrite is not append-shaped)
     const fat = 'x'.repeat(1900);
     ingest(head + line('u2', 'a1', fat) + line('u3', 'u2', 'the anchor row'));
     const tight = store.askContext(SESSION, 'u3', 20, 100);
     expect(tight.excerpt).toContain('the anchor row');
     expect(tight.excerpt).not.toContain(fat);
+  });
+
+  it('askContext excerpt: the row timestamp is the jsonl line\'s own, ms intact — a Grep coordinate (#21)', () => {
+    const ts = '2026-09-10T17:30:27.352Z';
+    ingest(line('u1', null, 'first question') + line('a1', 'u1', 'the answer', 'assistant', ts));
+    const { excerpt } = store.askContext(SESSION, 'a1');
+    expect(excerpt).toContain(`[assistant, ${ts}, contains the ANCHOR]\nthe answer`);
+    // the label is grep-able in the file: exactly one line carries it
+    const hits = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.includes(ts));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toContain('"uuid":"a1"');
+  });
+
+  it('askContext excerpt: tool output is cut to its head, except in the anchor\'s own message', () => {
+    const output = 'z'.repeat(1000);
+    const head = line('u1', null, 'run it')
+      + line('a1', 'u1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }], 'assistant')
+      + line('u2', 'a1', [{ type: 'tool_result', tool_use_id: 't1', content: output }])
+      + line('a2', 'u2', 'done', 'assistant')
+      + line('u3', 'a2', 'what happened?');
+    ingest(head);
+    const cut = store.askContext(SESSION, 'u3').excerpt;
+    expect(cut).toContain(`${'z'.repeat(300)} …[tool output cut: 700 more chars]`);
+    expect(cut).not.toContain('z'.repeat(301));
+    expect(cut).toContain('ls');            // tool_use summary stays
+    // anchor inside the tool result: the reader selected text there, keep it whole
+    const whole = store.askContext(SESSION, 'u2').excerpt;
+    expect(whole).toContain(output);
+    expect(whole).not.toContain('tool output cut');
+    // short output is never cut
+    ingest(head.replace(output, 'short'));
+    expect(store.askContext(SESSION, 'u3').excerpt).toContain('short');
+    expect(store.askContext(SESSION, 'u3').excerpt).not.toContain('tool output cut');
   });
 
   it('folds each abandoned run whole, ahead of step folding', () => {

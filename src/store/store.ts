@@ -116,13 +116,21 @@ function dialogText(blocks: RenderBlock[]): string {
     .map((b) => stripMarkdown(b.markdown)).filter(Boolean).join('\n');
 }
 
-/** Full raw text of a message, for responder excerpts. */
-function blocksText(blocks: RenderBlock[]): string {
+/** Message text for responder excerpts: prose and thinking in full, tool
+ *  output cut to its head unless the anchor sits in this message. Measured
+ *  2026-09-12 (10k tool results): 36% fit in 300 chars, 8% run
+ *  past 4000, the largest 884KB — left whole they eat the excerpt budget
+ *  that the "why" prose needs. The responder reads a cut result in full by
+ *  Grepping the transcript for the row's timestamp (#21). */
+const TOOL_OUTPUT_HEAD = 300;
+function blocksText(blocks: RenderBlock[], anchor: boolean): string {
   return blocks.map((b) => {
     switch (b.type) {
       case 'text': return b.markdown;
       case 'thinking': return b.text;
-      case 'tool_result': return b.output;
+      case 'tool_result': return anchor || b.output.length <= TOOL_OUTPUT_HEAD
+        ? b.output
+        : `${b.output.slice(0, TOOL_OUTPUT_HEAD)} …[tool output cut: ${b.output.length - TOOL_OUTPUT_HEAD} more chars]`;
       case 'tool_use': return b.summary;
       default: return '';
     }
@@ -364,6 +372,8 @@ export class Store {
    *    2026-08-31: the tool loop spends its first ~5-8 rounds (~4s each) just
    *    locating the anchor and orienting in the raw jsonl; text_content is
    *    the same material without the envelope, so those rounds are free here.
+   *    Rows carry their timestamp (#21): both CLIs write it verbatim on the
+   *    jsonl line, so it is a one-Grep coordinate back into the file.
    *  Both need the abandoned set — computed once. */
   askContext(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
       { excerpt: string; branches: { anchorAbandoned: boolean } | null } {
@@ -374,19 +384,22 @@ export class Store {
       : null;
     if (anchorSeq === null) return { excerpt: '', branches };
     const rows = this.db.prepare(`
-      SELECT id, seq, role, blocks_json FROM messages
+      SELECT id, seq, role, ts, blocks_json FROM messages
       WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
       ORDER BY seq
     `).all(sessionId, anchorSeq - n, anchorSeq + n) as
-      { id: string; seq: number; role: string; blocks_json: string }[];
+      { id: string; seq: number; role: string; ts: number; blocks_json: string }[];
     // from blocks_json, not text_content: the search index dropped tool_result
     // output, but the excerpt still needs it (the anchor may sit inside one)
     const blocks = rows
-      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[]) }))
+      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[], r.id === anchorMessageId) }))
       .filter((r) => r.full).map((r) => {
-      const text = r.full.length > 2000
-        ? `${r.full.slice(0, 2000)} …[truncated]` : r.full;
+      // 4000: 97% of text blocks fit (92% at the previous 2000); the budget
+      // by distance below still bounds a run of fat rows
+      const text = r.full.length > 4000
+        ? `${r.full.slice(0, 4000)} …[truncated]` : r.full;
       const tags = [r.role];
+      if (r.ts) tags.push(new Date(r.ts).toISOString());
       if (abandoned.has(r.seq)) tags.push('abandoned branch');
       if (r.id === anchorMessageId) tags.push('contains the ANCHOR');
       return { seq: r.seq, text: `[${tags.join(', ')}]\n${text}` };
