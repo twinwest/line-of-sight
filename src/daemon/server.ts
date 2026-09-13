@@ -11,7 +11,7 @@ import { CODEX_OPTIONS, type ResponderRequest } from '../responders/types.js';
 import { dialectFor } from '../shared/dialects/index.js';
 import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
 import type { LiveSession, SessionMeta } from '../shared/types.js';
-import type { Store, StoredEvent } from '../store/store.js';
+import { renderExcerpt, type Store, type StoredEvent } from '../store/store.js';
 
 const WEB_DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
 
@@ -307,6 +307,7 @@ export function buildServer(store: Store, hub: SseHub,
       const ctrl = new AbortController();
       running.set(chat.id, ctrl);
 
+      const snapshot = store.getSideChatSnapshot(chat.id);
       // persist the question immediately — must survive a daemon crash mid-answer
       store.appendSideChatTurn(chat.id, { role: 'user', text: question, ts: Date.now() });
       store.incrementStat('question_asked');
@@ -318,7 +319,10 @@ export function buildServer(store: Store, hub: SseHub,
         sessionFilePath: session.filePath,
         projectDir: session.projectDir,
         priorTurns: chat.turns.map(({ role, text }) => ({ role, text })),
-        ...store.askContext(chat.sessionId, chat.anchorMessageId),
+        // the context frozen when the chat was created — a follow-up is a
+        // follow-up on that moment, not on wherever the session is now
+        excerpt: snapshot ? renderExcerpt(snapshot.rows) : '',
+        branches: snapshot?.branches ?? null,
       };
 
       reply.raw.writeHead(200, {

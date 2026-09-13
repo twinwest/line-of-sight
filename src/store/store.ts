@@ -44,7 +44,8 @@ END;
 CREATE TABLE IF NOT EXISTS side_chats (
   id TEXT PRIMARY KEY, session_id TEXT, anchor_message_id TEXT,
   anchor_text TEXT, created_at INTEGER,
-  turns_json TEXT
+  turns_json TEXT,
+  excerpt_json TEXT
 );
 CREATE TABLE IF NOT EXISTS stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
@@ -116,6 +117,35 @@ function dialogText(blocks: RenderBlock[]): string {
     .map((b) => stripMarkdown(b.markdown)).filter(Boolean).join('\n');
 }
 
+/** One message of an ask excerpt, as facts. `text` is already cut
+ *  (blocksText); the label is rendered from the rest on the way out. */
+export interface ExcerptRow {
+  id: string; seq: number; role: string; ts: number; text: string;
+  abandoned: boolean; anchor: boolean;
+}
+
+/** What side_chats.excerpt_json holds: the excerpt rows plus enough of the
+ *  session to label them once the sessions row is gone. `v` is for a later
+ *  shape change; the label text is NOT part of the shape. */
+export interface AskSnapshot {
+  v: 1;
+  session: { adapter: string; projectDir: string | null; title: string; filePath: string };
+  branches: { anchorAbandoned: boolean } | null;
+  rows: ExcerptRow[];
+}
+
+/** The rows as the responder reads them: `[role, timestamp, marks]\ntext`,
+ *  blank-line separated. The single place the label format lives. */
+export function renderExcerpt(rows: ExcerptRow[]): string {
+  return rows.map((r) => {
+    const tags = [r.role];
+    if (r.ts) tags.push(new Date(r.ts).toISOString());
+    if (r.abandoned) tags.push('abandoned branch');
+    if (r.anchor) tags.push('contains the ANCHOR');
+    return `[${tags.join(', ')}]\n${r.text}`;
+  }).join('\n\n');
+}
+
 /** Message text for responder excerpts: prose and thinking in full, tool
  *  output cut to its head unless the anchor sits in this message. Measured
  *  2026-09-12 (10k tool results): 36% fit in 300 chars, 8% run
@@ -157,6 +187,10 @@ export class Store {
       this.db.exec(`DELETE FROM kv WHERE key LIKE 'text_content_v%' OR key = 'repair_v1'`);
       this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
     }
+    // user-owned tables can't be rebuilt, so they take additive columns.
+    // Rows from before the column are filled in lazily (getSideChatSnapshot).
+    const cols = (this.db.pragma('table_info(side_chats)') as { name: string }[]).map((c) => c.name);
+    if (!cols.includes('excerpt_json')) this.db.exec('ALTER TABLE side_chats ADD COLUMN excerpt_json TEXT');
   }
 
   close(): void { this.db.close(); }
@@ -377,12 +411,21 @@ export class Store {
    *  Both need the abandoned set — computed once. */
   askContext(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
       { excerpt: string; branches: { anchorAbandoned: boolean } | null } {
+    const { rows, branches } = this.askRows(sessionId, anchorMessageId, n, maxChars);
+    return { excerpt: renderExcerpt(rows), branches };
+  }
+
+  /** The excerpt as facts — one row per message, unrendered — so a stored
+   *  snapshot (side_chats.excerpt_json) is never parsed back out of prompt
+   *  text and a later label change applies to old snapshots too. */
+  askRows(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
+      { rows: ExcerptRow[]; branches: { anchorAbandoned: boolean } | null } {
     const abandoned = this.abandonedSeqs(sessionId);
     const anchorSeq = this.getMessageSeq(sessionId, anchorMessageId);
     const branches = abandoned.size
       ? { anchorAbandoned: anchorSeq !== null && abandoned.has(anchorSeq) }
       : null;
-    if (anchorSeq === null) return { excerpt: '', branches };
+    if (anchorSeq === null) return { rows: [], branches };
     const rows = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages
       WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
@@ -398,11 +441,10 @@ export class Store {
       // by distance below still bounds a run of fat rows
       const text = r.full.length > 4000
         ? `${r.full.slice(0, 4000)} …[truncated]` : r.full;
-      const tags = [r.role];
-      if (r.ts) tags.push(new Date(r.ts).toISOString());
-      if (abandoned.has(r.seq)) tags.push('abandoned branch');
-      if (r.id === anchorMessageId) tags.push('contains the ANCHOR');
-      return { seq: r.seq, text: `[${tags.join(', ')}]\n${text}` };
+      return {
+        id: r.id, seq: r.seq, role: r.role, ts: r.ts, text,
+        abandoned: abandoned.has(r.seq), anchor: r.id === anchorMessageId,
+      };
     });
     // budget by distance from the anchor, so a fat early message can never
     // push the anchor itself out; re-sort into reading order after
@@ -415,7 +457,7 @@ export class Store {
       total += b.text.length + 2;
     }
     kept.sort((a, b) => a.seq - b.seq);
-    return { excerpt: kept.map((b) => b.text).join('\n\n'), branches };
+    return { rows: kept, branches };
   }
 
   getEvents(sessionId: string, opts: { beforeSeq?: number; limit?: number } = {}): StoredEvent[] {
@@ -535,11 +577,45 @@ export class Store {
       INSERT INTO side_chats (id, session_id, anchor_message_id, anchor_text, created_at, turns_json)
       VALUES (?, ?, ?, ?, ?, '[]')
     `).run(chat.id, sessionId, anchorMessageId, anchorText, chat.createdAt);
+    this.snapshotSideChat(chat.id);
     return chat;
   }
 
+  /** Freeze the conversation around the anchor as it is right now. Taken
+   *  once, when the side chat is created: every follow-up in the chat is
+   *  asked against this same context (decided 2026-09-12). No session or no anchor
+   *  (a test's ghost chat, a rebuild in progress): nothing stored. */
+  snapshotSideChat(id: string): AskSnapshot | null {
+    const chat = this.getSideChat(id);
+    const session = chat && this.getSession(chat.sessionId);
+    if (!chat || !session) return null;
+    const { rows, branches } = this.askRows(chat.sessionId, chat.anchorMessageId);
+    if (!rows.length) return null;
+    const snapshot: AskSnapshot = {
+      v: 1,
+      session: { adapter: session.adapter, projectDir: session.projectDir,
+        title: session.title, filePath: session.filePath },
+      branches, rows,
+    };
+    this.db.prepare('UPDATE side_chats SET excerpt_json = ? WHERE id = ?')
+      .run(JSON.stringify(snapshot), id);
+    return snapshot;
+  }
+
+  /** The stored snapshot; a chat from before snapshots existed is filled in
+   *  here, while its transcript is still around to read. */
+  getSideChatSnapshot(id: string): AskSnapshot | null {
+    const r = this.db.prepare('SELECT excerpt_json FROM side_chats WHERE id = ?')
+      .get(id) as { excerpt_json: string | null } | undefined;
+    if (!r) return null;
+    if (r.excerpt_json) return JSON.parse(r.excerpt_json) as AskSnapshot;
+    return this.snapshotSideChat(id);
+  }
+
   getSideChat(id: string): SideChat | null {
-    const r = this.db.prepare('SELECT * FROM side_chats WHERE id = ?').get(id) as {
+    // not SELECT *: excerpt_json is up to 30KB and only the ask path reads it
+    const r = this.db.prepare(`SELECT id, session_id, anchor_message_id, anchor_text, created_at, turns_json
+      FROM side_chats WHERE id = ?`).get(id) as {
       id: string; session_id: string; anchor_message_id: string;
       anchor_text: string; created_at: number; turns_json: string;
     } | undefined;
