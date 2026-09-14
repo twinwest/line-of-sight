@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
-import { codexFingerprint, readCompressedCodex } from '../adapters/codexRollout.js';
 import type { AgentAdapter } from '../adapters/types.js';
 import { readConfig } from '../shared/config.js';
 import type { NormalizedEvent } from '../shared/types.js';
@@ -53,11 +52,11 @@ export class Ingester {
         this.watchers.push(watcher);
         return watcher;
       };
-      if (adapter.id === 'codex') {
-        // Roots can appear after startup (first archive), so watch their
-        // shared parent — ONE watcher, scoped to the roots: chokidar 4's
-        // kqueue fallback holds an fd per watched file, and ~/.codex also
-        // holds databases, caches and the thread-writer locks.
+      if (adapter.resolveSessionFile) {
+        // Relocatable transcripts: roots can appear after startup (codex's
+        // first archive), so watch their shared parent — ONE watcher, scoped
+        // to the roots: chokidar 4's kqueue fallback holds an fd per watched
+        // file, and ~/.codex also holds databases, caches and the locks.
         const inRoots = (p: string) => roots.some(r => p === r || p.startsWith(r + path.sep));
         for (const parent of new Set(roots.map(r => path.dirname(r)))) {
           const watcher = watch(parent, { depth: (adapter.watchDepth ?? 3) + 1,
@@ -73,30 +72,30 @@ export class Ingester {
     }
     this.store.prune(this.keepSideChats(), session => {
       const adapter = this.adapters.find(a => a.id === session.adapter);
-      if (adapter?.id !== 'codex' || !adapter.resolveSessionFile) return false;
-      // Codex ingestion either finds a surviving UUID source or confirms
-      // its absence and deletes it. An I/O error is logged, never deletion.
+      if (!adapter?.resolveSessionFile) return false;
+      // Relocatable: ingestion either finds a surviving source by session id
+      // or confirms its absence and deletes it. An I/O error is logged, never deletion.
       try {
         const resolved = adapter.resolveSessionFile(session.filePath, session.filePath);
-        if (resolved?.endsWith('.zst')) void this.enqueue(() => this.ingestQueued(adapter, session.filePath));
+        if (resolved && adapter.compressed?.matches(resolved)) void this.enqueue(() => this.ingestQueued(adapter, session.filePath));
         else this.ingestFile(adapter, session.filePath);
-      } catch (e) { this.log(`Codex reconciliation failed: ${String(e)}`); }
+      } catch (e) { this.log(`source reconciliation failed: ${String(e)}`); }
       return true;
     }, false);
     // Schema rebuild retains chats while compressed session rows are queued.
-    // The final pass still resolves Codex paths: a failed decode may retain a
+    // The final pass still resolves relocatable paths: a failed decode may retain a
     // valid view whose old path is gone, while its compressed replacement is
     // present on disk.
     void this.enqueue(() => this.store.prune(this.keepSideChats(), session => {
       const adapter = this.adapters.find(a => a.id === session.adapter);
-      if (adapter?.id !== 'codex' || !adapter.resolveSessionFile) return false;
+      if (!adapter?.resolveSessionFile) return false;
       try {
         const resolved = adapter.resolveSessionFile(session.filePath, session.filePath);
         if (!resolved) return false;
-        if (resolved.endsWith('.zst')) void this.enqueue(() => this.ingestQueued(adapter, session.filePath));
+        if (adapter.compressed?.matches(resolved)) void this.enqueue(() => this.ingestQueued(adapter, session.filePath));
         return true;
       } catch (e) {
-        this.log(`Codex reconciliation failed: ${String(e)}`);
+        this.log(`source reconciliation failed: ${String(e)}`);
         return true;
       }
     }));
@@ -110,15 +109,15 @@ export class Ingester {
       } else {
         const files = fs.readdirSync(root, { withFileTypes: true, recursive: true })
           .filter(entry => entry.isFile()).map(entry => path.join(entry.parentPath, entry.name));
-        if (adapter.id === 'codex') files.sort();
+        if (adapter.resolveSessionFile) files.sort();   // deterministic duplicate selection
         for (const filePath of files) if (adapter.matches(filePath)) {
-          if (adapter.id === 'codex' && filePath.endsWith('.zst')) void this.enqueue(() => this.ingestQueued(adapter, filePath));
+          if (adapter.compressed?.matches(filePath)) void this.enqueue(() => this.ingestQueued(adapter, filePath));
           else this.ingestFile(adapter, filePath);
         }
       }
     } catch (e) {
-      if (adapter.id !== 'codex') throw e;
-      this.log(`Codex scan failed for ${root}: ${String(e)}`);
+      if (!adapter.resolveSessionFile) throw e;   // a relocatable root may be absent or mid-move
+      this.log(`scan failed for ${root}: ${String(e)}`);
     }
   }
 
@@ -171,25 +170,25 @@ export class Ingester {
 
   private ingestError(adapter: AgentAdapter, filePath: string, e: unknown): void {
     this.log(`ingest failed for ${filePath}: ${String(e)}`);
-    if (adapter.id === 'codex' && (e as NodeJS.ErrnoException).code === 'ENOENT') void this.reingest(filePath);
+    if (adapter.resolveSessionFile && (e as NodeJS.ErrnoException).code === 'ENOENT') void this.reingest(filePath);
   }
 
   private ingestFileInner(adapter: AgentAdapter, filePath: string, queued: boolean): void | Promise<void> {
     let restored: { events: NormalizedEvent[]; consumed: number } | undefined;
-    if (adapter.id === 'codex' && !adapter.patchFile?.(filePath) && adapter.resolveSessionFile) {
+    if (adapter.resolveSessionFile && !adapter.patchFile?.(filePath)) {
       const id = adapter.sessionMeta(filePath, []).id;
       const bound = this.store.getSession(id);
-      if (bound && bound.adapter !== 'codex') throw new Error(`session UUID collision: ${id}`);
+      if (bound && bound.adapter !== adapter.id) throw new Error(`session UUID collision: ${id}`);
       const resolved = adapter.resolveSessionFile(filePath, bound?.filePath);
       if (!resolved) {
         if (bound) this.store.deleteSession(id, this.keepSideChats());
         return;
       }
       if (resolved !== filePath && fs.existsSync(filePath)) {
-        this.log(`duplicate Codex rollout ${id}: keeping ${resolved}, ignoring ${filePath}`);
+        this.log(`duplicate transcript ${id}: keeping ${resolved}, ignoring ${filePath}`);
       }
       filePath = resolved;
-      if (filePath.endsWith('.zst')) {
+      if (adapter.compressed?.matches(filePath)) {
         return queued ? this.ingestCompressed(adapter, filePath, id)
           : this.enqueue(() => this.ingestQueued(adapter, filePath));
       }
@@ -210,9 +209,9 @@ export class Ingester {
       }
     }
     if (!fs.existsSync(filePath)) {
-      // The selected Codex source may move again after resolution/binding.
-      // Retry through its UUID resolver, never delete by that stale path.
-      if (adapter.id === 'codex' && !adapter.patchFile?.(filePath) && adapter.resolveSessionFile) {
+      // A relocatable source may move again after resolution/binding.
+      // Retry through its resolver, never delete by that stale path.
+      if (adapter.resolveSessionFile && !adapter.patchFile?.(filePath)) {
         void this.reingest(filePath);
         return;
       }
@@ -235,7 +234,7 @@ export class Ingester {
     if (size <= offset && !restored) return;
 
     const { events, consumed } = restored ?? this.parseFrom(adapter, filePath, offset, size);
-    if (adapter.id === 'codex') {
+    if (adapter.resolveSessionFile) {
       const id = adapter.sessionMeta(filePath, []).id;
       for (const prefix of ['codex-error:', 'codex-failed:', 'codex-fingerprint:']) {
         this.store.db.prepare('DELETE FROM kv WHERE key = ?').run(`${prefix}${id}`);
@@ -244,7 +243,7 @@ export class Ingester {
     if (!session) {
       const meta = adapter.sessionMeta(filePath, events.slice(0, 5));
       this.store.upsertSession(meta);
-      if (adapter.id === 'codex') {
+      if (adapter.resolveSessionFile) {
         const stat = fs.statSync(filePath);
         this.store.bindCodexSessionFile(meta.id, filePath, `${stat.dev}:${stat.ino}`);
       }
@@ -259,7 +258,7 @@ export class Ingester {
     const stored = this.store.appendEvents(session.id, events, offset + consumed);
     // A new rollout can arrive after its name was already indexed. Replay
     // the tiny title carrier so first archive creation gets its AI title too.
-    if (adapter.id === 'codex' && offset === 0) {
+    if (offset === 0) {
       for (const root of adapter.roots()) {
         if (adapter.patchFile?.(root) && fs.existsSync(root)) this.ingestPatchFile(adapter, root);
       }
@@ -268,7 +267,8 @@ export class Ingester {
   }
 
   private async ingestCompressed(adapter: AgentAdapter, filePath: string, id: string): Promise<void> {
-    const fingerprint = codexFingerprint(filePath);
+    const compressed = adapter.compressed!;
+    const fingerprint = compressed.fingerprint(filePath);
     const stat = fs.statSync(filePath);
     const sourceKey = `zst:${stat.dev}:${stat.ino}`;
     if (this.store.getKv(`codex-failed:${id}`) === fingerprint) return;
@@ -282,7 +282,7 @@ export class Ingester {
       this.store.beginCodexReplay(meta); staging = true;
       let first = true;
       let unknown = false;
-      const decoded = await readCompressedCodex(filePath, async lines => {
+      const decoded = await compressed.read(filePath, async lines => {
         const events: NormalizedEvent[] = [];
         for (const line of lines) if (line.text.trim()) {
           events.push(...adapter.parseLine(line.text, { filePath, byteOffset: line.byteOffset }));
@@ -295,7 +295,7 @@ export class Ingester {
         // Let HTTP/SSE work run between bounded parse/database batches.
         await new Promise<void>(resolve => setImmediate(resolve));
       });
-      if (codexFingerprint(filePath) !== decoded.fingerprint || adapter.resolveSessionFile?.(filePath, filePath) !== filePath) {
+      if (compressed.fingerprint(filePath) !== decoded.fingerprint || adapter.resolveSessionFile?.(filePath, filePath) !== filePath) {
         void this.reingest(filePath);
         return; // Discard staging; a rename/restore must pass through source selection again.
       }
@@ -314,11 +314,11 @@ export class Ingester {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') { void this.reingest(filePath); return; }
       try {
         const current = adapter.resolveSessionFile?.(filePath, this.store.getSession(id)?.filePath);
-        if (!current || current !== filePath || codexFingerprint(current) !== fingerprint) {
+        if (!current || current !== filePath || compressed.fingerprint(current) !== fingerprint) {
           void this.reingest(filePath); return;
         }
       } catch { /* A read/discovery error is a diagnostic, never confirmed absence. */ }
-      const error = `Cannot read compressed Codex transcript: ${e instanceof Error ? e.message.slice(0, 300) : 'decoder failed'}`;
+      const error = `Cannot read compressed transcript: ${e instanceof Error ? e.message.slice(0, 300) : 'decoder failed'}`;
       this.store.upsertSession(meta); // New corrupt sources appear as a passive error, never partial history.
       this.store.setKv(`codex-error:${id}`, error);
       this.store.setKv(`codex-failed:${id}`, fingerprint);

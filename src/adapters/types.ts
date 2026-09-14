@@ -1,4 +1,5 @@
 import type { LiveSession, NormalizedEvent, SessionMeta } from '../shared/types.js';
+import type { DecodedRollout, RolloutLine } from './codexRollout.js';
 
 /** One implementation per supported agent CLI. Session ids (SessionMeta.id)
  *  MUST be globally unique across adapters — every adapter feeds the same
@@ -21,6 +22,14 @@ export interface AgentAdapter {
    *  bound source; null means no source remains. Errors must propagate so a
    *  temporarily unreadable directory cannot be mistaken for deletion. */
   resolveSessionFile?(filePath: string, boundPath?: string): string | null;
+  /** A transcript representation that cannot be parsed by byte offset (e.g.
+   *  codex's .jsonl.zst): `read` streams complete decoded lines with their
+   *  DECODED offsets, `fingerprint` says whether the physical file changed. */
+  compressed?: {
+    matches(filePath: string): boolean;
+    fingerprint(filePath: string): string;
+    read(filePath: string, onBatch: (lines: RolloutLine[]) => void | Promise<void>): Promise<DecodedRollout>;
+  };
   /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
   parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */

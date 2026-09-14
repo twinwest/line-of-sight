@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { LiveSession, NormalizedEvent, RenderBlock, SessionPatch } from '../shared/types.js';
 import type { AgentAdapter } from './types.js';
+import { codexFingerprint, readCompressedCodex } from './codexRollout.js';
 import { parseTs, str, truncate } from './util.js';
 
 // Codex CLI rollout transcripts (0.150.x–0.153.x, SPIKE_NOTES 2026-08-27 and
@@ -208,6 +209,8 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
     },
 
     patchFile: (filePath) => filePath === indexPath,
+
+    compressed: { matches: p => p.endsWith('.zst'), fingerprint: codexFingerprint, read: readCompressedCodex },
 
     resolveSessionFile(filePath, boundPath) {
       const id = sessionId(filePath);

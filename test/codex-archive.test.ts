@@ -154,7 +154,7 @@ describe('Codex archive lifecycle', () => {
     ingester.ingestFile(adapter, alternate);
     expect(store.getSession(ID)?.filePath).toBe(active);
     expect(store.getEvents(ID).map(e => e.id)).toEqual(['u1']);
-    expect(warnings.some(w => w.includes('duplicate Codex rollout'))).toBe(true);
+    expect(warnings.some(w => w.includes('duplicate transcript'))).toBe(true);
     fs.unlinkSync(active);
     ingester.ingestFile(adapter, active);
     expect(store.getSession(ID)?.filePath).toBe(alternate);
