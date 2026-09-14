@@ -1,16 +1,20 @@
 import type { ResponderRequest } from './types.js';
 
+/** How to reach the transcript; an engine passes its own when the file
+ *  needs a decoder first (codexCli's compressed rollouts). */
+export function transcriptPointer(filePath: string): string {
+  return `The full transcript is at ${filePath} — it is JSONL; ` +
+    `read the relevant parts with your tools (Grep to locate the anchor text, ` +
+    `Read with offsets for context).`;
+}
+
 /** The one composed-prompt template for all engines (ARCHITECTURE §6). */
-export function composePrompt(req: ResponderRequest): string {
+export function composePrompt(req: ResponderRequest, transcript = transcriptPointer(req.sessionFilePath)): string {
   const parts: string[] = [];
   parts.push(
     `You are answering a reader's question about a coding-agent session.`,
   );
-  parts.push(
-    `The full transcript is at ${req.sessionFilePath} — it is JSONL; ` +
-    `read the relevant parts with your tools (Grep to locate the anchor text, ` +
-    `Read with offsets for context).`,
-  );
+  parts.push(transcript);
   if (req.projectDir) parts.push(`The project lives at ${req.projectDir}.`);
   if (req.excerpt) {
     parts.push(

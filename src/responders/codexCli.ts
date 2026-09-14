@@ -36,8 +36,7 @@ export function codexPrompt(req: ResponderRequest): string {
   const helper = fileURLToPath(new URL('./readCodexRollout.js', import.meta.url));
   const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
   const command = `${quote(process.execPath)} ${quote(helper)} ${quote(req.sessionFilePath)}`;
-  return composePrompt(req).replace(
-    `The full transcript is at ${req.sessionFilePath} — it is JSONL; read the relevant parts with your tools (Grep to locate the anchor text, Read with offsets for context).`,
+  return composePrompt(req,
     `The full transcript is zstd-compressed at ${req.sessionFilePath}. Read its complete decoded JSONL through this bundled read-only command: ${command}. ` +
     `Use a pipeline with pipefail and rg/sed to locate relevant records, timestamps, or line ranges. ` +
     `No system zstd executable is needed. Never write a decompressed file or restore/resume the agent session. ` +
