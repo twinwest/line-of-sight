@@ -19,6 +19,8 @@ const DROP_TYPES = new Set([
   'mode', 'permission-mode', 'last-prompt', 'bridge-session',
   'file-history-snapshot', 'file-history-delta',
   'atis-latch', 'agent-name', 'fork-context-ref',
+  // end-of-session cost/duration totals (CLI ≥ 2.1.251); the transcript keeps them
+  'cost-state',
 ]);
 
 // Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES and

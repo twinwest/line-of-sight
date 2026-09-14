@@ -383,8 +383,9 @@ scrub `CLAUDE_CODE_CHILD_SESSION` (we also scrubbed `CLAUDECODE`,
   (2026-08-27 addendum) would work for Claude Code too. Display work is
   deliberately NOT built here; recorded on issues #3/#5.
 - New (to us) transcript line types seen: `bridge-session`, `atis-latch`,
-  `cost-state`, `ai-title`. All flow through the raw fallback; ingestion
-  unaffected.
+  `cost-state`, `ai-title`. All flowed through the raw fallback at the time;
+  since handled (`ai-title` → title, the rest dropped — `cost-state` is one
+  end-of-session totals line per transcript from CLI 2.1.251 on).
 
 **Probe methodology gotchas (for the next person driving a TUI):**
 
