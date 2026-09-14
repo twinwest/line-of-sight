@@ -10,6 +10,7 @@ import { ANTHROPIC_OPTIONS, candidates, resolveResponder } from '../responders/i
 import { CODEX_OPTIONS, type ResponderRequest } from '../responders/types.js';
 import { dialectFor } from '../shared/dialects/index.js';
 import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
+import { VERSION } from '../shared/paths.js';
 import type { LiveSession, SessionMeta } from '../shared/types.js';
 import { renderExcerpt, type Store, type StoredEvent } from '../store/store.js';
 
@@ -117,7 +118,9 @@ export function buildServer(store: Store, hub: SseHub,
     }
     done();
   });
-  app.get('/api/health', () => ({ ok: true, pid: process.pid, startedAt, viewers: hub.clientCount(), viewerSeen }));
+  app.get('/api/health', () => ({
+    ok: true, pid: process.pid, version: VERSION, startedAt, viewers: hub.clientCount(), viewerSeen,
+  }));
 
   /** Mark sessions whose agent process is active (see AgentAdapter.liveSessions).
    *  A `busy` claim also has to be corroborated by something still moving —

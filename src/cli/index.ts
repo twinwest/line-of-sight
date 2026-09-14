@@ -3,12 +3,14 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LOG_FILE, PID_FILE, PORT, SIGHT_DIR } from '../shared/paths.js';
+import { LOG_FILE, PID_FILE, PORT, SIGHT_DIR, VERSION } from '../shared/paths.js';
 
 const DAEMON_ENTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'daemon', 'main.js');
 const URL_BASE = `http://127.0.0.1:${PORT}`;
 
-type Health = { ok: boolean; pid?: number; startedAt?: number; viewers?: number; viewerSeen?: number };
+type Health = {
+  ok: boolean; pid?: number; version?: string; startedAt?: number; viewers?: number; viewerSeen?: number;
+};
 
 async function health(timeoutMs = 500): Promise<Health> {
   try {
@@ -168,7 +170,9 @@ async function cmdStop(): Promise<void> {
 async function cmdStatus(): Promise<void> {
   const h = await health();
   if (h.ok) {
-    console.log(`daemon running on ${URL_BASE} (pid ${h.pid})`);
+    console.log(`daemon running on ${URL_BASE} (pid ${h.pid}, v${h.version ?? '?'})`);
+    // a daemon can outlive an upgrade: the CLI is what got installed, the daemon is what is serving
+    if (h.version !== VERSION) console.log(`cli is v${VERSION} — run \`sight stop && sight start\` to update the daemon`);
   } else {
     const pid = readPid();
     console.log(pid ? `daemon not responding (stale pidfile, pid ${pid})` : 'daemon not running');
@@ -256,6 +260,7 @@ switch (cmd) {
   case 'start': void cmdStart(); break;
   case 'stop': void cmdStop(); break;
   case 'status': void cmdStatus(); break;
+  case 'version': case '--version': case '-v': console.log(VERSION); break;
   case 'open':
     void (async () => { await startDaemon(); openBrowser(); })();
     break;
@@ -268,6 +273,7 @@ switch (cmd) {
   sight claude [args...]   run claude with the viewer alongside
   sight codex [args...]    run codex with the viewer alongside
   sight start|stop|status  daemon lifecycle
+  sight version            print the installed version
   sight open               open the viewer in the browser
   sight stats              local usage stats (last 14 days)
   sight inspect <jsonl>    parse one transcript headlessly (format debugging)

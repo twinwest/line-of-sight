@@ -184,6 +184,12 @@ describe('CSP', () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.headers['content-security-policy']).toBe("img-src 'self' data:");
   });
+
+  it('health reports the package version so `sight status` can spot a daemon that outlived an upgrade', async () => {
+    const app = serverWith(0, new Map());
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.json()).toMatchObject({ ok: true, version: expect.stringMatching(/^\d+\.\d+\.\d+$/) });
+  });
 });
 
 describe('origin guard: only our own loopback names may talk to the API', () => {
