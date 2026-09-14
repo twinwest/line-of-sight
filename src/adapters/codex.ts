@@ -38,6 +38,10 @@ const ECHOED = new Set(['message', 'reasoning', 'custom_tool_call_output']);
 
 type Json = Record<string, unknown>;
 
+function object(value: unknown): Json {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Json : {};
+}
+
 /** Join an item content array ({type:'text'|'Text', text}) to markdown. */
 function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -280,10 +284,29 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       const payload = (line.payload ?? {}) as Json;
 
       if (type === 'session_meta') {
-        // patch-only carrier: cwd → projectDir, ts → startedAt; no display row
+        // Forked context may echo the parent's header later in the child
+        // rollout. Only this rollout's own header describes its relationship.
+        if (str(payload.id) && payload.id !== sessionId(ctx.filePath)) return [];
         const cwd = str(payload.cwd);
+        const subagent = object(object(payload.source).subagent);
+        const spawn = object(subagent.thread_spawn);
+        const parent = str(payload.parent_thread_id) ?? str(spawn.parent_thread_id);
+        const patch: SessionPatch = cwd ? { projectDir: cwd } : {};
+        // Never infer parentage from forked_from_id: ordinary user forks
+        // must remain top-level. Reject malformed/self relationships.
+        if (parent && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(parent)
+            && parent !== sessionId(ctx.filePath)) {
+          patch.parentId = parent;
+          const nickname = str(payload.agent_nickname) ?? str(spawn.agent_nickname);
+          const agentPath = str(payload.agent_path) ?? str(spawn.agent_path);
+          const name = agentPath?.split('/').filter(Boolean).at(-1);
+          patch.title = truncate([nickname, name].filter(Boolean).join(' · ')
+            || (subagent.other === 'guardian' || payload.thread_source === 'guardian_review'
+              ? 'Guardian review' : 'Subagent'), 120);
+          patch.titleSource = 'custom';
+        }
         return [{ kind: 'meta', id: fallbackId, ts, label: 'session_meta', raw: null,
-          ...(cwd ? { sessionPatch: { projectDir: cwd } } : {}) }];
+          sessionPatch: patch }];
       }
 
       if (type && DROP_TYPES.has(type)) return [];

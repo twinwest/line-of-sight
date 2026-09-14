@@ -210,6 +210,19 @@ as `ended_at`; a child without one is running while its parent process is
 
 ### Ingestion pipeline
 
+Codex child rollouts use the same parent/children UI. Their own `session_meta`
+header supplies `parent_thread_id`, with the nested
+`source.subagent.thread_spawn.parent_thread_id` as a fallback;
+`forked_from_id` alone does not establish a child relationship. The agent
+nickname/path names a worker, and guardian review sessions with explicit
+parentage are children too. Copied parent headers in forked context are
+ignored. Codex children use their own writer lock and turn markers for
+liveness, rather than inheriting Claude's parent process rule. Nested children
+are reached through their immediate parent; parent deletion removes all
+descendants. A one-time Codex-only checkpoint invalidation backfills existing
+rows without removing messages or side chats, and invalidates compressed
+fingerprints so their staged metadata is replayed.
+
 1. On daemon start: scan all adapter roots; for each transcript file, if
    `(filePath, size, mtime)` differs from the stored checkpoint, incrementally
    parse from the stored byte offset (files are append-only; if size shrank,

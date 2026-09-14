@@ -44,6 +44,8 @@ export interface SessionPatch {
    *  carry lines for many sessions, e.g. codex's session_index.jsonl). */
   sessionId?: string;
   projectDir?: string;
+  /** Explicit transcript relationship; a user-created fork is independent. */
+  parentId?: string;
   title?: string;
   titleSource?: TitleSource;
   /** Turn boundary markers (last-wins): true at turn start, false at end. */

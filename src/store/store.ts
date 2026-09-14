@@ -191,6 +191,16 @@ export class Store {
     // Rows from before the column are filled in lazily (getSideChatSnapshot).
     const cols = (this.db.pragma('table_info(side_chats)') as { name: string }[]).map((c) => c.name);
     if (!cols.includes('excerpt_json')) this.db.exec('ALTER TABLE side_chats ADD COLUMN excerpt_json TEXT');
+    // Re-read Codex rollouts once to backfill explicit parent relationships.
+    // Upserts preserve existing message IDs, sequences, titles and side chats;
+    // Claude's checkpoints and derived rows are untouched.
+    if (!this.getKv('codex-subagents-v1')) {
+      this.txn(() => {
+        this.db.prepare("UPDATE sessions SET byte_offset = 0 WHERE adapter = 'codex'").run();
+        this.db.prepare("DELETE FROM kv WHERE key LIKE 'codex-fingerprint:%' OR key LIKE 'codex-failed:%'").run();
+        this.setKv('codex-subagents-v1', '1');
+      })();
+    }
   }
 
   close(): void { this.db.close(); }
@@ -231,7 +241,8 @@ export class Store {
       turn_open = ?, turn_started_at = ? WHERE id = ?`)
       .run(row.byte_offset, row.message_count, row.updated_at, row.started_at, row.turn_open, row.turn_started_at, meta.id);
     this.applyPatch(meta.id, { projectDir: row.project_dir ?? undefined,
-      title: row.title, titleSource: row.title_source ?? undefined });
+      title: row.title, titleSource: row.title_source ?? undefined,
+      parentId: row.parent_id ?? undefined });
     this.setKv(`codex-fingerprint:${meta.id}`, fingerprint);
     this.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-error:${meta.id}`);
   });
@@ -338,7 +349,9 @@ export class Store {
    *  (config) is the one opt-in exception: the side chats stay, snapshot
    *  and all; nothing else does. */
   deleteSession = this.txn((id: string, keepSideChats = false): void => {
-    const ids = [id, ...this.listChildren(id).map((c) => c.id)];
+    const ids = (this.db.prepare(`WITH RECURSIVE descendants(id) AS (
+      SELECT ? UNION SELECT s.id FROM sessions s JOIN descendants d ON s.parent_id = d.id
+    ) SELECT id FROM descendants`).all(id) as { id: string }[]).map(r => r.id);
     const ph = ids.map(() => '?').join(',');
     this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...ids);
     if (!keepSideChats) this.db.prepare(`DELETE FROM side_chats WHERE session_id IN (${ph})`).run(...ids);
@@ -428,6 +441,10 @@ export class Store {
   }
 
   private applyPatch(sessionId: string, patch: SessionPatch, schema: 'main' | 'codex_replay' = 'main'): void {
+    if (patch.parentId && patch.parentId !== sessionId) {
+      this.db.prepare(`UPDATE ${schema}.sessions SET parent_id = ? WHERE id = ? AND parent_id IS NULL`)
+        .run(patch.parentId, sessionId);
+    }
     if (patch.turnOpen !== undefined) {
       // last-wins: patches arrive in transcript order
       this.db.prepare(`UPDATE ${schema}.sessions SET turn_open = ?,

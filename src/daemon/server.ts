@@ -140,7 +140,7 @@ export function buildServer(store: Store, hub: SseHub,
       // and the parent hasn't recorded its end. The quiet cap is a
       // belt-and-braces bound, not the signal: a run killed with no
       // task-notification (seen on disk) must not read busy for hours.
-      if (m.parentId) {
+      if (m.parentId && m.adapter === 'claude-code') {
         const running = live.has(m.parentId) && !m.endedAt && now - m.updatedAt <= STALE_BUSY_MS;
         return running ? { ...m, live: true, waiting: false, busySince: 0 } : m;
       }

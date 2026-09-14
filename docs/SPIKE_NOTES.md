@@ -627,3 +627,27 @@ The compiled production helper was exercised on Node 20.20.2 with a
 compressed-only fixture. It recovered a fact outside the selected excerpt
 while using the existing read-only Codex invocation, with no system `zstd`
 executable and no raw transcript copy.
+
+## Addendum 2026-09-13 — Codex Desktop subagent relationships
+
+Read-only inspection of the rollouts for the screenshot's parent found seven
+files: one parent, two worker subagents and four guardian reviews. Worker
+headers contain `parent_thread_id`, `forked_from_id`, `agent_nickname`,
+`agent_path`, and `source.subagent.thread_spawn` with the parent ID and depth.
+Guardian headers also carry `parent_thread_id`, with
+`source: {subagent: {other: "guardian"}}` and
+`thread_source: "guardian_review"`. These are child runs, not extra user tasks.
+
+Worker rollouts can contain a second `session_meta` for the parent, copied
+with forked context. Its ID differs from the rollout filename UUID; it must
+not overwrite the child's relationship. A user fork's `forked_from_id` alone
+is not subagent evidence. Unknown source shapes still parse defensively.
+
+The old Codex adapter always created `parentId: null` and only extracted cwd
+from metadata. The shared list already filters children, and the viewer
+already has a Subagents popover and parent navigation. Extracting explicit
+parentage and readable names fixes grouping without new frontend machinery.
+A read-only replay into an in-memory store produced one list entry and six
+children, including the screenshot's 58- and 45-message workers. Regression
+coverage includes child-first ingestion, copied headers, nested children,
+plain checkpoint backfill, compressed replay, and Codex child turn liveness.

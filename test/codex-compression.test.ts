@@ -39,6 +39,25 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
     vi.restoreAllMocks(); await ingester.stop(); store.close(); fs.rmSync(home, { recursive: true, force: true });
   });
 
+  it('groups a compressed child and backfills its relationship on upgrade without losing chats', async () => {
+    const parent = '11111111-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const childRaw = entry('session_meta', { id: ID, cwd: '/synthetic/repo',
+      parent_thread_id: parent, agent_nickname: 'Ada' }) + user('Child evidence');
+    fs.writeFileSync(archive, compress(childRaw)); fs.unlinkSync(plain);
+    await ingester.reingest(archive);
+    expect(store.listSessions()).toHaveLength(0);
+    expect(store.listChildren(parent)[0]).toMatchObject({ id: ID, title: 'Ada' });
+    const events = store.getEvents(ID);
+    const chat = store.createSideChat(ID, events[0]!.id, 'Child evidence');
+    store.db.prepare('UPDATE sessions SET parent_id = NULL WHERE id = ?').run(ID);
+    // Simulate the upgrade invalidation of an already decoded rollout.
+    store.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-fingerprint:${ID}`);
+    await ingester.reingest(archive);
+    expect(store.getSession(ID)?.parentId).toBe(parent);
+    expect(store.getEvents(ID)).toEqual(events);
+    expect(store.getSideChat(chat.id)).not.toBeNull();
+  });
+
   it('retains side chats during a compressed-only schema rebuild and prunes genuine orphans', async () => {
     const db = path.join(home, 'rebuild.sqlite');
     store.close(); store = new Store(db);

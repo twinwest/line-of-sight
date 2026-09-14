@@ -42,7 +42,7 @@ describe('codexAdapter.parseLine', () => {
   });
 
   it('session_meta is a patch-only carrier with the cwd', () => {
-    const [ev] = adapter.parseLine(line('session_meta', { id: 'x', cwd: '/repo' }), ctx);
+    const [ev] = adapter.parseLine(line('session_meta', { id: adapter.sessionMeta(FILE, []).id, cwd: '/repo' }), ctx);
     expect(ev).toMatchObject({ kind: 'meta', label: 'session_meta', raw: null,
       sessionPatch: { projectDir: '/repo' } });
   });
