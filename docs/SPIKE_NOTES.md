@@ -595,8 +595,35 @@ runtime measurements, and checkpoint decision. Node 20 can stream through
 `zstd-napi` with a capped window and detect truncation/checksum corruption;
 the tested pure JS `fzstd` accepts corrupted checksums. Codex can read the
 full compressed source through a read-only Node helper. Claude's existing
-Read/Grep/Glob tools cannot, and its actual run refused to guess. #30 remains
-blocked on an explicit Claude grounding or compressed-Ask scope decision.
+Read/Grep/Glob tools cannot, and its actual run refused to guess. The owner
+subsequently chose strict engine matching, so Claude's limitation does not
+block Codex compressed Ask.
 No compressed runtime support, tool widening, or raw transcript cache ships
 with this spike. Upstream-main observations are distinguished from local
 CLI activation evidence in the report.
+
+## Strict session routing and compressed Codex support — 2026-09-13 (#30)
+
+The owner explicitly chose Claude-for-Claude and Codex-for-Codex, with no
+cross-engine override/fallback. Legacy global `responder` pins are ignored
+without rewriting config; per-engine model/effort remain supported. This
+supersedes #29's cross-engine grounding blocker and intentionally changes
+Ask/status/prewarm routing for both agents. Claude parsing, watchers,
+subagents, liveness, and read-only tools are unchanged.
+
+Compressed Codex rollouts now decode with the optional Node 20-compatible
+native binding in a worker with acknowledged bounded batches. Anonymous
+SQLite staging contains normalized rows only, disappears automatically on
+connection close, and replaces the previous derived view only after frame,
+JSONL tail, and source validation. Corrupt/new/modified/relocated sources,
+sibling restore, offline moves, fallback anchors, frozen snapshots, title
+precedence, and final-source cleanup have integration coverage. Source
+errors are passive and block ungrounded Ask. Codex uses a bundled Node
+stdout decoder under its existing read-only sandbox; no system zstd or raw
+copy is needed. The 8 MiB history/record limits yield explicit diagnostics
+for unsupported inputs; they are not a total-memory guarantee. Staging uses
+a 2 MiB SQLite page-cache budget. No schema-version bump rebuilds Claude.
+The compiled production helper was exercised on Node 20.20.2 with a
+compressed-only fixture. It recovered a fact outside the selected excerpt
+while using the existing read-only Codex invocation, with no system `zstd`
+executable and no raw transcript copy.

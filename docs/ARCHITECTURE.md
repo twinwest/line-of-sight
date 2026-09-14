@@ -237,8 +237,32 @@ reparsed while retaining titles and side chats. Final deletion clears this
 fact. Ask awaits Codex reconciliation and refreshes its source and anchor
 after responder availability probing. Claude ingestion and deletion do not
 use source reconciliation.
-Compressed `.jsonl.zst` rollouts are not yet supported (#29/#30); this change
-adds no archive controls or Sight-owned retention.
+Codex accepts `.jsonl.zst` in either location. A restored plain sibling
+wins even while a compressed sibling remains bound. Compressed physical
+fingerprints include representation/dev/inode/size/mtimeNs/ctimeNs; decoded
+UTF-8 byte positions are the checkpoints and fallback-ID coordinates.
+An unchanged valid source is skipped; a changed fingerprint triggers replay
+from frame start. Before publishing, revalidate the open source and selected
+path. No compressed-size comparison or compressed seek uses decoded offsets.
+
+The optional `zstd-napi` low-level decoder loads only on compressed reads.
+A worker limits history to 8 MiB, input slices to 4 KiB, output slices to
+128 KiB, records to 8 MiB, and in-flight batches to 256 records / roughly
+512 KiB (a single larger record is still bounded by the record limit).
+The daemon yields between parse/database batches. SQLite's anonymous attached
+temporary database holds normalized replay rows with a 2 MiB page-cache
+budget; it has no raw JSONL copy or user-owned data. Complete frame and
+JSONL-tail validation precedes atomic replacement of the main derived rows.
+Detach/connection close/process death removes staging. Side chats, frozen
+snapshots, and title precedence survive replacement. Corruption keeps the
+previous derived view, adds a passive source diagnostic, and blocks Ask;
+new corrupt sources expose an error with no partial messages. Failures are
+cached per physical fingerprint to bound repeated decoding/logging, and heal
+on valid source change. Deletion clears source/fingerprint/error facts and
+honors the existing `keepSideChats` preference. Manual compressed reingestion
+invalidates fingerprints without deleting the last valid derived view.
+
+This adds no archive controls, runtime downloads, or Sight-owned retention.
 
 ## 5. Store (SQLite)
 
@@ -290,14 +314,14 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
   on derived tables; the user-owned ones take additive columns, checked with
   `PRAGMA table_info` on open.
 
-## 6. Responder (the answering engine) — pluggable, decoupled from the viewed agent
+## 6. Responder (the answering engine)
 
-The engine answering side-chat questions is decoupled from the viewed agent
-(any engine can answer about any session — the interface guarantees that),
-but by default it **matches the viewed session's agent**: a Codex session is
-answered by codex-cli, a Claude session by claude-cli. Rationale: a session's
-presence on disk implies its CLI is installed and authenticated — routing by
-session always picks a login the user actually has. A config pin overrides.
+Ask strictly matches the viewed session: Claude Code sessions use claude-cli,
+Codex sessions use codex-cli. If that CLI is unavailable, show a setup hint
+and return 409; never use the other engine. Legacy global `responder` pins
+are ignored without editing config. Model/effort settings remain per engine.
+This routing decision was adopted 2026-09-13; Adapter and Responder remain
+separate seams, but cross-engine answering is not a product capability.
 
 ```ts
 export interface Responder {
@@ -322,18 +346,13 @@ export interface ResponderRequest {
 }
 ```
 
-**Resolution** (`responders/index.ts` — routing is a pure `candidates()`
-function over config + session adapter; availability probing sits outside it):
-1. `responder` pinned in `~/.sight/config.json` → that engine ONLY. If it is
-   unavailable the ask fails with a readable 409 — no silent fallback to an
-   engine the user didn't pick.
-2. else the engine matching the viewed session's adapter
-   (`claude-code`→`claude-cli`, `codex`→`codex-cli`) if available
-3. else first available of claude-cli, codex-cli
-4. none → UI shows setup hint (SPEC 5.4).
+**Resolution** (`responders/index.ts`): `candidates()` returns only the
+engine matching a known session adapter. `resolveResponder()` probes only
+that engine. Unknown/missing adapters have no candidate.
 
-`GET /api/responder/status` reports the *default* engine (no session context);
-the engine actually used is announced in the ask SSE's first frame.
+`GET /api/responder/status?adapter=...` reports the session's available engine
+or a specific setup message. The same routing is used by prewarming and Ask;
+the engine is announced in the first Ask SSE frame.
 
 ### claude-cli responder **[VERIFIED M0]**
 
@@ -390,6 +409,18 @@ command executions feed the progress line. `responderModel`/
 `codexResponderModel`/`codexResponderEffort` settings, defaulting to
 `gpt-5.6-terra`/`medium`; both are supplied explicitly so the viewed Codex
 session's defaults cannot affect Ask. Updated 2026-09-08.
+
+### Compressed Codex Ask (2026-09-13)
+
+Only Codex answers Codex sessions. For `.jsonl.zst`, its prompt directs the
+existing read-only sandbox to the bundled Node `readCodexRollout.js` helper,
+using the same installed optional decoder. The helper streams decoded JSONL
+to stdout with backpressure; it creates no decompressed file and does not
+resume/restore an agent session. Pipelines must use pipefail; decoder errors
+make partial output unavailable as complete evidence. Ask awaits source
+reconciliation and refuses known source errors before persisting a question.
+Plain Codex prompts and Claude's Read/Grep/Glob cage remain unchanged.
+No normalized full-session projection is needed under strict routing.
 
 ### Engine config
 

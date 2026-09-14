@@ -158,9 +158,10 @@ Rules:
 - The Ask input shows the answering model and effort when the responder
   supports them. Codex changes are saved before the next question can be sent
   and never alter the working agent's session configuration.
-- If no responder engine is available (no agent CLI detected), the Ask
+- Ask always uses the session's own CLI, with no cross-engine override or fallback.
+- If that CLI is unavailable, the Ask
   button still appears but the panel shows a one-time setup hint (install a
-  CLI), never a dead end.
+  matching CLI), never a dead end.
 
 ### 5.5 C5 — Cross-session full-text search
 

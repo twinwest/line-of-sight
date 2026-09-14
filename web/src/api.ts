@@ -84,6 +84,7 @@ export function cancelAsk(id: string): void {
 }
 
 export interface ResponderStatus {
+  error?: string | null;
   engine: 'claude-cli' | 'codex-cli' | null;
   /** Display name for engines that do not expose selectors. */
   label: string | null;

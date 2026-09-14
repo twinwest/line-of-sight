@@ -27,7 +27,7 @@ try {
 const adapters = [claudeCodeAdapter(), codexAdapter()];
 const ingester = new Ingester(store, adapters, log);
 const hub = new SseHub();
-ingester.onEvents((sessionId, events) => hub.broadcast(sessionId, events));
+ingester.onEvents((sessionId, events, reset) => hub.broadcast(sessionId, events, reset));
 // session ids are globally unique across adapters (see AgentAdapter), so the
 // flat merge cannot collide
 const app = buildServer(store, hub, () => {

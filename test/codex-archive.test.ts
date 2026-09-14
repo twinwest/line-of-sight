@@ -15,7 +15,7 @@ vi.mock('../src/responders/index.js', async orig => ({
   resolveResponder: async () => {
     await beforeResolve?.();
     return {
-      id: 'claude-cli',
+      id: 'codex-cli',
       answer: async (request: ResponderRequest) => {
         requests.push(request);
         return 'grounded answer';
@@ -219,7 +219,7 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSideChat(chat.id)).not.toBeNull();
   });
 
-  it('passes the relocated transcript and preserved context to a Claude responder through Ask', async () => {
+  it('passes the relocated transcript and preserved context to its Codex responder through Ask', async () => {
     const { buildServer, SseHub } = await import('../src/daemon/server.js');
     ingester.ingestFile(adapter, active);
     const chat = store.createSideChat(ID, 'u1', 'archive evidence');

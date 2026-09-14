@@ -52,5 +52,8 @@
   "files": [
     "dist",
     "web/dist"
-  ]
+  ],
+  "optionalDependencies": {
+    "zstd-napi": "0.0.12"
+  }
 }

@@ -12,6 +12,17 @@ unavailable. Sight opens <http://127.0.0.1:2020> when no viewer tab is detected.
 To use `claude` or `codex` directly, run `sight open` once. Existing and new
 sessions appear automatically while Sight is running.
 
+## Archived and compressed Codex sessions
+
+Sight discovers active and archived Codex rollouts, including `.jsonl.zst`,
+without restoring or modifying agent files. Codex Ask reads compressed
+content through Sight's bundled Node helper. No system `zstd` command is
+required. Install with optional dependencies enabled for compressed support;
+a missing decoder or corrupt/unsupported file shows a passive explanation
+and prevents Ask from treating incomplete evidence as the full session.
+The decoder accepts history windows and individual JSONL records up to
+8 MiB; larger inputs show an explicit error. Total session size may be larger.
+
 ## Browsing subagents
 
 Browse Claude Code subagent transcripts from their parent session. Expand
@@ -20,14 +31,13 @@ in the session header.
 
 ## Configuration
 
-Ask defaults to the session's CLI, falling back to the other installed CLI
-if unavailable. No Sight configuration is required.
-
-Optional settings in `~/.sight/config.json`:
+Ask uses the session's own CLI: Claude Code for Claude sessions, Codex for
+Codex sessions. If it is unavailable, the panel tells you which CLI to install;
+there is no cross-engine fallback. Settings live in `~/.sight/config.json`.
 
 | Setting | Effect |
 | --- | --- |
-| `responder` | Pin Ask to `claude-cli` or `codex-cli`, with no fallback. |
+| `responder` | Legacy setting, ignored; session type determines the answering CLI. |
 | `responderModel` | Claude Ask model; also selectable in the Ask panel. |
 | `responderEffort` | Claude Ask effort; also selectable in the Ask panel. |
 | `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |

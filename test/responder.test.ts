@@ -57,21 +57,20 @@ describe('candidates routing', () => {
   const ids = (cfg: Parameters<typeof candidates>[0], adapter?: 'claude-code' | 'codex') =>
     candidates(cfg, adapter).map((e) => e.id);
 
-  it('defaults to claude-cli, codex-cli', () => {
-    expect(ids({})).toEqual(['claude-cli', 'codex-cli']);
+  it('requires known session context', () => {
+    expect(ids({})).toEqual([]);
+    expect(ids({}, 'unknown' as never)).toEqual([]);
   });
 
-  it('puts the engine matching the viewed session agent first', () => {
-    expect(ids({}, 'codex')).toEqual(['codex-cli', 'claude-cli']);
-    expect(ids({}, 'claude-code')).toEqual(['claude-cli', 'codex-cli']);
+  it('offers only the CLI matching the session', () => {
+    expect(ids({}, 'codex')).toEqual(['codex-cli']);
+    expect(ids({}, 'claude-code')).toEqual(['claude-cli']);
   });
 
-  it('a config pin is the only candidate — no fallback, session agent ignored', () => {
-    expect(ids({ responder: 'claude-cli' }, 'codex')).toEqual(['claude-cli']);
-  });
-
-  it('an unknown pin yields no candidates', () => {
-    expect(ids({ responder: 'gemini-cli' as never })).toEqual([]);
+  it('ignores legacy pins without crossing session types', () => {
+    expect(ids({ responder: 'claude-cli' }, 'codex')).toEqual(['codex-cli']);
+    expect(ids({ responder: 'codex-cli' }, 'claude-code')).toEqual(['claude-cli']);
+    expect(ids({ responder: 'gemini-cli' as never }, 'codex')).toEqual(['codex-cli']);
   });
 });
 

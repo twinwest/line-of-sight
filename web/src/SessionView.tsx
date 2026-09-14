@@ -192,7 +192,10 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
   }, [id]);
 
   useEffect(() => {
+    let version: string | undefined;
+    let loaded = false;
     fetchSession(id, undefined, targetMessageId).then(({ session, events, children, runs }) => {
+      version = session.sourceVersion; loaded = true;
       applyMeta({ session, children, runs });
       setEvents(events);
       requestAnimationFrame(() => {
@@ -227,7 +230,16 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
     const resync = () => {
       void fetchSession(id).then(({ session: meta, events: tail, children: kids, runs: r }) => {
         applyMeta({ session: meta, children: kids, runs: r });
-        setEvents((prev) => merge(prev, tail));
+        const replaced = loaded && version !== meta.sourceVersion;
+        setEvents((prev) => replaced ? tail : merge(prev, tail));
+        version = meta.sourceVersion; loaded = true;
+      }, () => {});
+    };
+    const refreshReplacement = () => {
+      void fetchSession(id).then(({ session: meta, events: tail, children: kids, runs: r }) => {
+        version = meta.sourceVersion; loaded = true;
+        applyMeta({ session: meta, children: kids, runs: r });
+        setEvents(tail);
       }, () => {});
     };
     let opened = false;
@@ -237,6 +249,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
         const incoming = JSON.parse(msg.data as string) as StoredEvent[];
         setEvents((prev) => merge(prev, incoming));
       };
+      es.addEventListener('reset', refreshReplacement);
       es.onopen = () => { if (opened) resync(); opened = true; };
       esRef.current = es;
     };
@@ -251,7 +264,10 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
     // the browser never retries a failed reconnect — so rebuild it here;
     // onopen then resyncs the tail missed while it was down.
     const t = setInterval(() => {
-      void fetchSessionMeta(id).then(applyMeta, () => {});
+      void fetchSessionMeta(id).then(meta => {
+        if (loaded && version !== meta.session.sourceVersion) refreshReplacement();
+        else { version = meta.session.sourceVersion; applyMeta(meta); }
+      }, () => {});
       if (esRef.current?.readyState === EventSource.CLOSED) connect();
     }, 10_000);
 
@@ -420,6 +436,7 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
   const resumeCmd = resumeCommand(dialect, session.id, session.projectDir);
   return (
     <div className="session-view">
+      {session.sourceError && <div className="setup-hint" role="status">{session.sourceError} Existing messages may be out of date.</div>}
       <div className="session-header">
         <span className={`dot ${dotStatus}`} title={dotTitle(session, dotStatus, Date.now())} />
         {session.parentId && (

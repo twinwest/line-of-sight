@@ -3,6 +3,19 @@
 Decision date: 2026-09-13. Archive lifecycle #28 is on `main` at
 `019ee2b`. This spike adds no compressed ingestion or responder behavior.
 
+## Subsequent decision — strict session matching (2026-09-13)
+
+The owner accepted strict routing: Claude answers Claude Code sessions;
+Codex answers Codex sessions. Global pins and cross-engine fallback are
+removed. Unavailable matching CLI produces a specific setup hint / 409.
+This supersedes the Claude-compressed-Codex blocker below: #30 uses the
+already validated Codex decoder route. It does not require a raw transcript
+cache, a full-session text projection, or widened Claude permissions.
+
+The remaining sections preserve the original investigation's evidence and
+scope at commit 5ee1b60. Current implementation details are in
+ARCHITECTURE §4/§6 and the #30 addendum in SPIKE_NOTES.
+
 ## Outcome
 
 Use `zstd-napi@0.0.12`'s low-level streaming decoder for the Node >=20
@@ -11,7 +24,7 @@ ran on this machine with Node 20.20.2 / macOS arm64. No system `zstd`
 executable is needed. Keep it isolated from daemon startup so missing native
 bindings cannot break plain ingestion or the fail-open wrapper.
 
-**#30 remains blocked on Claude Ask grounding.** With the existing
+**Original outcome (superseded by strict routing above): #30 was blocked on Claude Ask grounding.** With the existing
 Read/Grep/Glob cage, the actual Claude responder could not read evidence in
 a valid `.jsonl.zst` outside its anchor excerpt. Codex's read-only responder
 could, including through the Node 20 decoder helper. The daemon decoding a

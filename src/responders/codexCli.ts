@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { CODEX_ASK_DEFAULTS, readConfig, responderSettings } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
 import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js';
@@ -27,6 +28,21 @@ export const CODEX_ARGS = (prompt: string,
 interface JsonEvent {
   type?: string;
   item?: { type?: string; text?: string; command?: string };
+}
+
+/** Only Codex sees this decoder instruction; Claude's prompt/tools stay intact. */
+export function codexPrompt(req: ResponderRequest): string {
+  if (!req.sessionFilePath.endsWith('.jsonl.zst')) return composePrompt(req);
+  const helper = fileURLToPath(new URL('./readCodexRollout.js', import.meta.url));
+  const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+  const command = `${quote(process.execPath)} ${quote(helper)} ${quote(req.sessionFilePath)}`;
+  return composePrompt(req).replace(
+    `The full transcript is at ${req.sessionFilePath} — it is JSONL; read the relevant parts with your tools (Grep to locate the anchor text, Read with offsets for context).`,
+    `The full transcript is zstd-compressed at ${req.sessionFilePath}. Read its complete decoded JSONL through this bundled read-only command: ${command}. ` +
+    `Use a pipeline with pipefail and rg/sed to locate relevant records, timestamps, or line ranges. ` +
+    `No system zstd executable is needed. Never write a decompressed file or restore/resume the agent session. ` +
+    `If decoding fails, state that source evidence is unavailable; partial output is not a complete transcript.`,
+  );
 }
 
 function parse(line: string): JsonEvent | null {
@@ -75,7 +91,7 @@ export const codexCliResponder: Responder = {
          onStatus?: (s: string) => void): Promise<string> {
     const { model, effort } = responderSettings('codex-cli', readConfig());
     return new Promise((resolve, reject) => {
-      const child = spawn('codex', CODEX_ARGS(composePrompt(req), { model, effort }), {
+      const child = spawn('codex', CODEX_ARGS(codexPrompt(req), { model, effort }), {
         cwd: req.projectDir ?? os.homedir(),
         // stdin MUST be ignored: with a piped stdin, `codex exec` waits for
         // EOF to append it to the prompt and never starts (measured)

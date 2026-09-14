@@ -95,7 +95,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const busy = streaming !== null || (remote?.answering ?? false);
 
   const ask = (question: string) => {
-    if (busy || savingConfig || !question.trim()) return;
+    if (busy || savingConfig || !status?.engine || !question.trim()) return;
     atBottom.current = true;   // asking re-arms the follow
     void runAsk(chat.id, question, chat.turns).then(onChanged);
     setInput('');
@@ -170,9 +170,10 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
         </span>
       </div>
       <div className="panel-body" ref={bodyRef} onScroll={onScroll}>
+        {status === null && <div className="setup-hint">Could not check this session’s answering CLI. Reopen the chat to retry.</div>}
         {status?.engine === null && (
           <div className="setup-hint">
-            No answer engine found. Install the <code>claude</code> or <code>codex</code> CLI.
+            {status.error ?? 'The session’s CLI is unavailable.'}
           </div>
         )}
         {turns.map((t, i) => (
@@ -223,7 +224,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             e.preventDefault();
             ask(input);
           }}
-          placeholder="Ask about the selection…" disabled={busy || savingConfig} autoFocus />
+          placeholder="Ask about the selection…" disabled={busy || savingConfig || (status !== undefined && !status?.engine)} autoFocus />
         <div className="input-foot">
           {/* Engines with dropdowns need no text label: the selectors say
               what answers. */}
@@ -251,7 +252,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
               .map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
           </select>
           </>}
-          <button type="submit" disabled={busy || savingConfig || !input.trim()} title="Ask (Enter)">↑</button>
+          <button type="submit" disabled={busy || savingConfig || !status?.engine || !input.trim()} title="Ask (Enter)">↑</button>
         </div>
       </form>
     </aside>

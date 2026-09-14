@@ -19,8 +19,8 @@ import { parseTs, str, truncate } from './util.js';
 // echoed response_item types are dropped BY TYPE (a line-local parser can't
 // dedupe by id); truly unknown shapes still fall through to `unknown`.
 
-const ROLLOUT = /^rollout-.*\.jsonl$/;
-const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+const ROLLOUT = /^rollout-.*\.jsonl(?:\.zst)?$/;
+const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(?:\.zst)?$/i;
 
 // Bookkeeping with no conversational content (SPIKE_NOTES): dropped, like
 // the claude adapter's DROP_TYPES. Unknown envelope types render as unknown.
@@ -163,7 +163,7 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
   const indexPath = path.join(root, '..', 'session_index.jsonl');
   const archiveRoot = path.join(root, '..', 'archived_sessions');
   const sessionId = (filePath: string) => UUID.exec(path.basename(filePath))?.[1]
-    ?? path.basename(filePath, '.jsonl');
+    ?? path.basename(filePath).replace(/\.jsonl(?:\.zst)?$/, '');
   const matchesRollout = (filePath: string) => {
     if (!ROLLOUT.test(path.basename(filePath))) return false;
     const dir = path.dirname(filePath);
@@ -207,9 +207,15 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
 
     resolveSessionFile(filePath, boundPath) {
       const id = sessionId(filePath);
-      if (boundPath && sessionId(boundPath) === id && fs.existsSync(boundPath)) return boundPath;
+      if (boundPath && sessionId(boundPath) === id && fs.existsSync(boundPath)) {
+        const plain = boundPath.replace(/\.zst$/, '');
+        return fs.existsSync(plain) ? plain : boundPath;
+      }
       if (boundPath || !discovered?.get(id)?.includes(filePath)) discovered = discover();
-      return discovered?.get(id)?.find(p => fs.existsSync(p)) ?? null;
+      const source = discovered?.get(id)?.find(p => fs.existsSync(p));
+      if (!source) return null;
+      const plain = source.replace(/\.zst$/, '');
+      return fs.existsSync(plain) ? plain : source;
     },
 
     // ~/.codex/thread-writer-locks/<session-uuid>.lock is held OPEN by the

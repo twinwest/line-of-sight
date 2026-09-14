@@ -17,6 +17,11 @@ export interface SessionMeta {
   /** API-only: the process is verified alive but nothing has moved since this
    *  stamp for longer than the stale cap — unverifiable, not busy, not idle. */
   quietSince?: number;
+  /** API-only: compressed-source validation failed; any existing derived
+   *  view is stale and must not be offered as complete Ask evidence. */
+  sourceError?: string;
+  /** Changes when the derived Codex view is replaced, rather than appended. */
+  sourceVersion?: string;
   /** Transcript-derived turn state (agents with turn markers, e.g. codex
    *  task_started/task_complete). Corroborates process-alive-only live
    *  signals: false = the turn ended, an open TUI is just idle. */

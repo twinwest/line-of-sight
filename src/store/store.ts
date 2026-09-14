@@ -195,6 +195,49 @@ export class Store {
 
   close(): void { this.db.close(); }
 
+  /** SQLite owns this anonymous, disk-backed temporary database. It is
+   *  unlinked on detach/connection close (including process death), contains
+   *  derived rows only, and is never visible to readers of the main tables. */
+  beginCodexReplay(meta: SessionMeta): void {
+    this.db.prepare("ATTACH DATABASE '' AS codex_replay").run();
+    try {
+      this.db.pragma('codex_replay.cache_size = -2048');
+      this.db.exec(`CREATE TABLE codex_replay.sessions AS SELECT * FROM main.sessions WHERE 0;
+        CREATE TABLE codex_replay.messages AS SELECT * FROM main.messages WHERE 0;
+        CREATE UNIQUE INDEX codex_replay.messages_key ON messages(session_id, id)`);
+      this.db.prepare(`INSERT INTO codex_replay.sessions
+        (id, adapter, file_path, project_dir, title, title_source, started_at, updated_at, message_count, byte_offset)
+        VALUES (?, 'codex', ?, NULL, '', NULL, ?, ?, 0, 0)`)
+        .run(meta.id, meta.filePath, meta.startedAt, meta.updatedAt);
+    } catch (e) { this.endCodexReplay(); throw e; }
+  }
+
+  stageCodexEvents = this.txn((id: string, events: NormalizedEvent[], offset: number): void => {
+    this.appendTo(id, events, offset, 'codex_replay');
+  });
+
+  commitCodexReplay = this.txn((meta: SessionMeta, sourceKey: string, fingerprint: string): void => {
+    const prior = this.getSession(meta.id);
+    if (prior && prior.adapter !== 'codex') throw new Error('not a Codex session');
+    const row = this.db.prepare('SELECT * FROM codex_replay.sessions WHERE id = ?').get(meta.id) as SessionRow;
+    this.upsertSession(meta);
+    this.bindCodexSessionFile(meta.id, meta.filePath, sourceKey);
+    this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(meta.id);
+    this.db.prepare(`INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
+      SELECT id, session_id, seq, role, ts, blocks_json, text_content, parent_id
+      FROM codex_replay.messages ORDER BY seq`).run();
+    this.db.prepare(`UPDATE sessions SET byte_offset = ?, message_count = ?, updated_at = ?,
+      started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END,
+      turn_open = ?, turn_started_at = ? WHERE id = ?`)
+      .run(row.byte_offset, row.message_count, row.updated_at, row.started_at, row.turn_open, row.turn_started_at, meta.id);
+    this.applyPatch(meta.id, { projectDir: row.project_dir ?? undefined,
+      title: row.title, titleSource: row.title_source ?? undefined });
+    this.setKv(`codex-fingerprint:${meta.id}`, fingerprint);
+    this.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-error:${meta.id}`);
+  });
+
+  endCodexReplay(): void { this.db.exec('DETACH DATABASE codex_replay'); }
+
   getSessionByPath(filePath: string): { id: string; byteOffset: number } | null {
     const r = this.db.prepare('SELECT id, byte_offset FROM sessions WHERE file_path = ?')
       .get(filePath) as { id: string; byte_offset: number } | undefined;
@@ -302,18 +345,20 @@ export class Store {
     this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...ids);
     this.db.prepare(`DELETE FROM kv WHERE key LIKE 'ended:' || ? || ':%'
       OR key LIKE 'wfrun:' || ? || ':%' OR key LIKE 'wfname:' || ? || ':%'`).run(id, id, id);
-    for (const sessionId of ids) this.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-source:${sessionId}`);
+    for (const sessionId of ids) for (const prefix of ['codex-source:', 'codex-fingerprint:', 'codex-error:', 'codex-failed:']) {
+      this.db.prepare('DELETE FROM kv WHERE key = ?').run(`${prefix}${sessionId}`);
+    }
   });
 
   /** After a scan: sessions whose transcript is gone, and side chats a
    *  schema rebuild left without a session. With `keepSideChats` the
    *  orphans stay; turning it off clears them on the next scan. */
-  prune(keepSideChats = false, handleMissing?: (session: SessionMeta) => boolean): void {
+  prune(keepSideChats = false, handleMissing?: (session: SessionMeta) => boolean, cleanupOrphans = true): void {
     const rows = this.db.prepare('SELECT * FROM sessions').all() as SessionRow[];
     for (const r of rows) {
       if (!fs.existsSync(r.file_path) && !handleMissing?.(toMeta(r))) this.deleteSession(r.id, keepSideChats);
     }
-    if (!keepSideChats) {
+    if (!keepSideChats && cleanupOrphans) {
       this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
     }
   }
@@ -326,11 +371,15 @@ export class Store {
 
   /** Append a batch of events and advance the checkpoint, in one transaction.
    *  Returns the events as stored (with seq) for SSE broadcast. */
-  appendEvents = this.txn((sessionId: string, events: NormalizedEvent[], newByteOffset: number): StoredEvent[] => {
-    const maxSeq = (this.db.prepare('SELECT MAX(seq) s FROM messages WHERE session_id = ?')
+  appendEvents = this.txn((sessionId: string, events: NormalizedEvent[], newByteOffset: number): StoredEvent[] =>
+    this.appendTo(sessionId, events, newByteOffset, 'main'));
+
+  private appendTo(sessionId: string, events: NormalizedEvent[], newByteOffset: number,
+      schema: 'main' | 'codex_replay'): StoredEvent[] {
+    const maxSeq = (this.db.prepare(`SELECT MAX(seq) s FROM ${schema}.messages WHERE session_id = ?`)
       .get(sessionId) as { s: number | null }).s ?? 0;
     const insert = this.db.prepare(`
-      INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
+      INSERT INTO ${schema}.messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id, id) DO UPDATE SET blocks_json = excluded.blocks_json,
         text_content = excluded.text_content, ts = excluded.ts, parent_id = excluded.parent_id
@@ -342,7 +391,7 @@ export class Store {
       // patch-only carriers (title lines: raw === null) update the session
       // but have nothing to display — no row, no SSE broadcast
       if (ev.kind === 'meta' && ev.raw === null) {
-        if (ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch);
+        if (ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch, schema);
         continue;
       }
       const role = ev.kind === 'message' ? ev.role : ev.kind;
@@ -355,7 +404,7 @@ export class Store {
       // only real messages count as activity — trailing bookkeeping writes
       // (away_summary etc.) must not make an idle session look running
       if (ev.kind === 'message' && ev.ts > lastTs) lastTs = ev.ts;
-      if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch);
+      if (ev.kind !== 'unknown' && ev.sessionPatch) this.applyPatch(ev.sessionPatch.sessionId ?? sessionId, ev.sessionPatch, schema);
       stored.push({
         id: ev.id, seq, ts: ev.ts, kind: ev.kind,
         role: ev.kind === 'message' ? ev.role : null,
@@ -365,32 +414,32 @@ export class Store {
     // recount rather than add: a re-read from byte 0 (schema backfill) lands
     // every row on DO UPDATE, which reports changes=1 just like an insert
     this.db.prepare(`
-      UPDATE sessions SET byte_offset = ?, message_count = ${MESSAGE_COUNT},
+      UPDATE ${schema}.sessions SET byte_offset = ?, message_count = ${MESSAGE_COUNT.replace('FROM messages m', `FROM ${schema}.messages m`)},
         updated_at = MAX(updated_at, ?),
         started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END
       WHERE id = ?
     `).run(newByteOffset, lastTs, events[0]?.ts ?? 0, sessionId);
     return stored;
-  });
+  }
 
   /** Apply one patch outside the append flow (patch files, see Ingester). */
   patchSession(sessionId: string, patch: SessionPatch): void {
     this.applyPatch(sessionId, patch);
   }
 
-  private applyPatch(sessionId: string, patch: SessionPatch): void {
+  private applyPatch(sessionId: string, patch: SessionPatch, schema: 'main' | 'codex_replay' = 'main'): void {
     if (patch.turnOpen !== undefined) {
       // last-wins: patches arrive in transcript order
-      this.db.prepare(`UPDATE sessions SET turn_open = ?,
+      this.db.prepare(`UPDATE ${schema}.sessions SET turn_open = ?,
         turn_started_at = COALESCE(?, turn_started_at) WHERE id = ?`)
         .run(patch.turnOpen ? 1 : 0, patch.turnStartedAt ?? null, sessionId);
     }
     if (patch.projectDir) {
-      this.db.prepare('UPDATE sessions SET project_dir = ? WHERE id = ? AND project_dir IS NULL')
+      this.db.prepare(`UPDATE ${schema}.sessions SET project_dir = ? WHERE id = ? AND project_dir IS NULL`)
         .run(patch.projectDir, sessionId);
     }
     if (patch.title && patch.titleSource) {
-      const cur = this.db.prepare('SELECT title, title_source FROM sessions WHERE id = ?')
+      const cur = this.db.prepare(`SELECT title, title_source FROM ${schema}.sessions WHERE id = ?`)
         .get(sessionId) as { title: string; title_source: TitleSource | null } | undefined;
       if (!cur) return;
       const curPrio = cur.title_source ? TITLE_PRIORITY[cur.title_source] : 0;
@@ -398,7 +447,7 @@ export class Store {
       // prompt: first one wins; custom/ai: last one wins (>= allows re-titling)
       const apply = patch.titleSource === 'prompt' ? curPrio === 0 : newPrio >= curPrio;
       if (apply) {
-        this.db.prepare('UPDATE sessions SET title = ?, title_source = ? WHERE id = ?')
+        this.db.prepare(`UPDATE ${schema}.sessions SET title = ?, title_source = ? WHERE id = ?`)
           .run(patch.title, patch.titleSource, sessionId);
       }
     }
@@ -413,7 +462,7 @@ export class Store {
         AND (@q IS NULL OR title LIKE '%' || @q || '%')
       ORDER BY updated_at DESC
     `).all({ project: opts.project ?? null, q: opts.q ?? null }) as SessionRow[];
-    return rows.map(toMeta);
+    return rows.map(r => this.withCodexError(toMeta(r)));
   }
 
   /** Subagent sessions this session spawned, in the order they started. */
@@ -426,7 +475,13 @@ export class Store {
 
   getSession(id: string): SessionMeta | null {
     const r = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
-    return r ? toMeta(r) : null;
+    return r ? this.withCodexError(toMeta(r)) : null;
+  }
+
+  private withCodexError(meta: SessionMeta): SessionMeta {
+    const error = meta.adapter === 'codex' ? this.getKv(`codex-error:${meta.id}`) : null;
+    if (meta.adapter !== 'codex') return meta;
+    return { ...meta, sourceError: error ?? undefined, sourceVersion: this.getKv(`codex-fingerprint:${meta.id}`) ?? this.getKv(`codex-source:${meta.id}`) ?? undefined };
   }
 
   getMessageSeq(sessionId: string, messageId: string): number | null {
@@ -530,6 +585,9 @@ export class Store {
    *  never dropped, so this rule needs no intact chain. Computed per read
    *  because a later append can abandon rows already written. */
   private abandonedSeqs(sessionId: string): Set<number> {
+    // Codex is linear: avoid loading its entire graph for every bounded read.
+    const session = this.db.prepare('SELECT adapter FROM sessions WHERE id = ?').get(sessionId) as { adapter: string } | undefined;
+    if (session?.adapter === 'codex') return new Set();
     const rows = this.db.prepare(
       'SELECT id, seq, parent_id FROM messages WHERE session_id = ? ORDER BY seq',
     ).all(sessionId) as { id: string; seq: number; parent_id: string | null }[];

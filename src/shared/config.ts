@@ -3,6 +3,7 @@ import path from 'node:path';
 import { SIGHT_DIR } from './paths.js';
 
 export interface SightConfig {
+  /** Legacy global pin, ignored: Ask always uses the session's own CLI. */
   responder?: 'claude-cli' | 'codex-cli';
   /** Model for responder invocations (claude-cli --model). Engine default if unset. */
   responderModel?: string;

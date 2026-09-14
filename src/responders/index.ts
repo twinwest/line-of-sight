@@ -9,22 +9,17 @@ export { ANTHROPIC_OPTIONS } from './types.js';
 
 const ENGINES: Responder[] = [claudeCliResponder, codexCliResponder];
 
-/** Adapter→engine preference — the only coupling between the two vocabularies. */
+/** A session is answered only by its own agent's CLI. */
 const PREFERRED: Record<SessionMeta['adapter'], Responder['id']> = {
   'claude-code': 'claude-cli',
   codex: 'codex-cli',
 };
 
-/** Pure routing (ARCHITECTURE §6): a config pin is the only candidate — no
- *  silent fallback to an engine the user didn't pick. Otherwise the engine
- *  matching the viewed session's agent goes first, default order after it. */
-export function candidates(cfg: SightConfig, adapter?: SessionMeta['adapter']): Responder[] {
-  if (cfg.responder) {
-    const pinned = ENGINES.find((e) => e.id === cfg.responder);
-    return pinned ? [pinned] : [];
-  }
+/** Legacy global pins are ignored, without rewriting the user's config.
+ *  Unknown/missing session context has no candidate. Never cross-fallback. */
+export function candidates(_cfg: SightConfig, adapter?: SessionMeta['adapter']): Responder[] {
   const match = adapter && ENGINES.find((e) => e.id === PREFERRED[adapter]);
-  return match ? [match, ...ENGINES.filter((e) => e !== match)] : ENGINES;
+  return match ? [match] : [];
 }
 
 export async function resolveResponder(adapter?: SessionMeta['adapter']): Promise<Responder | null> {

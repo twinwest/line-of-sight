@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import {
   readConfig, responderConfigPatch, responderSettings, type ResponderEngine, writeConfig,
 } from '../shared/config.js';
-import { ANTHROPIC_OPTIONS, resolveResponder } from '../responders/index.js';
+import { ANTHROPIC_OPTIONS, candidates, resolveResponder } from '../responders/index.js';
 import { CODEX_OPTIONS, type ResponderRequest } from '../responders/types.js';
 import { dialectFor } from '../shared/dialects/index.js';
 import { pendingBlockId, toolOutcomes } from '../shared/outcomes.js';
@@ -32,10 +32,10 @@ export class SseHub {
     return n;
   }
 
-  broadcast(sessionId: string, events: StoredEvent[]): void {
+  broadcast(sessionId: string, events: StoredEvent[], reset = false): void {
     const set = this.clients.get(sessionId);
     if (!set?.size) return;
-    const payload = `data: ${JSON.stringify(events)}\n\n`;
+    const payload = `${reset ? 'event: reset\n' : ''}data: ${JSON.stringify(events)}\n\n`;
     for (const res of set) res.write(payload);
   }
 }
@@ -198,7 +198,9 @@ export function buildServer(store: Store, hub: SseHub,
     if (!session) return reply.code(404).send({ error: 'not found' });
     const targets = [session, ...store.listChildren(session.id)];
     for (const s of targets) {
-      store.resetSession(s.id);
+      if (s.adapter === 'codex' && s.filePath.endsWith('.zst')) {
+        for (const prefix of ['codex-fingerprint:', 'codex-failed:']) store.db.prepare('DELETE FROM kv WHERE key = ?').run(prefix + s.id);
+      } else store.resetSession(s.id);
       reingest(s.filePath);
     }
     return { ok: true, sessions: targets.length };
@@ -220,7 +222,7 @@ export function buildServer(store: Store, hub: SseHub,
     store.search(req.query.q ?? ''));
 
   app.get<{ Querystring: { adapter?: string } }>('/api/responder/status', async (req) => {
-    // candidates() ignores unknown adapter strings, so pass the raw value through
+    // Unknown/missing context has no answering engine.
     const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
     const settings = engine ? responderSettings(engine.id, readConfig()) : { model: '', effort: '' };
     return {
@@ -229,6 +231,11 @@ export function buildServer(store: Store, hub: SseHub,
       options: engine?.options ?? null,
       responderModel: settings.model,
       responderEffort: settings.effort,
+      error: engine ? null : req.query.adapter === 'codex'
+        ? 'Codex CLI is unavailable. Install Codex CLI to ask about this session.'
+        : req.query.adapter === 'claude-code'
+          ? 'Claude Code CLI is unavailable. Install Claude Code to ask about this session.'
+          : 'Select a session to choose its answering CLI.',
     };
   });
 
@@ -295,11 +302,8 @@ export function buildServer(store: Store, hub: SseHub,
 
       const engine = await resolveResponder(session.adapter);
       if (!engine) {
-        const pinned = readConfig().responder;
         return reply.code(409).send({
-          error: pinned
-            ? `configured responder '${pinned}' is not available`
-            : 'no responder engine available',
+          error: `${candidates({}, session.adapter)[0]?.id ?? 'matching CLI'} is not available for this session`,
         });
       }
 
@@ -310,6 +314,7 @@ export function buildServer(store: Store, hub: SseHub,
         session = store.getSession(chat.sessionId);
         chat = store.getSideChat(chat.id);
         if (!session || !chat) return reply.code(404).send({ error: 'session not found' });
+        if (session.sourceError) return reply.code(409).send({ error: session.sourceError });
       }
 
       running.get(chat.id)?.abort();
