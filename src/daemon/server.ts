@@ -68,7 +68,10 @@ const STALE_BUSY_MS = 15 * 60_000;
 export function buildServer(store: Store, hub: SseHub,
     liveSessions: () => Map<string, LiveSession> = () => new Map(),
     reingest: (filePath: string) => void | Promise<void> = () => {}): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // Fastify's default ('idle') only drops idle keep-alive sockets on close;
+  // an open SSE stream (a viewer tab) kept `app.close()` pending forever, so
+  // `sight stop` left a daemon that had logged "stopping" and never exited.
+  const app = Fastify({ logger: false, forceCloseConnections: true });
   // so the CLI can tell a daemon that predates the current build
   const startedAt = Date.now();
 
