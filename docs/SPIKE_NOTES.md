@@ -618,7 +618,7 @@ Ask/status/prewarm routing for both agents. Claude parsing, watchers,
 subagents, liveness, and read-only tools are unchanged.
 
 Compressed Codex rollouts now decode with the optional Node 20-compatible
-native binding in a worker with acknowledged bounded batches. Anonymous
+native binding, inline, in bounded batches the daemon yields between. Anonymous
 SQLite staging contains normalized rows only, disappears automatically on
 connection close, and replaces the previous derived view only after frame,
 JSONL tail, and source validation. Corrupt/new/modified/relocated sources,

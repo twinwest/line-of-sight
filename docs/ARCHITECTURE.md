@@ -259,7 +259,8 @@ from frame start. Before publishing, revalidate the open source and selected
 path. No compressed-size comparison or compressed seek uses decoded offsets.
 
 The optional `zstd-napi` low-level decoder loads only on compressed reads.
-A worker limits history to 8 MiB, input slices to 4 KiB, output slices to
+It runs inline (native decode is far cheaper than the per-batch JSON parse
+that follows it) and limits history to 8 MiB, input slices to 4 KiB, output slices to
 128 KiB, records to 8 MiB, and in-flight batches to 256 records / roughly
 512 KiB (a single larger record is still bounded by the record limit).
 The daemon yields between parse/database batches. SQLite's anonymous attached
