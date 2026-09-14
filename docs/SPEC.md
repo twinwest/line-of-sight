@@ -213,6 +213,7 @@ Rules:
 | Any quiz/gate/forced-explanation mechanic | never (opt-in maybe later) | Violates B1/B2 |
 | Multi-agent orchestration, kanban, notifications, cost dashboards | never | Crowded/commoditized; off-thesis |
 | Cloud sync, accounts, team features, telemetry | not v1 | |
+| Global responder pin / cross-engine Ask ("answer every session with Claude") | cut 2026-09-13 | The agent that wrote the session answers about it (5.4). Only its own CLI can read its own transcript in full (compressed Codex rollouts need the Codex-side decoder); a pin was the one config key nobody had set. Rebuild against `Responder` if a real user asks for it. |
 | IDE integrations | not planned | CLI-first (B7) |
 
 ## 7. Non-functional requirements

@@ -444,6 +444,8 @@ No normalized full-session projection is needed under strict routing.
   Sight defaults to `gpt-5.6-terra` and `medium`. The panel shows the
   effective values and saves changes before enabling the next Ask.
 - Settings are read per Ask — no daemon restart is needed.
+- No engine pin. Routing is the session's adapter, full stop (decided
+  2026-09-13); a `responder` key in an older config is ignored.
 - A BYOK api engine (direct Messages API, no tools, inline excerpt as its
   grounding) existed through 2026-08-31 and was cut: it never ran (requires
   both CLIs absent plus a hand-configured key — contradicting "a session on
