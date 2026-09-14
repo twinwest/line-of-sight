@@ -17,7 +17,6 @@ export class Ingester {
   private listeners: IngestListener[] = [];
   private queue = Promise.resolve();
   private rechecks = new Map<string, NodeJS.Timeout>();
-  private codexRescan?: NodeJS.Timeout;
 
   constructor(
     private store: Store,
@@ -87,16 +86,6 @@ export class Ingester {
       } catch (e) { this.log(`Codex reconciliation failed: ${String(e)}`); }
       return true;
     }, false);
-    // Chokidar cannot always attach to a directory created between its
-    // parent event and the first child write. A low-frequency reconciliation
-    // closes that startup gap; checkpoints make unchanged scans no-ops.
-    if (this.adapters.some(a => a.id === 'codex')) {
-      const codex = this.adapters.find(a => a.id === 'codex')!;
-      const roots = codex.roots().slice(0, 2);
-      this.codexRescan = setInterval(() => void this.enqueue(async () => {
-        for (const root of roots) this.scanRoot(codex, root);
-      }), 1000);
-    }
     // Schema rebuild retains chats while compressed session rows are queued.
     // The final pass still resolves Codex paths: a failed decode may retain a
     // valid view whose old path is gone, while its compressed replacement is
@@ -140,8 +129,6 @@ export class Ingester {
     await Promise.all(this.watchers.map((w) => w.close()));
     for (const t of this.rechecks.values()) clearTimeout(t);
     this.rechecks.clear();
-    if (this.codexRescan) clearInterval(this.codexRescan);
-    this.codexRescan = undefined;
     let pending = this.queue;
     for (;;) {
       await pending;

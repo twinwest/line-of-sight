@@ -263,6 +263,7 @@ export class Store {
     if (!session || session.adapter !== 'codex') throw new Error('not a Codex session');
     const key = `codex-source:${id}`;
     const priorSource = this.getKv(key);
+    if (priorSource === sourceKey && session.filePath === filePath) return; // every append lands here: no-op, no write
     // Upgrade old path-based fallback IDs without rebuilding unrelated
     // adapters or invalidating side-chat anchors.
     const oldPrefix = `${session.filePath}:`;
