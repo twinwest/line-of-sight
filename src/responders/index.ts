@@ -1,4 +1,3 @@
-import { readConfig, type SightConfig } from '../shared/config.js';
 import type { SessionMeta } from '../shared/types.js';
 import { claudeCliResponder } from './claudeCli.js';
 import { codexCliResponder } from './codexCli.js';
@@ -15,15 +14,15 @@ const PREFERRED: Record<SessionMeta['adapter'], Responder['id']> = {
   codex: 'codex-cli',
 };
 
-/** Legacy global pins are ignored, without rewriting the user's config.
- *  Unknown/missing session context has no candidate. Never cross-fallback. */
-export function candidates(_cfg: SightConfig, adapter?: SessionMeta['adapter']): Responder[] {
+/** Unknown/missing session context has no candidate. Never cross-fallback
+ *  (decided 2026-09-13); a `responder` key left in an old config is ignored. */
+export function candidates(adapter?: SessionMeta['adapter']): Responder[] {
   const match = adapter && ENGINES.find((e) => e.id === PREFERRED[adapter]);
   return match ? [match] : [];
 }
 
 export async function resolveResponder(adapter?: SessionMeta['adapter']): Promise<Responder | null> {
-  for (const engine of candidates(readConfig(), adapter)) {
+  for (const engine of candidates(adapter)) {
     if (await engine.available()) return engine;
   }
   return null;

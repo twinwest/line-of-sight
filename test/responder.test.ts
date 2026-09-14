@@ -54,24 +54,19 @@ describe('composePrompt', () => {
 });
 
 describe('candidates routing', () => {
-  const ids = (cfg: Parameters<typeof candidates>[0], adapter?: 'claude-code' | 'codex') =>
-    candidates(cfg, adapter).map((e) => e.id);
+  const ids = (adapter?: 'claude-code' | 'codex') =>
+    candidates(adapter).map((e) => e.id);
 
   it('requires known session context', () => {
-    expect(ids({})).toEqual([]);
-    expect(ids({}, 'unknown' as never)).toEqual([]);
+    expect(ids()).toEqual([]);
+    expect(ids('unknown' as never)).toEqual([]);
   });
 
   it('offers only the CLI matching the session', () => {
-    expect(ids({}, 'codex')).toEqual(['codex-cli']);
-    expect(ids({}, 'claude-code')).toEqual(['claude-cli']);
+    expect(ids('codex')).toEqual(['codex-cli']);
+    expect(ids('claude-code')).toEqual(['claude-cli']);
   });
 
-  it('ignores legacy pins without crossing session types', () => {
-    expect(ids({ responder: 'claude-cli' }, 'codex')).toEqual(['codex-cli']);
-    expect(ids({ responder: 'codex-cli' }, 'claude-code')).toEqual(['claude-cli']);
-    expect(ids({ responder: 'gemini-cli' as never }, 'codex')).toEqual(['codex-cli']);
-  });
 });
 
 describe('claude-cli command construction', () => {

@@ -306,7 +306,7 @@ export function buildServer(store: Store, hub: SseHub,
       const engine = await resolveResponder(session.adapter);
       if (!engine) {
         return reply.code(409).send({
-          error: `${candidates({}, session.adapter)[0]?.id ?? 'matching CLI'} is not available for this session`,
+          error: `${candidates(session.adapter)[0]?.id ?? 'matching CLI'} is not available for this session`,
         });
       }
 

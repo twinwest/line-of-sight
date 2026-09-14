@@ -3,8 +3,6 @@ import path from 'node:path';
 import { SIGHT_DIR } from './paths.js';
 
 export interface SightConfig {
-  /** Legacy global pin, ignored: Ask always uses the session's own CLI. */
-  responder?: 'claude-cli' | 'codex-cli';
   /** Model for responder invocations (claude-cli --model). Engine default if unset. */
   responderModel?: string;
   /** Effort for responder invocations: low | medium | high | xhigh | max. Engine default if unset. */
@@ -19,7 +17,7 @@ export interface SightConfig {
   keepSideChats?: boolean;
 }
 
-export type ResponderEngine = NonNullable<SightConfig['responder']>;
+export type ResponderEngine = 'claude-cli' | 'codex-cli';
 
 export const CODEX_ASK_DEFAULTS = { model: 'gpt-5.6-terra', effort: 'medium' } as const;
 

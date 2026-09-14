@@ -37,7 +37,6 @@ there is no cross-engine fallback. Settings live in `~/.sight/config.json`.
 
 | Setting | Effect |
 | --- | --- |
-| `responder` | Legacy setting, ignored; session type determines the answering CLI. |
 | `responderModel` | Claude Ask model; also selectable in the Ask panel. |
 | `responderEffort` | Claude Ask effort; also selectable in the Ask panel. |
 | `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |
