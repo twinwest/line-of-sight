@@ -161,20 +161,56 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
   // first the truncated prompt, then the AI rename seconds later, last wins.
   // Ingested as a patch file (see Ingester.ingestPatchFile).
   const indexPath = path.join(root, '..', 'session_index.jsonl');
+  const archiveRoot = path.join(root, '..', 'archived_sessions');
+  const sessionId = (filePath: string) => UUID.exec(path.basename(filePath))?.[1]
+    ?? path.basename(filePath, '.jsonl');
+  const matchesRollout = (filePath: string) => {
+    if (!ROLLOUT.test(path.basename(filePath))) return false;
+    const dir = path.dirname(filePath);
+    return dir === archiveRoot || path.dirname(path.dirname(path.dirname(dir))) === root;
+  };
+  // Cache one discovery snapshot, rather than recursively walking every
+  // directory for every initial rollout. Missing bindings and genuinely new
+  // paths refresh it; live appends keep the bound source without walking.
+  let discovered: Map<string, string[]> | null = null;
+  const discover = () => {
+    const files = new Map<string, string[]>();
+    for (const sourceRoot of [root, archiveRoot]) {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(sourceRoot, { recursive: true, withFileTypes: true });
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw e;
+      }
+      const candidates = entries.filter(e => e.isFile())
+        .map(e => path.join(e.parentPath, e.name)).filter(matchesRollout).sort();
+      for (const p of candidates) {
+        const id = sessionId(p);
+        files.set(id, [...(files.get(id) ?? []), p]);
+      }
+    }
+    return files;
+  };
   return {
     id: 'codex',
-    roots: () => [root, indexPath],
+    roots: () => [root, archiveRoot, indexPath],
     // 3 = <root>/YYYY/MM/DD/rollout-*.jsonl
     watchDepth: 3,
 
     matches(filePath) {
       if (filePath === indexPath) return true;
-      if (!ROLLOUT.test(path.basename(filePath))) return false;
-      const dd = path.dirname(filePath);
-      return path.dirname(path.dirname(path.dirname(dd))) === root;
+      return matchesRollout(filePath);
     },
 
     patchFile: (filePath) => filePath === indexPath,
+
+    resolveSessionFile(filePath, boundPath) {
+      const id = sessionId(filePath);
+      if (boundPath && sessionId(boundPath) === id && fs.existsSync(boundPath)) return boundPath;
+      if (boundPath || !discovered?.get(id)?.includes(filePath)) discovered = discover();
+      return discovered?.get(id)?.find(p => fs.existsSync(p)) ?? null;
+    },
 
     // ~/.codex/thread-writer-locks/<session-uuid>.lock is held OPEN by the
     // live codex process for the session's whole lifetime and the fd dies
@@ -211,7 +247,7 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
     },
 
     parseLine(rawLine, ctx) {
-      const fallbackId = `${ctx.filePath}:${ctx.byteOffset}`;
+      const fallbackId = `${sessionId(ctx.filePath)}:${ctx.byteOffset}`;
       let line: Json;
       try {
         const parsed: unknown = JSON.parse(rawLine);
@@ -316,7 +352,7 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
     sessionMeta(filePath, firstEvents) {
       const ts = firstEvents[0]?.ts ?? 0;
       return {
-        id: UUID.exec(path.basename(filePath))?.[1] ?? path.basename(filePath, '.jsonl'),
+        id: sessionId(filePath),
         adapter: 'codex',
         filePath,
         projectDir: null,   // filled by the session_meta cwd patch

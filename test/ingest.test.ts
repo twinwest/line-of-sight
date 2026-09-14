@@ -27,7 +27,7 @@ describe('incremental ingest', () => {
     fs.mkdirSync(path.join(root, '-tmp-proj'));
     file = path.join(root, '-tmp-proj', `${SESSION}.jsonl`);
     store = new Store(':memory:');
-    ingester = new Ingester(store, [adapter()]);
+    ingester = new Ingester(store, [adapter()], () => {}, () => false);
   });
 
   afterEach(() => {

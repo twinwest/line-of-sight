@@ -283,11 +283,12 @@ describe('codexAdapter session_index.jsonl (AI thread names)', () => {
     const store = new Store(':memory:');
     const ingester = new Ingester(store, [a]);
 
-    // index first: patches drop (no session yet) — the whole-file replay heals
+    // Index first: no phantom session. Ingesting the rollout replays the
+    // existing index immediately, even if no new index write follows.
     ingester.ingestFile(a, index);
     expect(store.getSession(UUID1)).toBeNull();
     ingester.ingestFile(a, rollout);
-    expect(store.getSession(UUID1)!.title).toBe('long raw prompt');
+    expect(store.getSession(UUID1)!.title).toBe('Compare repo ownership options');
     ingester.ingestFile(a, index);
     expect(store.getSession(UUID1)!.title).toBe('Compare repo ownership options');
     // a later prompt (new first message never happens, but same priority rule:

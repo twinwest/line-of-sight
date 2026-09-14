@@ -147,7 +147,8 @@ export type RenderBlock =
 
 Notes:
 - `id` must be stable across re-parses (use the transcript's own uuid when
-  present; else `filePath:lineNo`). Q&A anchors reference message ids.
+  present; Codex fallback = `sessionUuid:byteOffset`, independent of rollout
+  location; Claude keeps its path-based fallback). Q&A anchors reference message ids.
 - `summary` for tool blocks is computed at parse time (e.g. `Read src/x.ts`,
   `Bash: npm test`). Keep heuristics per-adapter, simple, and safe on missing
   fields.
@@ -218,6 +219,26 @@ as `ended_at`; a child without one is running while its parent process is
 3. Parsing must be line-buffered and tolerant of a partial last line (the
    checkpoint stays at the last complete newline; the tail is re-read once the
    newline arrives).
+
+Codex rollouts also live in the flat `~/.codex/archived_sessions/` directory.
+Scan active then archived rollouts before replaying `session_index.jsonl`;
+watch Codex locations through their parent with a scoped directory filter,
+even when initially absent; rescan once the subscription is ready.
+Archive/unarchive are file
+moves, separate from compression. Codex's optional adapter source resolver
+keeps an existing bound UUID source, otherwise chooses an active source before
+an archived one, using an ordered discovery snapshot refreshed for new paths
+and missing bindings. Missing-path ingestion and startup pruning resolve surviving
+UUID sources before deletion; unreadable directories are errors, not absence.
+Binding a Codex source updates the stored path and migrates legacy fallback
+anchors in a transaction. `kv` stores `codex-source:<uuid>` = device/inode:
+rename preserves the checkpoint across restarts; a copied/replaced source is
+reparsed while retaining titles and side chats. Final deletion clears this
+fact. Ask awaits Codex reconciliation and refreshes its source and anchor
+after responder availability probing. Claude ingestion and deletion do not
+use source reconciliation.
+Compressed `.jsonl.zst` rollouts are not yet supported (#29/#30); this change
+adds no archive controls or Sight-owned retention.
 
 ## 5. Store (SQLite)
 

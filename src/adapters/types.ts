@@ -17,6 +17,10 @@ export interface AgentAdapter {
    *  carrier (e.g. codex's session_index.jsonl): no session row of its own,
    *  re-read whole on every change, lines route via SessionPatch.sessionId. */
   patchFile?(filePath: string): boolean;
+  /** Locate one surviving source for a relocatable transcript. Keep a valid
+   *  bound source; null means no source remains. Errors must propagate so a
+   *  temporarily unreadable directory cannot be mistaken for deletion. */
+  resolveSessionFile?(filePath: string, boundPath?: string): string | null;
   /** Parse one jsonl line into zero or more normalized events. MUST NOT throw. */
   parseLine(line: string, ctx: { filePath: string; byteOffset: number }): NormalizedEvent[];
   /** Derive session metadata from path + first events. */

@@ -201,6 +201,35 @@ export class Store {
     return r ? { id: r.id, byteOffset: r.byte_offset } : null;
   }
 
+  /** Codex archive/unarchive moves the source, not its session. The inode
+   *  checkpoint survives rename (including while Sight is stopped). A copy
+   *  or replacement is reparsed, keeping titles and user-owned side chats. */
+  bindCodexSessionFile = this.txn((id: string, filePath: string, sourceKey: string): void => {
+    const session = this.getSession(id);
+    if (!session || session.adapter !== 'codex') throw new Error('not a Codex session');
+    const key = `codex-source:${id}`;
+    const priorSource = this.getKv(key);
+    // Upgrade old path-based fallback IDs without rebuilding unrelated
+    // adapters or invalidating side-chat anchors.
+    const oldPrefix = `${session.filePath}:`;
+    const newPrefix = `${id}:`;
+    if (!priorSource || session.filePath !== filePath) {
+      this.db.prepare(`UPDATE messages SET id = ? || substr(id, length(?) + 1)
+        WHERE session_id = ? AND substr(id, 1, length(?)) = ?`)
+        .run(newPrefix, oldPrefix, id, oldPrefix, oldPrefix);
+      this.db.prepare(`UPDATE side_chats SET anchor_message_id = ? || substr(anchor_message_id, length(?) + 1)
+        WHERE session_id = ? AND substr(anchor_message_id, 1, length(?)) = ?`)
+        .run(newPrefix, oldPrefix, id, oldPrefix, oldPrefix);
+    }
+    if ((priorSource && priorSource !== sourceKey) || (!priorSource && session.filePath !== filePath)) {
+      this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
+      this.db.prepare(`UPDATE sessions SET byte_offset = 0, message_count = 0,
+        turn_open = NULL, turn_started_at = NULL, updated_at = started_at WHERE id = ?`).run(id);
+    }
+    this.db.prepare('UPDATE sessions SET file_path = ? WHERE id = ?').run(filePath, id);
+    this.setKv(key, sourceKey);
+  });
+
   upsertSession(meta: SessionMeta): void {
     // ON CONFLICT(id) DO NOTHING would silently drop a cross-adapter id
     // collision; the AgentAdapter contract (globally-unique, uuid-derived ids)
@@ -273,15 +302,17 @@ export class Store {
     this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...ids);
     this.db.prepare(`DELETE FROM kv WHERE key LIKE 'ended:' || ? || ':%'
       OR key LIKE 'wfrun:' || ? || ':%' OR key LIKE 'wfname:' || ? || ':%'`).run(id, id, id);
+    for (const sessionId of ids) this.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-source:${sessionId}`);
   });
 
   /** After a scan: sessions whose transcript is gone, and side chats a
    *  schema rebuild left without a session. With `keepSideChats` the
-   *  orphans are the point and stay; turning it off clears them here on the
-   *  next scan. */
-  prune(keepSideChats = false): void {
-    const rows = this.db.prepare('SELECT id, file_path FROM sessions').all() as { id: string; file_path: string }[];
-    for (const r of rows) if (!fs.existsSync(r.file_path)) this.deleteSession(r.id, keepSideChats);
+   *  orphans stay; turning it off clears them on the next scan. */
+  prune(keepSideChats = false, handleMissing?: (session: SessionMeta) => boolean): void {
+    const rows = this.db.prepare('SELECT * FROM sessions').all() as SessionRow[];
+    for (const r of rows) {
+      if (!fs.existsSync(r.file_path) && !handleMissing?.(toMeta(r))) this.deleteSession(r.id, keepSideChats);
+    }
     if (!keepSideChats) {
       this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
     }

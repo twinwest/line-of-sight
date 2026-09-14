@@ -67,7 +67,7 @@ const STALE_BUSY_MS = 15 * 60_000;
 
 export function buildServer(store: Store, hub: SseHub,
     liveSessions: () => Map<string, LiveSession> = () => new Map(),
-    reingest: (filePath: string) => void = () => {}): FastifyInstance {
+    reingest: (filePath: string) => void | Promise<void> = () => {}): FastifyInstance {
   const app = Fastify({ logger: false });
   // so the CLI can tell a daemon that predates the current build
   const startedAt = Date.now();
@@ -286,11 +286,11 @@ export function buildServer(store: Store, hub: SseHub,
 
   app.post<{ Params: { id: string }; Body: { question?: string } }>(
     '/api/side-chats/:id/ask', async (req, reply) => {
-      const chat = store.getSideChat(req.params.id);
+      let chat = store.getSideChat(req.params.id);
       if (!chat) return reply.code(404).send({ error: 'not found' });
       const question = req.body?.question?.trim();
       if (!question) return reply.code(400).send({ error: 'question required' });
-      const session = store.getSession(chat.sessionId);
+      let session = store.getSession(chat.sessionId);
       if (!session) return reply.code(404).send({ error: 'session not found' });
 
       const engine = await resolveResponder(session.adapter);
@@ -301,6 +301,15 @@ export function buildServer(store: Store, hub: SseHub,
             ? `configured responder '${pinned}' is not available`
             : 'no responder engine available',
         });
+      }
+
+      if (session.adapter === 'codex') {
+        // Engine probing may outlive an archive/unarchive. Reconcile the
+        // source, then refresh both the path and any migrated fallback anchor.
+        await reingest(session.filePath);
+        session = store.getSession(chat.sessionId);
+        chat = store.getSideChat(chat.id);
+        if (!session || !chat) return reply.code(404).send({ error: 'session not found' });
       }
 
       running.get(chat.id)?.abort();

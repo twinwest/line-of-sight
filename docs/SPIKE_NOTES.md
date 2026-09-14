@@ -549,3 +549,40 @@ a long tool call either. Right now: 0 `unverifiable` sessions, 10/10 pid
 files backed by live processes. If a CLI version stops writing pid files, the
 rule above is the implementation; the schema already has `turn_open` /
 `turn_started_at` for it.
+
+## Addendum 2026-09-13 — Codex archive lifecycle (#16/#28)
+
+The 2026-09-12 sample had 14 active rollouts and one archived plain JSONL
+rollout (codex-cli 0.153.4), no `.jsonl.zst` files. The archive was 1,407,297
+bytes: filename UUID matched `session_meta`, the current parser produced 48
+messages with no unknown events, the title index had two matching entries,
+and Codex's state database still pointed to it with an archived flag. Its
+archive timestamp was about 1h44m after creation; age at discovery says
+nothing about an automatic archive threshold or who triggered the operation.
+
+Upstream main separates archive/unarchive (rename between active date tree
+and flat archive) from compression (plain JSONL to `.jsonl.zst` in either
+location). The seven-day mtime check is for compression. Source observations
+do not establish feature activation or identical behavior in 0.153.4:
+[archive](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/local/archive_thread.rs),
+[unarchive](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/local/unarchive_thread.rs),
+[compression](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/compression.rs).
+
+Current-source reproduction showed why merely adding an archive root loses
+data: unlink-before-add recreates the session without side chats;
+add-before-unlink or an offline move followed by startup pruning deletes the
+session entirely. Path lookup/deletion plus UUID insert-on-conflict-do-nothing
+was the cause. Nonexistent roots also had no watcher, missing first archive
+creation. Native watcher setup could still miss a move during its async
+subscription: merely enabling initial add events did not close this gap.
+Watching a scoped parent and rescanning on ready fixed the reproduced miss.
+#28 now discovers both layouts, resolves UUID sources before
+deletion, binds paths transactionally, preserves rename checkpoints using a
+device/inode fact, and reparses copies without dropping side chats. Fallback
+IDs use UUID/byte offset; legacy path IDs and anchors are migrated. Real
+watcher, restart, duplicate-copy, Ask-route, and mixed-Claude cleanup checks
+cover the lifecycle, including a move after source resolution and while Ask
+probes responder availability. Fixture `test/fixtures/codex/archived.jsonl` is synthetic
+and sanitized, modeled on the observed archived envelope. No agent data is
+written and no CLI archive/resume operation is invoked. Compression support
+remains separate (#29/#30).
