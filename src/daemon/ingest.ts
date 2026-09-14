@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import chokidar, { type FSWatcher } from 'chokidar';
+import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 import { codexFingerprint, readCompressedCodex } from '../adapters/codexRollout.js';
 import type { AgentAdapter } from '../adapters/types.js';
 import { readConfig } from '../shared/config.js';
@@ -31,47 +31,44 @@ export class Ingester {
   /** Scan all roots once, then watch for changes. */
   start(): void {
     for (const adapter of this.adapters) {
-      for (const root of adapter.roots()) {
-        const exists = fs.existsSync(root);
-        if (!exists && adapter.id !== 'codex') continue;
-        this.scanRoot(adapter, root);
-        // Replaying initial Codex add events closes the gap between the
-        // synchronous scan and asynchronous watcher setup. Checkpoints make
-        // this idempotent, including roots first created during startup.
-        const watchRoot = adapter.id === 'codex' ? path.dirname(root) : root;
-        const watcher = chokidar.watch(watchRoot, {
-          ignoreInitial: adapter.id !== 'codex',
-          depth: adapter.id === 'codex' ? (adapter.watchDepth ?? 3) + 1 : adapter.watchDepth,
-          // Watching the existing parent catches first directory creation.
-          // `matches` below filters non-rollout Codex data before ingestion.
-        });
-        const onFile = (p: string) => {
-          if (!adapter.matches(p)) return;
+      const roots = adapter.roots();
+      for (const root of roots) this.scanRoot(adapter, root);
+      const onFile = (p: string) => {
+        if (!adapter.matches(p)) return;
+        this.enqueue(() => this.ingestQueued(adapter, p));
+        // fs events coalesce: a write burst can land after our read
+        // snapshot with no further event, orphaning the file's tail
+        // (seen dropping codex's final message + task_complete). One
+        // trailing recheck once the burst goes quiet picks it up.
+        clearTimeout(this.rechecks.get(p));
+        this.rechecks.set(p, setTimeout(() => {
+          this.rechecks.delete(p);
           this.enqueue(() => this.ingestQueued(adapter, p));
-          // fs events coalesce: a write burst can land after our read
-          // snapshot with no further event, orphaning the file's tail
-          // (seen dropping codex's final message + task_complete). One
-          // trailing recheck once the burst goes quiet picks it up.
-          clearTimeout(this.rechecks.get(p));
-          this.rechecks.set(p, setTimeout(() => {
-            this.rechecks.delete(p);
-            this.enqueue(() => this.ingestQueued(adapter, p));
-          }, 1000));
-        };
+        }, 1000));
+      };
+      const watch = (dir: string, opts: ChokidarOptions) => {
+        const watcher = chokidar.watch(dir, { ignoreInitial: true, ...opts });
         watcher.on('add', onFile).on('change', onFile).on('unlink', onFile);
-        if (adapter.id === 'codex') watcher.on('addDir', p => {
-          // A first archive directory can be created after startup. Chokidar
-          // may report the directory before it begins watching its children;
-          // reconcile the snapshot so a file written in that window is seen.
-          if (p !== watchRoot) void this.enqueue(() => this.scanRoot(adapter, root));
-        });
-        if (adapter.id === 'codex') watcher.on('ready', () => {
-          // The parent subscription itself is asynchronous. Reconcile the
-          // startup snapshot once it is installed, closing its event gap.
-          void this.enqueue(() => this.scanRoot(adapter, root));
-        });
         watcher.on('error', (err) => this.log(`watcher error: ${String(err)}`));
         this.watchers.push(watcher);
+        return watcher;
+      };
+      if (adapter.id === 'codex') {
+        // Roots can appear after startup (first archive), so watch their
+        // shared parent — ONE watcher, scoped to the roots: chokidar 4's
+        // kqueue fallback holds an fd per watched file, and ~/.codex also
+        // holds databases, caches and the thread-writer locks.
+        const inRoots = (p: string) => roots.some(r => p === r || p.startsWith(r + path.sep));
+        for (const parent of new Set(roots.map(r => path.dirname(r)))) {
+          const watcher = watch(parent, { depth: (adapter.watchDepth ?? 3) + 1,
+            ignored: p => p !== parent && !inRoots(p) });
+          // A root created later can be reported before its children are
+          // watched, and the subscription itself is async: rescan both times.
+          watcher.on('addDir', p => { if (roots.includes(p)) void this.enqueue(() => this.scanRoot(adapter, p)); });
+          watcher.on('ready', () => void this.enqueue(() => { for (const r of roots) this.scanRoot(adapter, r); }));
+        }
+      } else {
+        for (const root of roots) if (fs.existsSync(root)) watch(root, { depth: adapter.watchDepth });
       }
     }
     this.store.prune(this.keepSideChats(), session => {
