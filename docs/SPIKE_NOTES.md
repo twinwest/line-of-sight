@@ -280,6 +280,12 @@ SIGKILL, an `exec resume`). Fixtures: `test/fixtures/codex/entries.jsonl`
   lock file; kernel releases flocks on process death, so unlike Claude's
   `status: busy` file this can never go stale — no STALE_BUSY_MS needed for
   codex. No busy/waiting distinction observed (see open questions).
+- Two caveats (2026-09-14): the Desktop app's long-lived `codex app-server`
+  holds every open thread's lock, so a stopped-but-still-open thread stays
+  held — the transcript's turn markers decide idle, not the lock. And a
+  stopped turn ends with `event_msg/turn_aborted` (no `task_complete`), so
+  the adapter must close the turn on it. Sight's own watcher holds fds on
+  the lock files too (kqueue); the lsof probe excludes its own pid.
 
 **Interaction analogs**
 - Plan mode exists: `turn_context.collaboration_mode.mode:

@@ -243,9 +243,11 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       if (!locks.length) return live;
       // lsof exits non-zero when any listed file is open by nobody, but
       // still prints the held ones — same spawnSync reasoning as the claude
-      // adapter's `ps` batch.
+      // adapter's `ps` batch. Exclude ourselves: the ingest watcher (kqueue
+      // under chokidar 4) holds an fd on every file under ~/.codex, locks
+      // included, which would read as forever-alive once codex lets go.
       const { stdout, error } = spawnSync('lsof',
-        ['-Fn', '--', ...locks.map((f) => path.join(lockDir, f))],
+        ['-a', '-p', `^${process.pid}`, '-Fn', '--', ...locks.map((f) => path.join(lockDir, f))],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       if (error || !stdout) return live;
       for (const line of stdout.split('\n')) {
@@ -314,11 +316,12 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       if (type === 'event_msg') {
         const sub = str(payload.type);
         if (sub && DROP_EVENTS.has(sub)) return [];
-        // turn boundaries → patch-only carriers (no display row). Unobserved
-        // task_* subtypes (a future task_aborted, say — the likely Esc path)
-        // defensively CLOSE the turn: a stuck-open turn pins the busy dot,
-        // a wrongly-closed one just greys it until the next task_started.
-        if (sub?.startsWith('task_')) {
+        // turn boundaries → patch-only carriers (no display row). A stop from
+        // the Desktop app / Esc lands as `turn_aborted` (seen 2026-09-14), not
+        // task_*; unobserved task_* subtypes also defensively CLOSE the turn:
+        // a stuck-open turn pins the busy dot, a wrongly-closed one just greys
+        // it until the next task_started.
+        if (sub?.startsWith('task_') || sub === 'turn_aborted') {
           const patch: SessionPatch = sub === 'task_started'
             ? { turnOpen: true, turnStartedAt: ts }
             : { turnOpen: false };

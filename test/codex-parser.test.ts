@@ -62,9 +62,12 @@ describe('codexAdapter.parseLine', () => {
       sessionPatch: { turnOpen: true, turnStartedAt: Date.parse('2026-08-27T22:00:00.000Z') } });
     const [done] = adapter.parseLine(line('event_msg', { type: 'task_complete' }), ctx);
     expect(done).toMatchObject({ kind: 'meta', raw: null, sessionPatch: { turnOpen: false } });
-    // unobserved task_* subtypes (the likely Esc/abort path) close defensively
-    const [aborted] = adapter.parseLine(line('event_msg', { type: 'task_aborted' }), ctx);
-    expect(aborted).toMatchObject({ kind: 'meta', raw: null, sessionPatch: { turnOpen: false } });
+    // a stop from the Desktop app / Esc is `turn_aborted`; unobserved task_*
+    // subtypes close defensively too
+    for (const sub of ['turn_aborted', 'task_aborted']) {
+      const [aborted] = adapter.parseLine(line('event_msg', { type: sub }), ctx);
+      expect(aborted).toMatchObject({ kind: 'meta', raw: null, sessionPatch: { turnOpen: false } });
+    }
   });
 
   it('UserMessage → user text + title patch; AgentMessage → assistant text', () => {
