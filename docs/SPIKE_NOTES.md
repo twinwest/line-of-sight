@@ -595,9 +595,10 @@ remains separate (#29/#30).
 
 ## Compressed Codex rollouts — investigation 2026-09-13 (#29)
 
-See [CODEX_COMPRESSION_SPIKE.md](CODEX_COMPRESSION_SPIKE.md) for the
-reproducible synthetic fixture, actual outside-excerpt responder runs,
-runtime measurements, and checkpoint decision. Node 20 can stream through
+The full report and its reproduction script were dropped once #30 shipped;
+both live in history at 5ee1b60 (`docs/CODEX_COMPRESSION_SPIKE.md`,
+`scripts/spikes/`). The synthetic fixture stayed under
+`test/fixtures/codex/compression/`. Node 20 can stream through
 `zstd-napi` with a capped window and detect truncation/checksum corruption;
 the tested pure JS `fzstd` accepts corrupted checksums. Codex can read the
 full compressed source through a read-only Node helper. Claude's existing
