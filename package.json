@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc && vite build web",
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
-    "test": "vitest run",
+    "test": "vitest run test",
     "dev": "vite web",
     "prepublishOnly": "npm run build",
     "preversion": "npm run typecheck && npm run test",

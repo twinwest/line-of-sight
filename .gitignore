@@ -7,3 +7,6 @@ web/dist/
 # owner-only notes: decision log, plans, research (never published)
 docs/private/
 CLAUDE.local.md
+
+# Claude Code worktrees (EnterWorktree); settings.local.json is ignored globally
+.claude/worktrees/
