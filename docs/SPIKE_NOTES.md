@@ -44,6 +44,13 @@ including one 4.5MB July session (CLI v2.1.202) and current sessions (v2.1.241).
   `isMeta`, `isApiErrorMessage`, `toolUseResult`, `slug`, `promptId`, ...
   Key sets vary line-to-line even within one file — parse field-by-field,
   never validate whole-object shape.
+- `isMeta: true` on a `user` line = CLI-injected, never shown by the CLI as
+  the user speaking: the local-command caveat, Skill bodies loaded by the
+  Skill tool, the `[Image: original WxH, displayed at …]` coordinate caption
+  after a screenshot tool_result (CLI ≥ 2.1.270 also sets `turnCompanion:
+  true` on those), usage-limit auto-continue, slash-command expansions.
+  Surveyed 2026-09-14: 159 such lines across every local transcript, zero
+  human-typed. Sight folds them as meta.
 - `message.content` is **string** (326×, plain user prompts incl.
   local-command caveats) **or array** of blocks.
 - Block types observed: `tool_use` (1037), `tool_result` (1037),

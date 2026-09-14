@@ -336,6 +336,17 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         if (!message || content == null) {
           return [{ kind: 'unknown', id, ts, raw: line }];
         }
+        const blocks = contentToBlocks(content);
+        // isMeta: CLI-injected user lines the CLI never shows as the user
+        // speaking — image coordinate captions after a screenshot, Skill
+        // bodies, usage-limit auto-continue, slash-command expansions, the
+        // local-command caveat. Fold them as meta; a tool_result carrier
+        // stays a message so the viewer can still pair it with its tool_use.
+        if (type === 'user' && line.isMeta === true && !blocks.some((b) => b.type === 'tool_result')) {
+          const text = blocks.find((b) => b.type === 'text');
+          const label = `user: ${text?.type === 'text' ? truncate(text.markdown.trim(), 80) : 'meta'}`;
+          return [{ kind: 'meta', id, ts, label, raw: line, parentId }];
+        }
         const patch: SessionPatch = {};
         const cwd = str(line.cwd);
         if (cwd) patch.projectDir = cwd;
@@ -345,7 +356,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         }
         return [{
           kind: 'message', id, ts, role: type, parentId,
-          blocks: contentToBlocks(content),
+          blocks,
           ...(Object.keys(patch).length ? { sessionPatch: patch } : {}),
           ...childSignals(line, content),
         }];

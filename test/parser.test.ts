@@ -53,6 +53,19 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(ev.sessionPatch?.projectDir).toMatch(/^\//);
   });
 
+  it('isMeta user lines (CLI-injected, never shown as user speech) become meta', () => {
+    const caption = JSON.stringify({ type: 'user', isMeta: true, turnCompanion: true, uuid: 'm1', parentUuid: 'p1',
+      timestamp: '2026-09-14T19:42:32.807Z', cwd: '/x',
+      message: { role: 'user', content: '[Image: original 3840x2160, displayed at 2000x1125. Multiply coordinates by 1.92 to map to original image.]' } });
+    const [ev] = adapter.parseLine(caption, ctx);
+    expect(ev).toMatchObject({ kind: 'meta', parentId: 'p1' });
+    expect(ev?.kind === 'meta' && ev.label).toMatch(/^user: \[Image: original 3840x2160/);
+    // a tool_result carrier must stay a message so its tool_use can pair with it
+    const carrier = JSON.stringify({ type: 'user', isMeta: true, uuid: 'm2', timestamp: '2026-09-14T19:42:32.807Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } });
+    expect(adapter.parseLine(carrier, ctx)[0]).toMatchObject({ kind: 'message', role: 'user' });
+  });
+
   it('tool_result with array content flattens to output text', () => {
     const all = lines.flatMap((l) => adapter.parseLine(l, ctx));
     const results = all.flatMap((e) => e.kind === 'message' ? e.blocks : [])
