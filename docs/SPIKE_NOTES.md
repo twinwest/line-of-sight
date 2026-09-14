@@ -586,3 +586,17 @@ probes responder availability. Fixture `test/fixtures/codex/archived.jsonl` is s
 and sanitized, modeled on the observed archived envelope. No agent data is
 written and no CLI archive/resume operation is invoked. Compression support
 remains separate (#29/#30).
+
+## Compressed Codex rollouts — investigation 2026-09-13 (#29)
+
+See [CODEX_COMPRESSION_SPIKE.md](CODEX_COMPRESSION_SPIKE.md) for the
+reproducible synthetic fixture, actual outside-excerpt responder runs,
+runtime measurements, and checkpoint decision. Node 20 can stream through
+`zstd-napi` with a capped window and detect truncation/checksum corruption;
+the tested pure JS `fzstd` accepts corrupted checksums. Codex can read the
+full compressed source through a read-only Node helper. Claude's existing
+Read/Grep/Glob tools cannot, and its actual run refused to guess. #30 remains
+blocked on an explicit Claude grounding or compressed-Ask scope decision.
+No compressed runtime support, tool widening, or raw transcript cache ships
+with this spike. Upstream-main observations are distinguished from local
+CLI activation evidence in the report.
