@@ -1,5 +1,9 @@
 # Line of Sight
 
+[![CI](https://github.com/twinwest/line-of-sight/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/twinwest/line-of-sight/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/line-of-sight)](https://www.npmjs.com/package/line-of-sight)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **Stay oriented while coding agents work.**
 
 Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
