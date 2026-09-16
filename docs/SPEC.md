@@ -13,9 +13,10 @@ Codex CLI) already write to disk, renders them as a live, readable web page on
 localhost, and adds four things the terminal cannot do: **clean copy**,
 **select-any-text-and-ask** (a grounded side-chat answered by a separate
 read-only LLM invocation, so the working agent's context stays clean),
-**cross-session full-text search**, and a **session list**. It is launched by
-wrapping the agent command: `sight claude` behaves exactly like `claude` plus
-a viewer.
+**cross-session full-text search**, and a **session list**. It is launched with
+`sight open`, which starts a background daemon and opens the viewer.
+Optionally, `sight claude` wraps the agent command so the viewer starts with
+it, and otherwise behaves exactly like `claude`.
 
 ## 3. Design principles (binding)
 
@@ -43,7 +44,8 @@ a viewer.
   transcript parsing, planned for v1.5, **shipped 2026-08-27** — adapter,
   dialect, and responder; see SPIKE_NOTES of that date.)
 - `sight start` / `sight stop` / `sight status` — daemon lifecycle.
-- `sight open` — (re)open the viewer in the browser.
+- `sight open` — start the daemon if needed and open the viewer in the
+  browser. The primary entry point (decided 2026-09-16).
 - `sight stats` — print the local usage stats (daily viewer-opens and
   questions-asked for the last 14 days).
 - Zero system-level install: no launchd/systemd; daemon is a detached child
