@@ -1,7 +1,18 @@
 {
   "name": "line-of-sight",
   "version": "0.2.1",
-  "description": "Your Claude Code and Codex sessions as a readable local page. Select any line and ask — the agent's context stays untouched.",
+  "description": "Stay oriented while coding agents work. Follow, search, and ask about Claude Code and Codex sessions, locally and read-only.",
+  "keywords": [
+    "agent-observability",
+    "claude",
+    "claude-code",
+    "cli",
+    "codex",
+    "coding-agents",
+    "developer-tools",
+    "local-first",
+    "openai-codex"
+  ],
   "type": "module",
   "license": "MIT",
   "engines": {
