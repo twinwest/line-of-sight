@@ -21,32 +21,37 @@ release only.
   `Origin` are refused.
 - **No remote loads from rendered content.** Transcripts and answers are
   untrusted. A Content Security Policy stops them from loading remote images.
-- **Read-only responder.** Claude Code runs with only `Read`, `Grep`, and
+- **Responder safeguards.** Claude Code runs with only `Read`, `Grep`, and
   `Glob`; write, shell, subagent, and web tools are blocked, and `--restricted`
   makes those read tools refuse any path outside the project and the
-  session's transcript directory. Codex runs with `--sandbox read-only`,
-  which blocks writes and network.
-- **No telemetry.** The only network traffic is your own agent CLI talking to
-  its model service when you ask a question.
+  session's transcript directory. Codex runs model-generated commands under
+  `--sandbox read-only`; commands that stay inside that sandbox cannot write
+  files or use command-level network access. See the Codex limitations below.
+- **No telemetry.** Sight itself makes no telemetry or application network
+  requests. When you ask a question, it launches your own agent CLI; that CLI
+  talks to its model service and may use capabilities enabled in its own
+  configuration.
 
 ## In scope
 
 - A web page or other origin reading data from Sight or triggering actions.
 - Transcript content that makes the viewer run script or load remote
   resources.
-- Anything that lets the responder write files, run commands, or send data
-  anywhere other than your agent CLI's model service.
+- Anything that lets the responder write files, execute commands outside its
+  intended read-only boundary, or send data through an undeclared channel.
 - Sight writing to your repository or changing agent state.
 
 ## Known limitations
 
-- **The Codex responder can read any file your user can read.** Codex's
-  read-only sandbox limits writes and network, not reads, and offers no way
-  to confine them. A transcript containing a prompt injection could steer it
-  to read a file outside the project and quote it in an answer. That answer
-  goes to your model service, as your agent's own traffic does, and is shown
-  in your local viewer; with network closed inside the sandbox, that is the
-  only exit. The Claude Code responder is confined (see above).
+- **The Codex responder currently has broad read access.** Sight uses Codex's
+   `--sandbox read-only` mode, so model-generated commands can read any
+  file available to the Codex process, including files outside the project.
+  The Claude Code responder is confined (see above).
+- **Codex configuration is inherited.** The Codex responder may load user and
+  trusted-project configuration. Configured web search, apps, MCP servers,
+  hooks, or approval behavior are separate capability surfaces and are not
+  confined by `--sandbox read-only`, which applies to model-generated
+  commands. Only use Codex Ask with configuration you trust.
 - **Local processes running as you are out of scope.** They can already read
   `~/.claude`, `~/.codex`, and `~/.sight` directly.
 - **Agent CLIs and model services.** Report issues in Claude Code, Codex
