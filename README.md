@@ -15,22 +15,18 @@ Set up and authenticate the CLI you want to use first. Linux is untested.
 
 ```sh
 npm i -g line-of-sight
-sight claude    # use in place of claude
-# or
-sight codex     # use in place of codex
-```
-
-Sight runs in the background while your agent stays in the terminal.
-In the viewer at <http://127.0.0.1:2020>, choose a session, select text,
-and click **Ask**.
-
-To keep using `claude` or `codex` directly, start the viewer once:
-
-```sh
 sight open
 ```
 
-Existing and new sessions appear automatically while Sight is running.
+Sight runs in the background and shows every Claude Code and Codex session,
+past and live, at <http://127.0.0.1:2020>. Choose a session, select text, and
+click **Ask**. Run `sight open` again after a restart.
+
+To start Sight automatically with your agent, launch the agent through it:
+
+```sh
+sight claude    # or: sight codex
+```
 
 ## Understand the work
 
