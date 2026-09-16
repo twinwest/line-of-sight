@@ -21,6 +21,9 @@ const DROP_TYPES = new Set([
   'atis-latch', 'agent-name', 'fork-context-ref',
   // end-of-session cost/duration totals (CLI ≥ 2.1.251); the transcript keeps them
   'cost-state',
+  // PR created in the session ({prNumber, prUrl}; seen on CLI 2.1.266+, re-written
+  // per PR); the URL is already in the tool output that created it
+  'pr-link',
 ]);
 
 // Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES and

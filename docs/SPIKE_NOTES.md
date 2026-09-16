@@ -393,6 +393,10 @@ scrub `CLAUDE_CODE_CHILD_SESSION` (we also scrubbed `CLAUDECODE`,
   `cost-state`, `ai-title`. All flowed through the raw fallback at the time;
   since handled (`ai-title` → title, the rest dropped — `cost-state` is one
   end-of-session totals line per transcript from CLI 2.1.251 on).
+- Later (2026-09-16): `pr-link` (`{sessionId, prNumber, prUrl, prRepository,
+  timestamp}`, no `uuid`/`parentUuid`), written when the session creates a PR —
+  seen on 2.1.266 and 2.1.270, sometimes more than once per PR. Dropped: the URL
+  is already in the output of the tool call that opened the PR.
 
 **Probe methodology gotchas (for the next person driving a TUI):**
 
