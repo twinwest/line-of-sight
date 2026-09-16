@@ -32,3 +32,7 @@ parse; `docs/SPEC.md` is what v1 is and, just as important, is not.
   Deferred features (SPEC §6) are not scaffolded "for later".
 - A fix in one adapter must not change another adapter's behaviour. If it has
   to, say so in the PR.
+- Every change lands through a PR, squash-merged: the PR title becomes the
+  one commit on `main`. Write PR titles and commit messages as Conventional
+  Commits, `type(scope): summary`, with type `feat`, `fix`, `docs`,
+  `refactor`, `test`, `chore`, or `ci`. Scope is optional.
