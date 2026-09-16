@@ -1,9 +1,10 @@
 # Line of Sight
 
-A local web companion for Claude Code CLI and Codex CLI.
-Browse live and past sessions from both tools, search across conversations,
-and ask questions in a separate, read-only side chat.
-Your main conversation stays unchanged.
+**Stay oriented while coding agents work.**
+
+Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
+Follow live and past sessions, search across conversations, and ask questions
+about any step—without touching the agent's working session.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
@@ -31,14 +32,25 @@ sight open
 
 Existing and new sessions appear automatically while Sight is running.
 
-## Read, search, and ask
+## Understand the work
 
-- **Browse.** Follow live sessions or revisit past conversations from
-  Claude Code and Codex in one place.
-- **Search.** Find conversation text across sessions from both CLIs.
-- **Ask.** Select text and get answers grounded in the session and project
-  files. Follow up in a saved side chat anchored to the selected message.
+- **Follow.** Read live sessions as they unfold, or return to past work
+  without digging through terminal output.
+- **Inspect.** See the conversation, tool calls, results, and subagent work
+  in one readable view.
+- **Ask.** Select any text and ask what happened, why the agent did it, or
+  whether something deserves a closer look. Answers live in a separate,
+  read-only side chat.
+- **Search.** Find decisions and explanations across Claude Code and Codex
+  sessions.
 - **Copy.** Copy messages as Markdown or code blocks as plain code.
+
+## Comprehension, not control
+
+Line of Sight is not a control plane or mission-control dashboard for agents.
+It does not orchestrate their work, send them commands, or reduce a session
+to a completion status. It gives you a readable view of what happened and a
+separate place to question it, while the working conversation stays untouched.
 
 ## Privacy and behavior
 
