@@ -370,14 +370,27 @@ the engine is announced in the first Ask SSE frame.
 
 ### claude-cli responder **[VERIFIED M0]**
 
-Spawn per question (cwd = projectDir if available, else home):
+Spawn per question (cwd = projectDir if available, else the transcript's
+directory):
 
 ```
 claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
   --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
+  --restricted --add-dir <dirname(sessionFilePath)> \
   --no-session-persistence --setting-sources "" \
   --output-format stream-json --include-partial-messages --verbose
 ```
+
+Reads are fenced as well as writes (decided 2026-09-16): `--restricted` makes
+the file tools refuse any path outside cwd and `--add-dir`, as a tool error
+rather than a permission rule, and the only added directory is the
+transcript's (`~/.claude/projects/<project>/`, which also holds the session's
+subagent transcripts and the project's other sessions — `--add-dir` has no
+per-file form). With no known project the transcript directory is the cwd, so
+the fence holds there too; home as cwd would have fenced nothing. Verified by
+a forced out-of-scope Read and Grep on CLI 2.1.273, cold and pre-spawned.
+`--restricted` is present from CLI 2.1.267 at least; an older CLI fails the
+ask with a readable error, never the wrapped agent.
 
 (WebFetch removed from the M0-era flag set and mutating tools hard-blocked —
 decided 2026-08-24: --allowedTools alone only auto-denies, while
@@ -458,8 +471,8 @@ No normalized full-session projection is needed under strict routing.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--allowedTools "Read,Grep,Glob"` + `--disallowedTools` on all mutating/exfiltrating tools |
-| codex-cli | `--sandbox read-only` |
+| claude-cli | `--allowedTools "Read,Grep,Glob"` + `--disallowedTools` on all mutating/exfiltrating tools; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
+| codex-cli | `--sandbox read-only` — blocks writes and network (verified 2026-09-16: DNS fails inside the sandbox), not reads; Codex has no read fence, so its responder can read any file the user can |
 
 If an engine cannot guarantee read-only, it must not be offered as a
 candidate.

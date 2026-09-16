@@ -1,5 +1,4 @@
 import { type ChildProcess, type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
-import os from 'node:os';
 import path from 'node:path';
 import { readConfig } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
@@ -14,15 +13,28 @@ import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './type
 const ALLOWED_TOOLS = 'Read,Grep,Glob';
 const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch';
 
+// Reads are confined too (#36): --restricted makes the file tools refuse any
+// path outside the working directory and --add-dir (verified 2026-09-16 on
+// CLI 2.1.273 — a structural error, not a permission rule), and the only
+// directory added is the transcript's. Transcript content is untrusted; an
+// injected "read ~/.ssh and quote it" now fails at the tool. --restricted
+// exists from CLI 2.1.267 at least; older CLIs fail the ask with a readable
+// error, never the wrapped agent.
+// The transcript dir is ~/.claude/projects/<project>/: it also holds the
+// session's subagent transcripts and the other sessions of the same project
+// — --add-dir takes directories, there is no per-file grant.
+
 // Flags verified in M0 (SPIKE_NOTES S2): stream-json needs --verbose;
 // answer text arrives as stream_event/content_block_delta/text_delta lines.
 // prompt === null: the process is pre-spawned before the reader has typed the
 // question and reads it from stdin later (SPIKE_NOTES S2, 2026-09-04). Same
 // cage, same output format either way — only where the prompt comes from.
-export const CLAUDE_ARGS = (prompt: string | null, opts: { model?: string; effort?: string } = {}): string[] => [
+export const CLAUDE_ARGS = (prompt: string | null, transcriptDir: string,
+    opts: { model?: string; effort?: string } = {}): string[] => [
   '-p', ...(prompt === null ? ['--input-format', 'stream-json'] : [prompt]),
   '--allowedTools', ALLOWED_TOOLS,
   '--disallowedTools', DISALLOWED_TOOLS,
+  '--restricted', '--add-dir', transcriptDir,
   // responder runs must not appear as sessions: the Q&A already lives in
   // side_chats (B6); without this the run writes its own transcript into
   // ~/.claude/projects/ and pollutes the session list
@@ -181,14 +193,15 @@ export const claudeCliResponder: Responder = {
   /** Spawn ahead of the question so node's boot happens while the reader
    *  types; the prompt goes in over stdin. Best-effort by construction — a
    *  failure here is silent and the ask spawns cold, as it always did. */
-  prewarm(chatId: string, projectDir: string | null): void {
+  prewarm(chatId: string, projectDir: string | null, sessionFilePath: string): void {
     dropWarm();
     const { responderModel, responderEffort } = readConfig();
     const opts = { model: responderModel, effort: responderEffort };
+    const transcriptDir = path.dirname(sessionFilePath);
     let child: ChildProcessWithoutNullStreams;
     try {
       // default stdio is pipe on all three — stdin is the point of this spawn
-      child = spawn('claude', CLAUDE_ARGS(null, opts), { cwd: projectDir ?? os.homedir() });
+      child = spawn('claude', CLAUDE_ARGS(null, transcriptDir, opts), { cwd: projectDir ?? transcriptDir });
     } catch {
       return;
     }
@@ -205,9 +218,12 @@ export const claudeCliResponder: Responder = {
     const { responderModel, responderEffort } = readConfig();
     const opts = { model: responderModel, effort: responderEffort };
     const prompt = composePrompt(req);
+    // no project known: the transcript dir is the cwd, so --restricted still
+    // fences the run in (home as cwd would have been no fence at all)
+    const transcriptDir = path.dirname(req.sessionFilePath);
     const hot = feed(takeWarm(req.chatId, configKey(opts)), prompt);
-    const child = hot ?? spawn('claude', CLAUDE_ARGS(prompt, opts), {
-      cwd: req.projectDir ?? os.homedir(),
+    const child = hot ?? spawn('claude', CLAUDE_ARGS(prompt, transcriptDir, opts), {
+      cwd: req.projectDir ?? transcriptDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       signal,
     });
