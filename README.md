@@ -65,6 +65,23 @@ separate place to question it, while the working conversation stays untouched.
   default). To keep your questions, answers and their conversation
   snapshot after that, set `keepSideChats` — see the usage guide.
 
+## Compatibility
+
+Tested with Claude Code 2.1.273 and Codex CLI 0.153.4. Their transcript
+formats are undocumented and change between versions. Entries Sight does not
+recognize render as raw JSON rather than breaking the page.
+
+## Uninstall
+
+```sh
+sight stop
+npm uninstall -g line-of-sight
+rm -rf ~/.sight
+```
+
+Deleting `~/.sight` removes Sight's index, settings, and saved side chats.
+Your Claude Code and Codex transcripts are not touched.
+
 ## Help
 
 See the [usage guide](docs/USAGE.md) for configuration and troubleshooting,
