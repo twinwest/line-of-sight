@@ -24,7 +24,7 @@ export interface Responder {
    *  has typed anything, so its startup overlaps the typing. Best-effort —
    *  answer() must work identically whether or not this ran, and must never
    *  surface a failed pre-spawn. */
-  prewarm?(chatId: string, projectDir: string | null): void;
+  prewarm?(chatId: string, projectDir: string | null, sessionFilePath: string): void;
   /** Streamed answer. MUST be read-only (per-engine enforcement).
    *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */
   answer(req: ResponderRequest, onChunk: (s: string) => void,

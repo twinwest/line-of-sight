@@ -49,7 +49,7 @@ beforeEach(() => { spawn.mockClear(); config = {}; });
 
 describe('pre-spawned responder (#12)', () => {
   it('prewarm spawns a promptless process that reads stdin, with the cage intact', () => {
-    claudeCliResponder.prewarm!('warm-args', '/proj');
+    claudeCliResponder.prewarm!('warm-args', '/proj', '/p/abc.jsonl');
     expect(spawn).toHaveBeenCalledOnce();
     const [cmd, args] = spawn.mock.calls[0] as unknown as [string, string[]];
     expect(cmd).toBe('claude');
@@ -57,10 +57,24 @@ describe('pre-spawned responder (#12)', () => {
     expect(args.slice(0, 4)).toEqual(['-p', '--input-format', 'stream-json', '--allowedTools']);
     expect(args).toContain('--no-session-persistence');
     expect(args[args.indexOf('--disallowedTools') + 1]).toContain('Bash');
+    // reads fenced to the project + the transcript's directory (#36)
+    expect(args).toContain('--restricted');
+    expect(args[args.indexOf('--add-dir') + 1]).toBe('/p');
+    expect(spawn.mock.calls[0]![2]).toMatchObject({ cwd: '/proj' });
+  });
+
+  it('with no project dir, the transcript dir is the cwd — never home (#36)', async () => {
+    claudeCliResponder.prewarm!('warm-noproj', null, '/p/abc.jsonl');
+    expect(spawn.mock.calls[0]![2]).toMatchObject({ cwd: '/p' });
+    const cold = claudeCliResponder.answer({ ...ask('cold-noproj'), projectDir: null }, () => {},
+      new AbortController().signal);
+    finish(lastChild(), 'ok');
+    await cold;
+    expect(spawn.mock.calls[1]![2]).toMatchObject({ cwd: '/p' });
   });
 
   it('the ask reuses the warm process, handing it the prompt over stdin', async () => {
-    claudeCliResponder.prewarm!('warm-hit', '/proj');
+    claudeCliResponder.prewarm!('warm-hit', '/proj', '/p/abc.jsonl');
     const child = lastChild();
 
     const chunks: string[] = [];
@@ -93,7 +107,7 @@ describe('pre-spawned responder (#12)', () => {
   it('a warm process belonging to another chat is not used', async () => {
     // it was spawned in that chat's project directory — Read/Grep there would
     // resolve against the wrong repo
-    claudeCliResponder.prewarm!('warm-other', '/other-proj');
+    claudeCliResponder.prewarm!('warm-other', '/other-proj', '/p/abc.jsonl');
     const other = lastChild();
 
     const answer = claudeCliResponder.answer(ask('warm-mine'), () => {},
@@ -105,7 +119,7 @@ describe('pre-spawned responder (#12)', () => {
   });
 
   it('a warm process that died is not used — the ask spawns cold', async () => {
-    claudeCliResponder.prewarm!('warm-dead', '/proj');
+    claudeCliResponder.prewarm!('warm-dead', '/proj', '/p/abc.jsonl');
     lastChild().exitCode = 1;
 
     const answer = claudeCliResponder.answer(ask('warm-dead'), () => {},
@@ -117,7 +131,7 @@ describe('pre-spawned responder (#12)', () => {
 
   it('a model change after the pre-spawn falls back to a cold process', async () => {
     config = { responderModel: 'claude-haiku-4-5' };
-    claudeCliResponder.prewarm!('warm-stale', '/proj');
+    claudeCliResponder.prewarm!('warm-stale', '/proj', '/p/abc.jsonl');
     const stale = lastChild();
     config = { responderModel: 'claude-opus-5' };
 
@@ -132,7 +146,7 @@ describe('pre-spawned responder (#12)', () => {
   });
 
   it('cancel kills the warm process', async () => {
-    claudeCliResponder.prewarm!('warm-cancel', '/proj');
+    claudeCliResponder.prewarm!('warm-cancel', '/proj', '/p/abc.jsonl');
     const child = lastChild();
     const ctrl = new AbortController();
     const answer = claudeCliResponder.answer(ask('warm-cancel'), () => {}, ctrl.signal);

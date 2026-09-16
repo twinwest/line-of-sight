@@ -10,8 +10,8 @@ about any step—without touching the agent's working session.
 
 ## Quick start
 
-Requires **macOS, Node.js 20+**, and `claude` or `codex` on your PATH.
-Set up and authenticate the CLI you want to use first. Linux is untested.
+Requires **macOS, Node.js 20+**, and `claude` (2.1.267+) or `codex` on your
+PATH. Set up and authenticate the CLI you want to use first. Linux is untested.
 
 ```sh
 npm i -g line-of-sight

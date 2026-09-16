@@ -281,7 +281,7 @@ export function buildServer(store: Store, hub: SseHub,
       // is the part of a cold start that can be overlapped (measured
       // 2026-09-04). Fire-and-forget — if it fails, the ask spawns cold.
       void resolveResponder(session.adapter)
-        .then((engine) => engine?.prewarm?.(chat.id, session.projectDir))
+        .then((engine) => engine?.prewarm?.(chat.id, session.projectDir, session.filePath))
         .catch(() => {});
       return chat;
     });
