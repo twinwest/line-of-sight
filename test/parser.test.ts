@@ -102,6 +102,8 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(byType('file-history-snapshot')).toHaveLength(0);
     const cost = JSON.stringify({ type: 'cost-state', sessionId: 's1', totalCostUSD: 0, modelUsage: {} });
     expect(adapter.parseLine(cost, ctx)).toHaveLength(0);
+    const pr = JSON.stringify({ type: 'pr-link', sessionId: 's1', prNumber: 1, prUrl: 'https://github.com/o/r/pull/1' });
+    expect(adapter.parseLine(pr, ctx)).toHaveLength(0);
     // the fixture attachment is date_change — reminder-class, dropped
     expect(byType('attachment')).toHaveLength(0);
     // the fixture system line is turn_duration — timing bookkeeping, dropped

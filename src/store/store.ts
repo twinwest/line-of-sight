@@ -10,7 +10,7 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 export type { SideChat, StoredEvent };
 
 /** Bump when sessions/messages/messages_fts change shape (see constructor). */
-const SCHEMA_VERSION = 4;  // 4: claude isMeta user lines → meta (3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
+const SCHEMA_VERSION = 5;  // 5: claude pr-link dropped (4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
