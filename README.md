@@ -14,7 +14,7 @@ about any step—without touching the agent's working session.
 
 ## Quick start
 
-Requires **macOS, Node.js 20+**, and `claude` (2.1.267+) or `codex` on your
+Requires **macOS, Node.js 20+**, and `claude` (2.1.267+) or `codex` (0.153.4+) on your
 PATH. Set up and authenticate the CLI you want to use first. Linux is untested.
 
 ```sh
@@ -68,12 +68,6 @@ separate place to question it, while the working conversation stays untouched.
   Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
   default). To keep your questions, answers and their conversation
   snapshot after that, set `keepSideChats` — see the usage guide.
-
-## Compatibility
-
-Tested with Claude Code 2.1.273 and Codex CLI 0.153.4. Their transcript
-formats are undocumented and change between versions. Entries Sight does not
-recognize render as raw JSON rather than breaking the page.
 
 ## Uninstall
 
