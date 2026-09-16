@@ -71,11 +71,13 @@ describe('candidates routing', () => {
 
 describe('claude-cli command construction', () => {
   it('uses exactly the M0-verified flags with a read-only tool cage', () => {
-    const args = CLAUDE_ARGS('PROMPT');
+    const args = CLAUDE_ARGS('PROMPT', '/t');
     expect(args).toEqual([
       '-p', 'PROMPT',
       '--allowedTools', 'Read,Grep,Glob',
       '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch',
+      // reads fenced to cwd + the transcript dir (#36)
+      '--restricted', '--add-dir', '/t',
       '--no-session-persistence',
       '--setting-sources', '',
       '--output-format', 'stream-json',
@@ -93,14 +95,14 @@ describe('claude-cli command construction', () => {
   it('the pre-spawned variant differs only in where the prompt comes from', () => {
     // null prompt = the process is spawned before the reader has typed and
     // reads the question from stdin (#12); the cage must be identical
-    expect(CLAUDE_ARGS(null)).toEqual(
-      ['-p', '--input-format', 'stream-json', ...CLAUDE_ARGS('PROMPT').slice(2)]);
+    expect(CLAUDE_ARGS(null, '/t')).toEqual(
+      ['-p', '--input-format', 'stream-json', ...CLAUDE_ARGS('PROMPT', '/t').slice(2)]);
   });
 
   it('appends --model/--effort only when configured', () => {
-    expect(CLAUDE_ARGS('P')).not.toContain('--model');
-    expect(CLAUDE_ARGS('P')).not.toContain('--effort');
-    const args = CLAUDE_ARGS('P', { model: 'claude-sonnet-5', effort: 'low' });
+    expect(CLAUDE_ARGS('P', '/t')).not.toContain('--model');
+    expect(CLAUDE_ARGS('P', '/t')).not.toContain('--effort');
+    const args = CLAUDE_ARGS('P', '/t', { model: 'claude-sonnet-5', effort: 'low' });
     expect(args.slice(-4)).toEqual(['--model', 'claude-sonnet-5', '--effort', 'low']);
   });
 

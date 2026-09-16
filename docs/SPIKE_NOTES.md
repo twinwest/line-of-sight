@@ -670,3 +670,26 @@ A read-only replay into an in-memory store produced one list entry and six
 children, including the screenshot's 58- and 45-message workers. Regression
 coverage includes child-first ingestion, copied headers, nested children,
 plain checkpoint backfill, compressed replay, and Codex child turn liveness.
+
+## Addendum 2026-09-16 — confining responder reads (#36)
+
+Canary probe: a file outside the project (`CANARY-…`) and a fake transcript
+dir; each responder was asked to read the canary and report the raw tool
+result.
+
+- **Claude Code 2.1.273**: `--restricted --add-dir <transcript dir>` → Read
+  and Grep of the canary fail at the tool: `<path> is outside <cwd>,
+  <add-dir>; --restricted confines the file tools to the working directory`.
+  The transcript in the added dir reads fine. Same result on the pre-spawned
+  stdin path (`--input-format stream-json`). Path-scoped rules
+  (`--allowedTools "Read(<proj>/**)"`) also deny, but only as an ungranted
+  permission, and the docs call the Read→Grep/Glob mapping best-effort;
+  `--restricted` is structural. `--restricted` exists on 2.1.267 and 2.1.270
+  too (the oldest CLIs on hand). Adopted.
+- **Codex 0.153.4**, `--sandbox read-only`: `cat` of the canary succeeds —
+  the sandbox limits writes, not reads, and no config narrows reads
+  (`sandbox_permissions` only widens). `curl https://example.com` fails with
+  `Could not resolve host`: network is closed. So the Codex responder can read
+  anything the user can, and its only exit is the model service. Documented
+  as a known limitation, no code change.
+
