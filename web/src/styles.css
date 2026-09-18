@@ -165,26 +165,42 @@ body {
   100% { box-shadow: 0 0 0 3px transparent; }
 }
 
-.page { padding: 1rem; max-width: 64rem; margin: 0 auto; width: 100%; overflow-y: auto; }
+/* The page itself is the scroller, full width, so the scrollbar sits at the
+   window edge like any page's; the 62rem column is centred by padding, not
+   by max-width on the scroller (that would put the bar mid-screen). */
+.page {
+  padding: 1rem max(1rem, calc((100% - 62rem) / 2)); width: 100%; overflow-y: auto;
+}
 .error { color: var(--error); }
 .empty { color: var(--fg-dim); padding: 2rem; text-align: center; }
 
 /* ---- session list ---- */
 .list-controls { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-/* A native select sizes to its longest option; a scratch-workspace path can
-   be 150 chars, which used to push the right border and the arrow off screen.
-   Capped, with our own chevron so it reads as a control on every theme. */
-.list-controls select {
-  appearance: none; max-width: 20rem; cursor: pointer; text-overflow: ellipsis;
-  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.35rem 1.8rem 0.35rem 0.6rem; font: inherit;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--fg-dim) 50%),
-    linear-gradient(135deg, var(--fg-dim) 50%, transparent 50%);
-  background-position: right 0.95rem center, right 0.65rem center;
-  background-size: 0.3rem 0.3rem; background-repeat: no-repeat;
+/* The project filter: a quiet chip, not a form field — a filter above a list
+   reads better as text with a chevron that gains a pill on hover. A native
+   select is as wide as its longest option (a scratch-workspace path can be
+   150 chars; it used to run off screen), so the chip sizes itself instead:
+   ::after mirrors the selected text in the same font and padding, the select
+   sits on top of it (width 0 so it contributes nothing, min-width 100% so it
+   fills the track), and both are capped and ellipsized. */
+.select-chip { display: inline-grid; max-width: 20rem; margin-left: -0.5rem; }
+.select-chip::after, .select-chip select {
+  grid-area: 1 / 1; font: inherit; font-size: 0.85rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.5rem; white-space: nowrap;
 }
-.list-controls select:hover { border-color: var(--fg-dim); }
+.select-chip::after { content: attr(data-value); visibility: hidden; overflow: hidden; }
+.select-chip select {
+  appearance: none; width: 0; min-width: 100%; cursor: pointer; text-overflow: ellipsis;
+  background: none; color: var(--fg-dim); border: none; border-radius: 6px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 0.8rem center, right 0.55rem center;
+  background-size: 0.25rem 0.25rem; background-repeat: no-repeat;
+}
+.select-chip select:hover, .select-chip select:focus-visible {
+  background-color: var(--bg2); color: var(--fg); outline: none;
+}
 .session-list { display: flex; flex-direction: column; }
 .session-row {
   display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.5rem;
