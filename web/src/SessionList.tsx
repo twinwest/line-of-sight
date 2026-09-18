@@ -64,10 +64,13 @@ export function SessionList() {
   return (
     <div className="page">
       <div className="list-controls">
-        <select value={project} onChange={(e) => setProject(e.target.value)}>
-          <option value="">All projects</option>
-          {projects.map((p) => <option key={p} value={p}>{shortDir(p)}</option>)}
-        </select>
+        {/* data-value mirrors the selected text so the chip hugs it (see .select-chip) */}
+        <label className="select-chip" data-value={project ? shortDir(project) : 'All projects'}>
+          <select value={project} onChange={(e) => setProject(e.target.value)}>
+            <option value="">All projects</option>
+            {projects.map((p) => <option key={p} value={p}>{shortDir(p)}</option>)}
+          </select>
+        </label>
       </div>
       <div className="session-list">
         {shown.map(({ s, st }) => (
