@@ -27,8 +27,7 @@
     "test": "vitest run test",
     "dev": "vite web",
     "prepublishOnly": "npm run build",
-    "preversion": "npm run typecheck && npm run test",
-    "postversion": "git push --follow-tags"
+    "preversion": "npm run typecheck && npm run test"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",
