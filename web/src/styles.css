@@ -183,7 +183,7 @@ body {
    ::after mirrors the selected text in the same font and padding, the select
    sits on top of it (width 0 so it contributes nothing, min-width 100% so it
    fills the track), and both are capped and ellipsized. */
-.select-chip { display: inline-grid; max-width: 20rem; margin-left: -0.5rem; }
+.select-chip { display: inline-grid; max-width: 20rem; }
 .select-chip::after, .select-chip select {
   grid-area: 1 / 1; font: inherit; font-size: 0.85rem;
   padding: 0.25rem 1.5rem 0.25rem 0.5rem; white-space: nowrap;
