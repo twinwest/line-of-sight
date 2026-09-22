@@ -1,6 +1,6 @@
 {
   "name": "line-of-sight",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Stay oriented while coding agents work. Follow, search, and ask about Claude Code and Codex sessions, locally and read-only.",
   "keywords": [
     "agent-observability",
