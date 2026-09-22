@@ -53,6 +53,15 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(ev.sessionPatch?.projectDir).toMatch(/^\//);
   });
 
+  it('pasted input is unwrapped: user speech, tags gone, title from the paste', () => {
+    const line = JSON.stringify({ type: 'user', uuid: 'u1', parentUuid: null, timestamp: '2026-09-22T02:59:00.000Z', cwd: '/x',
+      message: { role: 'user', content: '\n\n<pasted_content id="3460">\n内容不要自己推。\n</pasted_content id="3460">' } });
+    const [ev] = adapter.parseLine(line, ctx);
+    if (ev?.kind !== 'message') throw new Error('expected a message');
+    expect(ev.blocks[0]).toEqual({ type: 'text', markdown: '\n\n内容不要自己推。\n' });
+    expect(ev.sessionPatch?.title).toBe('内容不要自己推。');
+  });
+
   it('isMeta user lines (CLI-injected, never shown as user speech) become meta', () => {
     const caption = JSON.stringify({ type: 'user', isMeta: true, turnCompanion: true, uuid: 'm1', parentUuid: 'p1',
       timestamp: '2026-09-14T19:42:32.807Z', cwd: '/x',

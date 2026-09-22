@@ -206,6 +206,15 @@ function childSignals(line: Json, content: unknown): { taskEnd?: string; workflo
   return {};
 }
 
+// Text pasted into the prompt is written as <pasted_content id="N">…
+// </pasted_content id="N"> (the closing tag carries the id too). It is the
+// user speaking: unwrap it, or the '<' plumbing heuristic folds it and the
+// tags show in the bubble.
+const PASTED_TAG = /<\/?pasted_content\b[^>]*>\n?/g;
+function unwrapPaste(blocks: RenderBlock[]): RenderBlock[] {
+  return blocks.map((b) => b.type === 'text' ? { ...b, markdown: b.markdown.replace(PASTED_TAG, '') } : b);
+}
+
 /** First user prompt lines that are CLI plumbing, not a real prompt. */
 function isRealPrompt(line: Json, text: string): boolean {
   if (line.isMeta === true) return false;
@@ -339,7 +348,7 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         if (!message || content == null) {
           return [{ kind: 'unknown', id, ts, raw: line }];
         }
-        const blocks = contentToBlocks(content);
+        const blocks = type === 'user' ? unwrapPaste(contentToBlocks(content)) : contentToBlocks(content);
         // isMeta: CLI-injected user lines the CLI never shows as the user
         // speaking — image coordinate captions after a screenshot, Skill
         // bodies, usage-limit auto-continue, slash-command expansions, the
@@ -353,8 +362,9 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         const patch: SessionPatch = {};
         const cwd = str(line.cwd);
         if (cwd) patch.projectDir = cwd;
-        if (type === 'user' && typeof content === 'string' && isRealPrompt(line, content)) {
-          patch.title = truncate(content.trim(), 120);
+        const prompt = typeof content === 'string' && blocks[0]?.type === 'text' ? blocks[0].markdown : null;
+        if (type === 'user' && prompt !== null && isRealPrompt(line, prompt)) {
+          patch.title = truncate(prompt.trim(), 120);
           patch.titleSource = 'prompt';
         }
         return [{

@@ -693,3 +693,14 @@ result.
   anything the user can, and its only exit is the model service. Documented
   as a known limitation, no code change.
 
+
+## Addendum 2026-09-22 — pasted prompt text is wrapped in `<pasted_content>`
+
+CLI 2.1.280. Text pasted into the prompt box lands in the `user` line as
+`"\n\n<pasted_content id=\"3460\">\n…\n</pasted_content id=\"3460\">"` — the
+closing tag carries the id too, so it is not well-formed XML. Anything the
+user typed alongside precedes the wrapper. `isMeta` is unset: this is the
+user speaking, unlike every other `<`-prefixed user line. The adapter strips
+the tags (`unwrapPaste`) before the `<` plumbing heuristic and the title
+patch see the text. Bare `<pasted_content>` (no id) also appears inside
+`prompt_snapshot` system prompts, which are dropped anyway.
