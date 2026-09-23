@@ -13,7 +13,9 @@ about any step—without touching the agent's working session.
 In plain terms: a session viewer, transcript browser, and conversation history
 UI for Claude Code (`~/.claude/projects/**/*.jsonl`) and Codex CLI
 (`~/.codex/sessions/**/*.jsonl`). It reads the JSONL logs the CLIs already
-write, so there is nothing to export and nothing to configure.
+write, so there is nothing to export and nothing to configure. On top of
+the viewer sits a side chat: select any part of a session and ask why the
+agent did something, answered by your own CLI with read-only tools.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
@@ -87,6 +89,16 @@ CLIs, so one query covers every project and both agents.
 **How can I read Codex CLI session logs?**
 Sight parses the rollout files under `~/.codex/sessions` and shows them the
 same way as Claude Code sessions: conversation, tool calls, and results.
+
+**Why did Claude Code do X? How do I find out without re-reading the session?**
+Select the step in Sight and click **Ask**. The responder reads the
+surrounding conversation and your project files, then explains what happened
+and why. Ask follow-ups in the same side chat.
+
+**How do I review what an agent did in a long session?**
+Open the session in Sight and read it top to bottom: prompts, tool calls,
+results, and subagent work in one view. Select anything that looks off and
+ask whether it deserves a closer look.
 
 **Can I ask questions about what an agent did without interrupting it?**
 Yes. Select text in any session and click **Ask**. The answer comes from your
