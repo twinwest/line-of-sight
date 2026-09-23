@@ -5,6 +5,7 @@ import { toString as mdastToString } from 'mdast-util-to-string';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
+import { dialectFor } from '../shared/dialects/index.js';
 import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat, SideChatTurn, StoredEvent, TitleSource } from '../shared/types.js';
 
 export type { SideChat, StoredEvent };
@@ -153,6 +154,9 @@ export function renderExcerpt(rows: ExcerptRow[]): string {
  *  that the "why" prose needs. The responder reads a cut result in full by
  *  Grepping the transcript for the row's timestamp (#21). */
 const TOOL_OUTPUT_HEAD = 300;
+// askRows: rows read behind / ahead of the anchor before the turn walk gives up
+const EXCERPT_MAX_REACH = 400;
+const EXCERPT_MAX_AFTER = 10;
 function blocksText(blocks: RenderBlock[], anchor: boolean): string {
   return blocks.map((b) => {
     switch (b.type) {
@@ -519,16 +523,29 @@ export class Store {
    *    Rows carry their timestamp (#21): both CLIs write it verbatim on the
    *    jsonl line, so it is a one-Grep coordinate back into the file.
    *  Both need the abandoned set — computed once. */
-  askContext(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
+  askContext(sessionId: string, anchorMessageId: string, maxChars = 30_000):
       { excerpt: string; branches: { anchorAbandoned: boolean } | null } {
-    const { rows, branches } = this.askRows(sessionId, anchorMessageId, n, maxChars);
+    const { rows, branches } = this.askRows(sessionId, anchorMessageId, maxChars);
     return { excerpt: renderExcerpt(rows), branches };
   }
 
   /** The excerpt as facts — one row per message, unrendered — so a stored
    *  snapshot (side_chats.excerpt_json) is never parsed back out of prompt
-   *  text and a later label change applies to old snapshots too. */
-  askRows(sessionId: string, anchorMessageId: string, n = 20, maxChars = 30_000):
+   *  text and a later label change applies to old snapshots too.
+   *
+   *  The window is cut at turn boundaries, not row counts (#25): the anchor's
+   *  own turn plus the whole turn before it, then after the anchor up to and
+   *  including the first assistant row. Turns are the causal unit — "why did
+   *  it do this" is answered by the user prompt that opened the turn, and a
+   *  ±20-row window had it only 69% of the time (262 real anchors, measured
+   *  2026-09-20; p90 of the distance was 46 rows). One assistant row after the
+   *  anchor covers "what did this call return" (result, then the agent
+   *  reading it) without the rest of what it went on to do.
+   *  A turn starts at a user row with prose — the dialect's plumbing test,
+   *  the same one that decides what the viewer shows as user speech. Rows on
+   *  abandoned branches are kept (marked) but never count as a turn start.
+   *  The char budget stays the ceiling: a boundary, not a guarantee. */
+  askRows(sessionId: string, anchorMessageId: string, maxChars = 30_000):
       { rows: ExcerptRow[]; branches: { anchorAbandoned: boolean } | null } {
     const abandoned = this.abandonedSeqs(sessionId);
     const anchorSeq = this.getMessageSeq(sessionId, anchorMessageId);
@@ -536,16 +553,47 @@ export class Store {
       ? { anchorAbandoned: anchorSeq !== null && abandoned.has(anchorSeq) }
       : null;
     if (anchorSeq === null) return { rows: [], branches };
-    const rows = this.db.prepare(`
+    type Row = { id: string; seq: number; role: string; ts: number; blocks_json: string };
+    const session = this.db.prepare('SELECT adapter FROM sessions WHERE id = ?').get(sessionId) as { adapter: SessionMeta['adapter'] } | undefined;
+    const { plumbing } = dialectFor(session?.adapter ?? 'claude-code');
+    const parsed = new Map<string, RenderBlock[]>();
+    const blocksOf = (r: Row) => {
+      let b = parsed.get(r.id);
+      if (!b) { b = JSON.parse(r.blocks_json) as RenderBlock[]; parsed.set(r.id, b); }
+      return b;
+    };
+    const opensTurn = (r: Row) => r.role === 'user' && !abandoned.has(r.seq)
+      && blocksOf(r).some((b) => b.type === 'text' && b.markdown.trim() !== '' && plumbing(b.markdown) === null);
+    // Backwards from the anchor to the second turn start (the anchor's own,
+    // then the previous turn's). ponytail: hard row ceiling — the longest
+    // previous-turn distance seen was 332 rows; the char budget cuts long
+    // before that, but an autonomous run's turn can be thousands of rows of
+    // tool output and must not be read whole for one ask.
+    const before = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages
-      WHERE session_id = ? AND seq BETWEEN ? AND ? AND role IN ('user','assistant')
-      ORDER BY seq
-    `).all(sessionId, anchorSeq - n, anchorSeq + n) as
-      { id: string; seq: number; role: string; ts: number; blocks_json: string }[];
+      WHERE session_id = ? AND seq <= ? AND role IN ('user','assistant')
+      ORDER BY seq DESC LIMIT ${EXCERPT_MAX_REACH}
+    `).all(sessionId, anchorSeq) as Row[];
+    const rows: Row[] = [];
+    let starts = 0;
+    for (const r of before) {
+      rows.push(r);
+      if (opensTurn(r) && ++starts === 2) break;
+    }
+    // Forwards to the first assistant row, inclusive.
+    const after = this.db.prepare(`
+      SELECT id, seq, role, ts, blocks_json FROM messages
+      WHERE session_id = ? AND seq > ? AND role IN ('user','assistant')
+      ORDER BY seq LIMIT ${EXCERPT_MAX_AFTER}
+    `).all(sessionId, anchorSeq) as Row[];
+    for (const r of after) {
+      rows.push(r);
+      if (r.role === 'assistant') break;
+    }
     // from blocks_json, not text_content: the search index dropped tool_result
     // output, but the excerpt still needs it (the anchor may sit inside one)
     const blocks = rows
-      .map((r) => ({ ...r, full: blocksText(JSON.parse(r.blocks_json) as RenderBlock[], r.id === anchorMessageId) }))
+      .map((r) => ({ ...r, full: blocksText(blocksOf(r), r.id === anchorMessageId) }))
       .filter((r) => r.full).map((r) => {
       // 4000: 97% of text blocks fit (92% at the previous 2000); the budget
       // by distance below still bounds a run of fat rows

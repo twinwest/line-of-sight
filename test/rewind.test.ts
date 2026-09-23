@@ -138,7 +138,7 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     // smaller rewrite → shrink guard reparses from 0 (rewrite is not append-shaped)
     const fat = 'x'.repeat(1900);
     ingest(head + line('u2', 'a1', fat) + line('u3', 'u2', 'the anchor row'));
-    const tight = store.askContext(SESSION, 'u3', 20, 100);
+    const tight = store.askContext(SESSION, 'u3', 100);
     expect(tight.excerpt).toContain('the anchor row');
     expect(tight.excerpt).not.toContain(fat);
   });
@@ -174,6 +174,48 @@ describe('rewind branches (SPIKE_NOTES 2026-08-31)', () => {
     ingest(head.replace(output, 'short'));
     expect(store.askContext(SESSION, 'u3').excerpt).toContain('short');
     expect(store.askContext(SESSION, 'u3').excerpt).not.toContain('tool output cut');
+  });
+
+  it('askContext excerpt: window is the anchor\'s turn, the turn before, and one assistant row after (#25)', () => {
+    const use = (id: string) => [{ type: 'tool_use', id, name: 'Bash', input: { command: 'ls' } }];
+    ingest(
+      line('u0', null, 'setup question') + line('a0', 'u0', 'setup answer', 'assistant')
+      + line('u1', 'a0', 'first question') + line('a1', 'u1', use('t1'), 'assistant')
+      + line('r1', 'a1', result('t1')) + line('a1b', 'r1', 'first answer', 'assistant')
+      + line('u2', 'a1b', 'second question')
+      // a slash command is a user row the CLI wrote, not the user speaking:
+      // it must not open a turn
+      + line('uc', 'u2', '<command-name>/clear</command-name>')
+      + line('a2', 'uc', use('t2'), 'assistant')                      // the anchor
+      + line('r2', 'a2', result('t2')) + line('a2b', 'r2', 'second answer', 'assistant')
+      + line('a2c', 'a2b', 'and then it went on', 'assistant')
+      + line('u3', 'a2c', 'third question') + line('a3', 'u3', 'third answer', 'assistant'),
+    );
+    const { excerpt } = store.askContext(SESSION, 'a2');
+    expect(excerpt).toContain('second question');    // the anchor's own turn, from its start
+    expect(excerpt).toContain('first question');     // the whole previous turn
+    expect(excerpt).toContain('first answer');
+    expect(excerpt).not.toContain('setup');          // not the one before that
+    expect(excerpt).toContain('second answer');      // first assistant row after the anchor
+    expect(excerpt).not.toContain('went on');        // nothing past it
+    expect(excerpt).not.toContain('third');
+    // the char budget still caps the reach
+    const tight = store.askContext(SESSION, 'a2', 60);
+    expect(tight.excerpt).toContain('contains the ANCHOR');
+    expect(tight.excerpt).not.toContain('first question');
+  });
+
+  it('askContext excerpt: a prompt on an abandoned branch is shown but does not open a turn', () => {
+    ingest(
+      line('u1', null, 'first question') + line('a1', 'u1', 'first answer', 'assistant')
+      + line('u2', 'a1', 'dead wording') + line('u3', 'a1', 'live wording')
+      + line('a3', 'u3', 'the answer', 'assistant'),
+    );
+    const { excerpt } = store.askContext(SESSION, 'a3');
+    // walking back from a3: u3 opens the anchor's turn; u2 is abandoned, so
+    // the previous turn is u1's, not u2's
+    expect(excerpt).toContain('first question');
+    expect(excerpt).toContain(`[user, ${TS}, abandoned branch]\ndead wording`);
   });
 
   it('folds each abandoned run whole, ahead of step folding', () => {

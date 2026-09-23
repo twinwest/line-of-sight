@@ -357,9 +357,9 @@ export function buildServer(store: Store, hub: SseHub,
       reply.raw.on('error', () => {});
       const send = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
       send({ engine: engine.id });
-      // local telemetry for the excerpt parameters (n=20/30KB, decided
-      // 2026-08-31): many tool rounds despite an excerpt = window too small;
-      // review with `sight stats`
+      // local telemetry for the excerpt parameters (turn-bounded window under
+      // a 30KB ceiling, decided 2026-09-23): many tool rounds despite an
+      // excerpt = window too small; review with `sight stats`
       let toolRounds = 0;
       const t0 = Date.now();
       try {
