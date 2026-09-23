@@ -1,7 +1,7 @@
 {
   "name": "line-of-sight",
   "version": "0.2.3",
-  "description": "Ask why your coding agent did something. A local, read-only session viewer and side chat for Claude Code and Codex CLI conversation history.",
+  "description": "Stay oriented while coding agents work. A local, read-only session viewer and side chat for Claude Code and Codex CLI conversation history.",
   "keywords": [
     "agent-observability",
     "agent-qa",
@@ -12,17 +12,13 @@
     "cli",
     "codex",
     "codex-cli",
-    "coding-agents",
     "conversation-history",
     "developer-tools",
     "explain-agent-actions",
-    "jsonl",
     "local-first",
     "observability",
-    "openai-codex",
     "session-history",
     "session-viewer",
-    "transcript",
     "transcript-viewer"
   ],
   "type": "module",
