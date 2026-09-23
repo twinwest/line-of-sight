@@ -10,8 +10,8 @@ Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
 It reads the JSONL conversation history both CLIs already keep on disk
 (`~/.claude/projects`, `~/.codex/sessions`) and shows every past and live
 session in a browser, so you can review what the agent did, which commands
-it ran, and what it changed. Select a step and ask what it means or why the
-agent did it, without interrupting it. The same `claude` or `codex` you
+it ran, and what it changed. Select any text and ask what it means or why
+the agent did it, without interrupting it. The same `claude` or `codex` you
 already run answers in a side chat: it can read your project but not change
 it, and the working session is never touched.
 
@@ -88,12 +88,13 @@ CLIs, so one query covers every project and both agents.
 Sight parses the rollout files under `~/.codex/sessions` and shows them the
 same way as Claude Code sessions: conversation, tool calls, and results.
 
-**The agent's output is hard to follow. Can I get a step explained?**
-Select it and click **Ask**. You get a plain explanation of what that output,
-error, or tool call means, with the surrounding conversation as context.
+**The agent's output is hard to follow. Can I get it explained?**
+Select the part you don't follow and click **Ask**. You get a plain
+explanation of what that summary, error, or tool call means, with the
+surrounding conversation as context.
 
 **Why did Claude Code do X? How do I find out without re-reading the session?**
-Select the step in Sight and click **Ask**. The responder reads the
+Select the relevant text in Sight and click **Ask**. The responder reads the
 surrounding conversation and your project files, then explains what happened
 and why. Ask follow-ups in the same side chat.
 
