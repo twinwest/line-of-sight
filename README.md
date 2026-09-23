@@ -104,9 +104,9 @@ results, and subagent work in one view. Select anything that looks off and
 ask whether it deserves a closer look.
 
 **Can I ask questions about what an agent did without interrupting it?**
-Yes. Select text in any session and click **Ask**. The answer comes from your
-own `claude` or `codex` CLI with read-only tools, in a separate side chat. The
-working session is never touched.
+Yes. Select text in any session and click **Ask**. The same `claude` or
+`codex` you already run answers in a separate side chat; it can read your
+project but not change it. The working session is never touched.
 
 **Does it work with `claude --resume`?**
 Sight is a viewer, not a replacement for resume. Use it to find the session
