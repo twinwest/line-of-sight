@@ -12,9 +12,8 @@ It reads the JSONL conversation history both CLIs already keep on disk
 session in a browser, so you can review what the agent did, which commands
 it ran, and what it changed. Select a step and ask what it means or why the
 agent did it, without interrupting it. The same `claude` or `codex` you
-already run answers in a
-side chat: it can read your project but not change it, and the working
-session is never touched.
+already run answers in a side chat: it can read your project but not change
+it, and the working session is never touched.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
