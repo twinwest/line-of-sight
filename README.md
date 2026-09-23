@@ -10,6 +10,11 @@ Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
 Follow live and past sessions, search across conversations, and ask questions
 about any step—without touching the agent's working session.
 
+In plain terms: a session viewer, transcript browser, and conversation history
+UI for Claude Code (`~/.claude/projects/**/*.jsonl`) and Codex CLI
+(`~/.codex/sessions/**/*.jsonl`). It reads the JSONL logs the CLIs already
+write, so there is nothing to export and nothing to configure.
+
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
 ## Quick start
@@ -68,6 +73,33 @@ separate place to question it, while the working conversation stays untouched.
   Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
   default). To keep your questions, answers and their conversation
   snapshot after that, set `keepSideChats` — see the usage guide.
+
+## FAQ
+
+**How do I view my Claude Code conversation history in a browser?**
+Install Sight and run `sight open`. Every session under `~/.claude/projects`
+appears at <http://127.0.0.1:2020>, including ones that are still running.
+
+**How do I search across all my past Claude Code or Codex sessions?**
+Use the search box in Sight. It indexes user and assistant messages from both
+CLIs, so one query covers every project and both agents.
+
+**How can I read Codex CLI session logs?**
+Sight parses the rollout files under `~/.codex/sessions` and shows them the
+same way as Claude Code sessions: conversation, tool calls, and results.
+
+**Can I ask questions about what an agent did without interrupting it?**
+Yes. Select text in any session and click **Ask**. The answer comes from your
+own `claude` or `codex` CLI with read-only tools, in a separate side chat. The
+working session is never touched.
+
+**Does it work with `claude --resume`?**
+Sight is a viewer, not a replacement for resume. Use it to find the session
+you want, then resume it from the CLI as usual.
+
+**Does anything leave my machine?**
+Only the questions you ask, which go through your own CLI to its model
+service. There is no telemetry and no other network access.
 
 ## Uninstall
 
