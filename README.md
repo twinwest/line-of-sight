@@ -7,8 +7,13 @@
 **Stay oriented while coding agents work.**
 
 Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
-Follow live and past sessions, search across conversations, and ask questions
-about any step—without touching the agent's working session.
+It reads the JSONL conversation history both CLIs already keep on disk
+(`~/.claude/projects`, `~/.codex/sessions`) and shows every past and live
+session in a browser, so you can review what the agent did, which commands
+it ran, and what it changed. Select any text and ask what it means or why
+the agent did it, without interrupting it. The same `claude` or `codex` you
+already run answers in a side chat: it can read your project but not change
+it, and the working session is never touched.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
@@ -68,6 +73,48 @@ separate place to question it, while the working conversation stays untouched.
   Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
   default). To keep your questions, answers and their conversation
   snapshot after that, set `keepSideChats` — see the usage guide.
+
+## FAQ
+
+**How do I view my Claude Code conversation history in a browser?**
+Install Sight and run `sight open`. Every session under `~/.claude/projects`
+appears at <http://127.0.0.1:2020>, including ones that are still running.
+
+**How do I search across all my past Claude Code or Codex sessions?**
+Use the search box in Sight. It indexes user and assistant messages from both
+CLIs, so one query covers every project and both agents.
+
+**How can I read Codex CLI session logs?**
+Sight parses the rollout files under `~/.codex/sessions` and shows them the
+same way as Claude Code sessions: conversation, tool calls, and results.
+
+**The agent's output is hard to follow. Can I get it explained?**
+Select the part you don't follow and click **Ask**. You get a plain
+explanation of what that summary, error, or tool call means, with the
+surrounding conversation as context.
+
+**Why did Claude Code do X? How do I find out without re-reading the session?**
+Select the relevant text in Sight and click **Ask**. The responder reads the
+surrounding conversation and your project files, then explains what happened
+and why. Ask follow-ups in the same side chat.
+
+**How do I review what an agent did in a long session?**
+Open the session in Sight and read it top to bottom: prompts, tool calls,
+results, and subagent work in one view. Select anything that looks off and
+ask whether it deserves a closer look.
+
+**Can I ask questions about what an agent did without interrupting it?**
+Yes. Select text in any session and click **Ask**. The same `claude` or
+`codex` you already run answers in a separate side chat; it can read your
+project but not change it. The working session is never touched.
+
+**Does it work with `claude --resume`?**
+Sight is a viewer, not a replacement for resume. Use it to find the session
+you want, then resume it from the CLI as usual.
+
+**Does anything leave my machine?**
+Only the questions you ask, which go through your own CLI to its model
+service. There is no telemetry and no other network access.
 
 ## Uninstall
 
