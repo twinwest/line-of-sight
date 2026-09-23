@@ -154,7 +154,8 @@ export function renderExcerpt(rows: ExcerptRow[]): string {
  *  that the "why" prose needs. The responder reads a cut result in full by
  *  Grepping the transcript for the row's timestamp (#21). */
 const TOOL_OUTPUT_HEAD = 300;
-// askRows: rows read behind / ahead of the anchor before the turn walk gives up
+// askRows: row ceilings on the turn walk — an autonomous run's turn can be
+// thousands of rows of tool output (longest previous-turn distance seen: 332)
 const EXCERPT_MAX_REACH = 400;
 const EXCERPT_MAX_AFTER = 10;
 function blocksText(blocks: RenderBlock[], anchor: boolean): string {
@@ -533,18 +534,13 @@ export class Store {
    *  snapshot (side_chats.excerpt_json) is never parsed back out of prompt
    *  text and a later label change applies to old snapshots too.
    *
-   *  The window is cut at turn boundaries, not row counts (#25): the anchor's
-   *  own turn plus the whole turn before it, then after the anchor up to and
-   *  including the first assistant row. Turns are the causal unit — "why did
-   *  it do this" is answered by the user prompt that opened the turn, and a
-   *  ±20-row window had it only 69% of the time (262 real anchors, measured
-   *  2026-09-20; p90 of the distance was 46 rows). One assistant row after the
-   *  anchor covers "what did this call return" (result, then the agent
-   *  reading it) without the rest of what it went on to do.
-   *  A turn starts at a user row with prose — the dialect's plumbing test,
-   *  the same one that decides what the viewer shows as user speech. Rows on
-   *  abandoned branches are kept (marked) but never count as a turn start.
-   *  The char budget stays the ceiling: a boundary, not a guarantee. */
+   *  Window (#25): the anchor's turn, the turn before it, and the first
+   *  assistant row after the anchor. The prompt that opened the turn is what
+   *  answers "why did it do this"; ±20 rows held it only 69% of the time
+   *  (262 real anchors, 2026-09-20). A turn opens at a user row with prose
+   *  per the dialect's plumbing test — the viewer's own rule for user speech.
+   *  Abandoned-branch rows are kept, marked, and never open a turn. The char
+   *  budget is still the ceiling. */
   askRows(sessionId: string, anchorMessageId: string, maxChars = 30_000):
       { rows: ExcerptRow[]; branches: { anchorAbandoned: boolean } | null } {
     const abandoned = this.abandonedSeqs(sessionId);
@@ -564,11 +560,7 @@ export class Store {
     };
     const opensTurn = (r: Row) => r.role === 'user' && !abandoned.has(r.seq)
       && blocksOf(r).some((b) => b.type === 'text' && b.markdown.trim() !== '' && plumbing(b.markdown) === null);
-    // Backwards from the anchor to the second turn start (the anchor's own,
-    // then the previous turn's). ponytail: hard row ceiling — the longest
-    // previous-turn distance seen was 332 rows; the char budget cuts long
-    // before that, but an autonomous run's turn can be thousands of rows of
-    // tool output and must not be read whole for one ask.
+    // back to the second turn start: the anchor's own, then the previous one
     const before = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages
       WHERE session_id = ? AND seq <= ? AND role IN ('user','assistant')
@@ -580,7 +572,7 @@ export class Store {
       rows.push(r);
       if (opensTurn(r) && ++starts === 2) break;
     }
-    // Forwards to the first assistant row, inclusive.
+    // forward to the first assistant row, inclusive
     const after = this.db.prepare(`
       SELECT id, seq, role, ts, blocks_json FROM messages
       WHERE session_id = ? AND seq > ? AND role IN ('user','assistant')
