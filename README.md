@@ -12,9 +12,10 @@ Sight reads the JSONL conversation history both CLIs already keep on disk
 (`~/.claude/projects`, `~/.codex/sessions`) and shows every past and live
 session in a browser, so you can review what the agent did, which commands
 it ran, and what it changed. Select a step and ask why it did that, without
-interrupting it: the answer comes from your own CLI with read-only tools, in
-a side chat that never touches the working session. Search covers every
-session from both agents, so an explanation from last week is one query away.
+interrupting it. The same `claude` or `codex` you already run answers in a
+side chat: it can read your project but not change it, and the working
+session is never touched. Search covers every session from both agents, so
+an explanation from last week is one query away.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
