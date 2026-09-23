@@ -1,4 +1,4 @@
-import type { RenderBlock, StoredEvent } from '../types.js';
+import type { RenderBlock } from '../types.js';
 import type { AskOption, AskQuestion, Dialect, EditPair, Plumbing } from './types.js';
 
 // Codex's presentation policy (shapes from SPIKE_NOTES 2026-08-27, pinned by
