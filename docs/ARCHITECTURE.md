@@ -355,6 +355,7 @@ export interface ResponderRequest {
   priorTurns: { role: 'user' | 'assistant'; text: string }[];
   branches?: { anchorAbandoned: boolean } | null;  // rewind branches exist; which side the anchor is on
   excerpt?: string;  // anchor-centered clean excerpt (store-built) — spares the locate/orient tool rounds;
+                     // cut at turn boundaries: the anchor's turn, the turn before it, one assistant row after;
                      // rows carry their timestamp (a Grep coordinate into the file), tool output is cut to its head;
                      // frozen when the side chat is created and reused by every follow-up (side_chats.excerpt_json)
 }
@@ -410,8 +411,9 @@ skip them but breaks OAuth auth).
   concisely.") + prior side-chat turns + `ANCHOR (user-selected text): ...` +
   `QUESTION: ...`.
 - **Pointer, not payload**: do NOT inline the whole transcript. The engine
-  reads the jsonl itself via Read/Grep. (Fallback for engines without tools:
-  inline the anchor's surrounding ±30 messages, truncated to ~30k chars.)
+  reads the jsonl itself via Read/Grep. The store-built excerpt (the anchor's
+  turn, the turn before it, one assistant row after; ≤30k chars) is a
+  supplement to that, not a replacement.
 - Billing rides the user's existing Claude subscription/login — that is the
   point of this design (target users are subscribers without API keys).
 - M0 verified: works concurrently with an interactive `claude` session;
