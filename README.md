@@ -7,15 +7,14 @@
 **Stay oriented while coding agents work.**
 
 Line of Sight is a local, read-only companion for Claude Code and Codex CLI.
-Follow live and past sessions, search across conversations, and ask questions
-about any step—without touching the agent's working session.
-
-In plain terms: a session viewer, transcript browser, and conversation history
-UI for Claude Code (`~/.claude/projects/**/*.jsonl`) and Codex CLI
-(`~/.codex/sessions/**/*.jsonl`). It reads the JSONL logs the CLIs already
-write, so there is nothing to export and nothing to configure. On top of
-the viewer sits a side chat: select any part of a session and ask why the
-agent did something, answered by your own CLI with read-only tools.
+Let an agent run for an hour and you come back to a wall of terminal output.
+Sight reads the JSONL conversation history both CLIs already keep on disk
+(`~/.claude/projects`, `~/.codex/sessions`) and shows every past and live
+session in a browser, so you can review what the agent did, which commands
+it ran, and what it changed. Select a step and ask why it did that, without
+interrupting it: the answer comes from your own CLI with read-only tools, in
+a side chat that never touches the working session. Search covers every
+session from both agents, so an explanation from last week is one query away.
 
 ![Line of Sight: reading a session and asking about selected text](docs/demo.gif)
 
