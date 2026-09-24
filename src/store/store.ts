@@ -11,7 +11,7 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 export type { SideChat, StoredEvent };
 
 /** Bump when sessions/messages/messages_fts change shape (see constructor). */
-const SCHEMA_VERSION = 6;  // 6: claude pasted_content unwrapped (5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
+const SCHEMA_VERSION = 7;  // 7: source_stamp/source_error columns replace the codex-* kv facts (6: claude pasted_content unwrapped; 5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   started_at INTEGER, updated_at INTEGER, message_count INTEGER DEFAULT 0,
   byte_offset INTEGER DEFAULT 0,
   parent_id TEXT, tool_use_id TEXT, workflow_id TEXT, ended_at INTEGER,
-  turn_open INTEGER, turn_started_at INTEGER
+  turn_open INTEGER, turn_started_at INTEGER,
+  source_stamp TEXT, source_error TEXT   -- compressed sources: the physical file last replayed (or that failed), and why
 );
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT, session_id TEXT, seq INTEGER, role TEXT, ts INTEGER,
@@ -69,6 +70,7 @@ interface SessionRow {
   parent_id: string | null; tool_use_id: string | null; workflow_id: string | null;
   ended_at: number | null;
   turn_open: number | null; turn_started_at: number | null;
+  source_stamp: string | null; source_error: string | null;
 }
 
 function toMeta(r: SessionRow): SessionMeta {
@@ -80,8 +82,21 @@ function toMeta(r: SessionRow): SessionMeta {
     endedAt: r.ended_at,
     turnOpen: r.turn_open == null ? null : r.turn_open === 1,
     turnStartedAt: r.turn_started_at,
+    sourceError: r.source_error ?? undefined,
+    // the derived view was replaced (not appended) when the source moved
+    // or, for a compressed source, when its physical file changed
+    sourceVersion: r.source_stamp ? `${r.file_path}:${r.source_stamp}` : r.file_path,
   };
 }
+
+/** kv keys for the facts a parent transcript records about its children
+ *  before (or after) the child's own file is scanned. The one place these
+ *  names are spelled. */
+const CHILD_FACT = {
+  ended: (parentId: string, key: string) => `ended:${parentId}:${key}`,
+  wfrun: (parentId: string, toolUseId: string) => `wfrun:${parentId}:${toolUseId}`,
+  wfname: (parentId: string, runId: string) => `wfname:${parentId}:${runId}`,
+};
 
 // Must be the same parser the viewer renders with (react-markdown +
 // remark-gfm), or the index and the visible text drift apart again.
@@ -189,23 +204,14 @@ export class Store {
     }
     this.db.exec(SCHEMA);
     if (rebuild) {
-      this.db.exec(`DELETE FROM kv WHERE key LIKE 'text_content_v%' OR key = 'repair_v1'`);
+      // retired one-shot flags and the pre-v7 codex source facts (now columns)
+      this.db.exec(`DELETE FROM kv WHERE key LIKE 'text_content_v%' OR key = 'repair_v1' OR key LIKE 'codex-%'`);
       this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
     }
     // user-owned tables can't be rebuilt, so they take additive columns.
     // Rows from before the column are filled in lazily (getSideChatSnapshot).
     const cols = (this.db.pragma('table_info(side_chats)') as { name: string }[]).map((c) => c.name);
     if (!cols.includes('excerpt_json')) this.db.exec('ALTER TABLE side_chats ADD COLUMN excerpt_json TEXT');
-    // Re-read Codex rollouts once to backfill explicit parent relationships.
-    // Upserts preserve existing message IDs, sequences, titles and side chats;
-    // Claude's checkpoints and derived rows are untouched.
-    if (!this.getKv('codex-subagents-v1')) {
-      this.txn(() => {
-        this.db.prepare("UPDATE sessions SET byte_offset = 0 WHERE adapter = 'codex'").run();
-        this.db.prepare("DELETE FROM kv WHERE key LIKE 'codex-fingerprint:%' OR key LIKE 'codex-failed:%'").run();
-        this.setKv('codex-subagents-v1', '1');
-      })();
-    }
   }
 
   close(): void { this.db.close(); }
@@ -231,25 +237,23 @@ export class Store {
     this.appendTo(id, events, offset, 'codex_replay');
   });
 
-  commitCodexReplay = this.txn((meta: SessionMeta, sourceKey: string, fingerprint: string): void => {
+  commitCodexReplay = this.txn((meta: SessionMeta, stamp: string): void => {
     const prior = this.getSession(meta.id);
     if (prior && prior.adapter !== 'codex') throw new Error('not a Codex session');
     const row = this.db.prepare('SELECT * FROM codex_replay.sessions WHERE id = ?').get(meta.id) as SessionRow;
     this.upsertSession(meta);
-    this.bindCodexSessionFile(meta.id, meta.filePath, sourceKey);
     this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(meta.id);
     this.db.prepare(`INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
       SELECT id, session_id, seq, role, ts, blocks_json, text_content, parent_id
       FROM codex_replay.messages ORDER BY seq`).run();
-    this.db.prepare(`UPDATE sessions SET byte_offset = ?, message_count = ?, updated_at = ?,
+    this.db.prepare(`UPDATE sessions SET file_path = ?, byte_offset = ?, message_count = ?, updated_at = ?,
       started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END,
-      turn_open = ?, turn_started_at = ? WHERE id = ?`)
-      .run(row.byte_offset, row.message_count, row.updated_at, row.started_at, row.turn_open, row.turn_started_at, meta.id);
+      turn_open = ?, turn_started_at = ?, source_stamp = ?, source_error = NULL WHERE id = ?`)
+      .run(meta.filePath, row.byte_offset, row.message_count, row.updated_at, row.started_at,
+        row.turn_open, row.turn_started_at, stamp, meta.id);
     this.applyPatch(meta.id, { projectDir: row.project_dir ?? undefined,
       title: row.title, titleSource: row.title_source ?? undefined,
       parentId: row.parent_id ?? undefined });
-    this.setKv(`codex-fingerprint:${meta.id}`, fingerprint);
-    this.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-error:${meta.id}`);
   });
 
   endCodexReplay(): void { this.db.exec('DETACH DATABASE codex_replay'); }
@@ -260,34 +264,44 @@ export class Store {
     return r ? { id: r.id, byteOffset: r.byte_offset } : null;
   }
 
-  /** Codex archive/unarchive moves the source, not its session. The inode
-   *  checkpoint survives rename (including while Sight is stopped). A copy
-   *  or replacement is reparsed, keeping titles and user-owned side chats. */
-  bindCodexSessionFile = this.txn((id: string, filePath: string, sourceKey: string): void => {
-    const session = this.getSession(id);
-    if (!session || session.adapter !== 'codex') throw new Error('not a Codex session');
-    const key = `codex-source:${id}`;
-    const priorSource = this.getKv(key);
-    if (priorSource === sourceKey && session.filePath === filePath) return; // every append lands here: no-op, no write
-    // Upgrade old path-based fallback IDs without rebuilding unrelated
-    // adapters or invalidating side-chat anchors.
-    const oldPrefix = `${session.filePath}:`;
-    const newPrefix = `${id}:`;
-    if (!priorSource || session.filePath !== filePath) {
-      this.db.prepare(`UPDATE messages SET id = ? || substr(id, length(?) + 1)
-        WHERE session_id = ? AND substr(id, 1, length(?)) = ?`)
-        .run(newPrefix, oldPrefix, id, oldPrefix, oldPrefix);
-      this.db.prepare(`UPDATE side_chats SET anchor_message_id = ? || substr(anchor_message_id, length(?) + 1)
-        WHERE session_id = ? AND substr(anchor_message_id, 1, length(?)) = ?`)
-        .run(newPrefix, oldPrefix, id, oldPrefix, oldPrefix);
-    }
-    if ((priorSource && priorSource !== sourceKey) || (!priorSource && session.filePath !== filePath)) {
-      this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
-      this.db.prepare(`UPDATE sessions SET byte_offset = 0, message_count = 0,
-        turn_open = NULL, turn_started_at = NULL, updated_at = started_at WHERE id = ?`).run(id);
-    }
+  /** The physical file a compressed session was last replayed from (or
+   *  that failed to replay: see `sourceError`); null for plain sources. */
+  sourceStamp(id: string): string | null {
+    const r = this.db.prepare('SELECT source_stamp FROM sessions WHERE id = ?')
+      .get(id) as { source_stamp: string | null } | undefined;
+    return r?.source_stamp ?? null;
+  }
+
+  /** A source that could not be read: the previous derived view stays, the
+   *  error shows in the viewer and blocks Ask. With a stamp (a compressed
+   *  file) the same physical file is not retried until it changes; a plain
+   *  restore that failed (null) is retried on every notification. */
+  setSourceError(id: string, stamp: string | null, error: string): void {
+    this.db.prepare('UPDATE sessions SET source_stamp = ?, source_error = ? WHERE id = ?').run(stamp, error, id);
+  }
+
+  /** Forget the replayed stamp so the next notification replays the file
+   *  (manual reingest); the derived view stays until the replay lands. */
+  invalidateSource(id: string): void {
+    this.db.prepare('UPDATE sessions SET source_stamp = NULL, source_error = NULL WHERE id = ?').run(id);
+  }
+
+  /** The source was renamed (archive/unarchive) and nothing else changed:
+   *  the session follows the path, rows and checkpoint untouched. */
+  rebindPath(id: string, filePath: string): void {
     this.db.prepare('UPDATE sessions SET file_path = ? WHERE id = ?').run(filePath, id);
-    this.setKv(key, sourceKey);
+  }
+
+  /** The source is now a different file (moved, copied, restored): bind the
+   *  new path and replace every derived row with the given from-zero parse,
+   *  in one transaction. Ids are content-derived, so side-chat anchors and
+   *  snapshots survive; titles and other patches re-apply from the events. */
+  replaceSession = this.txn((id: string, filePath: string, events: NormalizedEvent[], newByteOffset: number): StoredEvent[] => {
+    this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
+    this.db.prepare(`UPDATE sessions SET file_path = ?, byte_offset = 0, message_count = 0,
+      turn_open = NULL, turn_started_at = NULL, updated_at = started_at,
+      source_stamp = NULL, source_error = NULL WHERE id = ?`).run(filePath, id);
+    return this.appendTo(id, events, newByteOffset, 'main');
   });
 
   upsertSession(meta: SessionMeta): void {
@@ -319,20 +333,20 @@ export class Store {
 
   /** Wipe a session's events for a from-zero re-parse (file shrank). */
   private childEnd(parentId: string, key: string | null | undefined): number | null {
-    const v = key ? this.getKv(`ended:${parentId}:${key}`) : null;
+    const v = key ? this.getKv(CHILD_FACT.ended(parentId, key)) : null;
     return v ? Number(v) : null;
   }
 
   /** A Workflow launch ack: remember which run a tool_use id names, so the
    *  run's task-notification can end every child under that run id. */
   noteWorkflowRun(parentId: string, toolUseId: string, runId: string, name: string | null): void {
-    this.setKv(`wfrun:${parentId}:${toolUseId}`, runId);
-    if (name) this.setKv(`wfname:${parentId}:${runId}`, name);
+    this.setKv(CHILD_FACT.wfrun(parentId, toolUseId), runId);
+    if (name) this.setKv(CHILD_FACT.wfname(parentId, runId), name);
   }
 
   /** run id → workflow name, for every Workflow run this session launched. */
   workflowNames(parentId: string): Record<string, string> {
-    const prefix = `wfname:${parentId}:`;
+    const prefix = CHILD_FACT.wfname(parentId, '');
     const rows = this.db.prepare('SELECT key, value FROM kv WHERE key LIKE ?')
       .all(`${prefix}%`) as { key: string; value: string }[];
     return Object.fromEntries(rows.map((r) => [r.key.slice(prefix.length), r.value]));
@@ -343,9 +357,9 @@ export class Store {
    *  children ingested later, and applied to the ones already here. */
   endChildren(parentId: string, toolUseId: string, ts: number): void {
     const keys = [toolUseId];
-    const runId = this.getKv(`wfrun:${parentId}:${toolUseId}`);
+    const runId = this.getKv(CHILD_FACT.wfrun(parentId, toolUseId));
     if (runId) keys.push(runId);
-    for (const k of keys) this.setKv(`ended:${parentId}:${k}`, String(ts));
+    for (const k of keys) this.setKv(CHILD_FACT.ended(parentId, k), String(ts));
     this.db.prepare(`UPDATE sessions SET ended_at = ? WHERE parent_id = ? AND ended_at IS NULL
       AND (tool_use_id = ? OR workflow_id = ?)`).run(ts, parentId, toolUseId, runId ?? '');
   }
@@ -362,22 +376,23 @@ export class Store {
     this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...ids);
     if (!keepSideChats) this.db.prepare(`DELETE FROM side_chats WHERE session_id IN (${ph})`).run(...ids);
     this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...ids);
-    this.db.prepare(`DELETE FROM kv WHERE key LIKE 'ended:' || ? || ':%'
-      OR key LIKE 'wfrun:' || ? || ':%' OR key LIKE 'wfname:' || ? || ':%'`).run(id, id, id);
-    for (const sessionId of ids) for (const prefix of ['codex-source:', 'codex-fingerprint:', 'codex-error:', 'codex-failed:']) {
-      this.db.prepare('DELETE FROM kv WHERE key = ?').run(`${prefix}${sessionId}`);
+    for (const sessionId of ids) {
+      this.db.prepare('DELETE FROM kv WHERE key LIKE ? OR key LIKE ? OR key LIKE ?')
+        .run(...([CHILD_FACT.ended, CHILD_FACT.wfrun, CHILD_FACT.wfname] as const).map((k) => `${k(sessionId, '')}%`));
     }
   });
 
   /** After a scan: sessions whose transcript is gone, and side chats a
    *  schema rebuild left without a session. With `keepSideChats` the
-   *  orphans stay; turning it off clears them on the next scan. */
-  prune(keepSideChats = false, handleMissing?: (session: SessionMeta) => boolean, cleanupOrphans = true): void {
+   *  orphans stay; turning it off clears them on the next scan.
+   *  `handleMissing` gets first refusal on a missing path (a relocatable
+   *  source may have moved): true = handled, do not delete. */
+  prune(keepSideChats = false, handleMissing?: (session: SessionMeta) => boolean): void {
     const rows = this.db.prepare('SELECT * FROM sessions').all() as SessionRow[];
     for (const r of rows) {
       if (!fs.existsSync(r.file_path) && !handleMissing?.(toMeta(r))) this.deleteSession(r.id, keepSideChats);
     }
-    if (!keepSideChats && cleanupOrphans) {
+    if (!keepSideChats) {
       this.db.prepare('DELETE FROM side_chats WHERE session_id NOT IN (SELECT id FROM sessions)').run();
     }
   }
@@ -385,7 +400,7 @@ export class Store {
   resetSession(sessionId: string): void {
     this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(sessionId);
     this.db.prepare(`UPDATE sessions SET byte_offset = 0, message_count = 0,
-      title = '', title_source = NULL WHERE id = ?`).run(sessionId);
+      title = '', title_source = NULL, source_stamp = NULL, source_error = NULL WHERE id = ?`).run(sessionId);
   }
 
   /** Append a batch of events and advance the checkpoint, in one transaction.
@@ -485,7 +500,7 @@ export class Store {
         AND (@q IS NULL OR title LIKE '%' || @q || '%')
       ORDER BY updated_at DESC
     `).all({ project: opts.project ?? null, q: opts.q ?? null }) as SessionRow[];
-    return rows.map(r => this.withCodexError(toMeta(r)));
+    return rows.map(toMeta);
   }
 
   /** Subagent sessions this session spawned, in the order they started. */
@@ -498,13 +513,7 @@ export class Store {
 
   getSession(id: string): SessionMeta | null {
     const r = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
-    return r ? this.withCodexError(toMeta(r)) : null;
-  }
-
-  private withCodexError(meta: SessionMeta): SessionMeta {
-    const error = meta.adapter === 'codex' ? this.getKv(`codex-error:${meta.id}`) : null;
-    if (meta.adapter !== 'codex') return meta;
-    return { ...meta, sourceError: error ?? undefined, sourceVersion: this.getKv(`codex-fingerprint:${meta.id}`) ?? this.getKv(`codex-source:${meta.id}`) ?? undefined };
+    return r ? toMeta(r) : null;
   }
 
   getMessageSeq(sessionId: string, messageId: string): number | null {

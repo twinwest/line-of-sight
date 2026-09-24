@@ -219,9 +219,7 @@ parentage are children too. Copied parent headers in forked context are
 ignored. Codex children use their own writer lock and turn markers for
 liveness, rather than inheriting Claude's parent process rule. Nested children
 are reached through their immediate parent; parent deletion removes all
-descendants. A one-time Codex-only checkpoint invalidation backfills existing
-rows without removing messages or side chats, and invalidates compressed
-fingerprints so their staged metadata is replayed.
+descendants.
 
 1. On daemon start: scan all adapter roots; for each transcript file, if
    `(filePath, size, mtime)` differs from the stored checkpoint, incrementally
@@ -233,30 +231,48 @@ fingerprints so their staged metadata is replayed.
    checkpoint stays at the last complete newline; the tail is re-read once the
    newline arrives).
 
-Codex rollouts also live in the flat `~/.codex/archived_sessions/` directory.
-Scan active then archived rollouts before replaying `session_index.jsonl`;
-watch Codex locations through their parent with a scoped directory filter,
-even when initially absent; rescan once the subscription is ready.
-Archive/unarchive are file
-moves, separate from compression. Codex's optional adapter source resolver
-keeps an existing bound UUID source, otherwise chooses an active source before
-an archived one, using an ordered discovery snapshot refreshed for new paths
-and missing bindings. Missing-path ingestion and startup pruning resolve surviving
-UUID sources before deletion; unreadable directories are errors, not absence.
-Binding a Codex source updates the stored path and migrates legacy fallback
-anchors in a transaction. `kv` stores `codex-source:<uuid>` = device/inode:
-rename preserves the checkpoint across restarts; a copied/replaced source is
-reparsed while retaining titles and side chats. Final deletion clears this
-fact. Ask awaits Codex reconciliation and refreshes its source and anchor
-after responder availability probing. Claude ingestion and deletion do not
-use source reconciliation.
-Codex accepts `.jsonl.zst` in either location. A restored plain sibling
-wins even while a compressed sibling remains bound. Compressed physical
-fingerprints include representation/dev/inode/size/mtimeNs/ctimeNs; decoded
-UTF-8 byte positions are the checkpoints and fallback-ID coordinates.
-An unchanged valid source is skipped; a changed fingerprint triggers replay
-from frame start. Before publishing, revalidate the open source and selected
-path. No compressed-size comparison or compressed seek uses decoded offsets.
+Codex rollouts also live in the flat `~/.codex/archived_sessions/` directory,
+and — behind a CLI feature flag that is off by default on 0.153.4 — as
+`.jsonl.zst` in either location (SPIKE_NOTES 2026-09-23). Both roots are
+watched through their parent with a scoped filter, even when initially
+absent, and rescanned once the subscription is ready; active rollouts scan
+before archived ones, then `session_index.jsonl` replays the AI titles.
+
+**The source rule** (decided 2026-09-23, replacing the inode binding of
+2026-09-13): a Codex session is its UUID; `sessions.file_path` is the file
+it was last read from. Archive and unarchive are `fs::rename` on the CLI's
+side, and a compressed rollout replaces its plain file, so a UUID has one
+source at a time and a second path for it is a transient duplicate at most.
+On every notification the adapter's resolver names the source: the bound
+path while it still exists (a plain sibling of a bound `.zst` wins, as it
+does for Codex's own reader), otherwise whichever file under the two roots
+carries the UUID (active before archived, sorted), otherwise none. Then:
+
+- source is the bound path → the ordinary incremental read;
+- source is a different path → **rebind and reparse from zero**: the file is
+  parsed first, then one transaction swaps `file_path` and every derived
+  row. Ids are content-derived (item id, or `<uuid>:<decoded offset>`), so
+  side-chat anchors and frozen snapshots survive; titles re-apply. Measured
+  80 ms for the largest local rollout — a move is a user action on a
+  finished session, and remembering the inode to skip it was not worth the
+  machinery. An unreadable replacement leaves the previous view bound to
+  its old path with a passive `source_error` (shown in the viewer, blocks
+  Ask) until it reads;
+- no source → the session leaves, `keepSideChats` as usual; an unreadable
+  directory is an error, never absence.
+
+The start-up prune runs after the scan and everything it queued, and gives a
+relocatable session one more resolution before deleting it. Ask awaits that
+reconciliation and refreshes its source before the responder runs.
+
+Compressed sources cannot be read by byte offset, so they replay whole:
+decoded UTF-8 positions are the checkpoint and the fallback-id coordinate.
+`sessions.source_stamp` (dev/inode/size/mtimeNs/ctimeNs of the physical
+file) says whether a replay is needed: same stamp at the same path, or the
+same stamp after a failure, is skipped; anything else replays from the
+frame start, and rename changes ctime, so archive/unarchive replay too
+(85 ms measured). Before publishing, the open file and the selected path
+are revalidated. No compressed-size comparison or seek uses decoded offsets.
 
 The optional `zstd-napi` low-level decoder loads only on compressed reads.
 It runs inline (native decode is far cheaper than the per-batch JSON parse
@@ -269,12 +285,11 @@ budget; it has no raw JSONL copy or user-owned data. Complete frame and
 JSONL-tail validation precedes atomic replacement of the main derived rows.
 Detach/connection close/process death removes staging. Side chats, frozen
 snapshots, and title precedence survive replacement. Corruption keeps the
-previous derived view, adds a passive source diagnostic, and blocks Ask;
-new corrupt sources expose an error with no partial messages. Failures are
-cached per physical fingerprint to bound repeated decoding/logging, and heal
-on valid source change. Deletion clears source/fingerprint/error facts and
-honors the existing `keepSideChats` preference. Manual compressed reingestion
-invalidates fingerprints without deleting the last valid derived view.
+previous derived view, records the failed stamp and a passive
+`source_error` (bounds repeated decoding and logging; blocks Ask), and
+heals when the file changes; a new corrupt source shows the error with no
+partial messages. Manual reingestion (`sight reingest`) forgets the stamp
+without deleting the last valid view.
 
 This adds no archive controls, runtime downloads, or Sight-owned retention.
 
@@ -288,7 +303,8 @@ CREATE TABLE sessions (
   message_count INTEGER DEFAULT 0,            -- user + assistant rows, recounted per append
   byte_offset INTEGER DEFAULT 0,  -- always at a line boundary; partial tails re-read
   parent_id TEXT, tool_use_id TEXT, workflow_id TEXT, ended_at INTEGER,  -- subagent runs (§4)
-  turn_open INTEGER, turn_started_at INTEGER  -- agents with turn markers; NULL otherwise
+  turn_open INTEGER, turn_started_at INTEGER,  -- agents with turn markers; NULL otherwise
+  source_stamp TEXT, source_error TEXT         -- compressed sources: file last replayed / why it failed (§4)
 );
 CREATE TABLE messages (
   id TEXT, session_id TEXT, seq INTEGER,
@@ -309,7 +325,7 @@ CREATE TABLE side_chats (
   excerpt_json TEXT               -- AskSnapshot: the excerpt rows frozen at creation (store.ts)
 );
 CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
-CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- e.g. last_viewer_open
+CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- child facts a parent records before the child is scanned (ended:/wfrun:/wfname:, store.ts CHILD_FACT)
 ```
 
 - Only the daemon opens the DB through `Store`. Anything else (`sight stats`)

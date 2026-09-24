@@ -204,9 +204,10 @@ export function buildServer(store: Store, hub: SseHub,
     if (!session) return reply.code(404).send({ error: 'not found' });
     const targets = [session, ...store.listChildren(session.id)];
     for (const s of targets) {
-      if (s.adapter === 'codex' && s.filePath.endsWith('.zst')) {
-        for (const prefix of ['codex-fingerprint:', 'codex-failed:']) store.db.prepare('DELETE FROM kv WHERE key = ?').run(prefix + s.id);
-      } else store.resetSession(s.id);
+      // a compressed source replays whole and atomically: keep the view up
+      // until the replay lands, just forget which file it came from
+      if (s.adapter === 'codex' && s.filePath.endsWith('.zst')) store.invalidateSource(s.id);
+      else store.resetSession(s.id);
       reingest(s.filePath);
     }
     return { ok: true, sessions: targets.length };

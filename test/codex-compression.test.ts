@@ -51,7 +51,7 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
     const chat = store.createSideChat(ID, events[0]!.id, 'Child evidence');
     store.db.prepare('UPDATE sessions SET parent_id = NULL WHERE id = ?').run(ID);
     // Simulate the upgrade invalidation of an already decoded rollout.
-    store.db.prepare('DELETE FROM kv WHERE key = ?').run(`codex-fingerprint:${ID}`);
+    store.invalidateSource(ID);
     await ingester.reingest(archive);
     expect(store.getSession(ID)?.parentId).toBe(parent);
     expect(store.getEvents(ID)).toEqual(events);
@@ -125,7 +125,7 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
     expect(store.getSession(ID)).toMatchObject({ filePath: archive, title: 'Compressed title', projectDir: '/synthetic/repo', messageCount: 2, turnOpen: false });
     expect(store.getSessionByPath(archive)?.byteOffset).toBe(Buffer.byteLength(raw));
     expect(store.search('归档')).toHaveLength(1);
-    expect(store.getKv(`codex-fingerprint:${ID}`)).toBe(codexFingerprint(archive));
+    expect(store.getSession(ID)?.sourceVersion).toBe(`${archive}:${codexFingerprint(archive)}`);
   });
 
   it.each(['unlink-first', 'add-first', 'offline'])(
@@ -155,7 +155,7 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
       fs.unlinkSync(plain); await ingester.reingest(plain);
       expect(store.getSession(ID)).toBeNull(); expect(store.getSideChat(chat.id)).toBeNull();
       expect(store.search('evidence')).toEqual([]);
-      for (const prefix of ['codex-source:', 'codex-fingerprint:', 'codex-error:', 'codex-failed:']) expect(store.getKv(prefix + ID)).toBeNull();
+      expect(store.db.prepare('SELECT key FROM kv WHERE key LIKE ?').all(`%${ID}%`)).toEqual([]);
     },
   );
 

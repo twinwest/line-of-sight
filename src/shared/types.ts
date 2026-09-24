@@ -20,7 +20,8 @@ export interface SessionMeta {
   /** API-only: compressed-source validation failed; any existing derived
    *  view is stale and must not be offered as complete Ask evidence. */
   sourceError?: string;
-  /** Changes when the derived Codex view is replaced, rather than appended. */
+  /** Changes when the derived view is replaced rather than appended: the
+   *  source moved, or a compressed source's physical file changed. */
   sourceVersion?: string;
   /** Transcript-derived turn state (agents with turn markers, e.g. codex
    *  task_started/task_complete). Corroborates process-alive-only live
