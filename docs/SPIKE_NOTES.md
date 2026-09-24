@@ -704,3 +704,106 @@ user speaking, unlike every other `<`-prefixed user line. The adapter strips
 the tags (`unwrapPaste`) before the `<` plumbing heuristic and the title
 patch see the text. Bare `<pasted_content>` (no id) also appears inside
 `prompt_snapshot` system prompts, which are dropped anyway.
+
+## Addendum 2026-09-23 — Codex archive / compression ingest path (#50)
+
+Question: is there a simpler model than resolver + inode binding +
+fingerprints + attached-db staging that keeps every promise? Everything
+below was run on codex-cli 0.153.4 inside a throwaway `CODEX_HOME`; the
+user's `~/.codex` was read, never written.
+
+**What Codex does on disk.**
+
+- `codex archive <id>` and `codex unarchive <id>` are `fs::rename`. The
+  inode was the same before archive, after archive and after unarchive
+  (73134951); no temp file. Unarchive bumps mtime, archive does not. The
+  state db (`state_5.sqlite`, `threads`) carries the archived flag and path.
+- Compression is gated behind the feature `local_thread_store_compression`,
+  which `codex features list` reports as *under development, false* on
+  0.153.4. This machine: 26 active rollouts, 23 past the 7-day threshold,
+  zero `.jsonl.zst` anywhere — a default-config user has no compressed
+  rollouts today. With the feature enabled in the throwaway home, the next
+  thread-store start (`codex archive`) compressed the 15-day-old rollout at
+  once: `archived_sessions/…jsonl.zst`, 1,950,448 → 300,097 bytes, plain
+  removed, lock files `.tmp/rollout-compression.lock` (pid + start time)
+  and `.tmp/rollout-maintenance.lock`. Upstream writes temp →
+  `persist_noclobber` → delete plain, and its own reader skips a `.zst`
+  whose plain sibling exists (`should_skip_compressed_sibling`), so Sight's
+  "plain sibling wins" is the writer's rule too. Temp names end in `.tmp`
+  and never match `ROLLOUT`.
+- Sight's decoder reads the Codex-produced file whole: 620 lines,
+  1,950,448 decoded bytes, equal to the plain size. Until now every
+  compressed fixture had been compressed by us.
+- Duplicate UUIDs across the two roots are therefore transient at most (a
+  rename or compress that died half-way). Never observed.
+- Watch item, out of scope here: `background_paginated_rollout_migration`
+  (*under development, false*) and the `legacy_to_paginated_v1` strings in
+  the binary point at a multi-file, SQLite-projected rollout format, and
+  archive already "deduplicates multiple rollout paths" per thread. Sight
+  assumes one file per session. That, not compression, is the next Codex
+  format risk. (Aside: the 2026-09-08 rollout has 11 unknown lines —
+  `SubAgentActivity`, `CollabAgentToolCall`,
+  `inter_agent_communication_metadata`, a `response_item` — #13 territory.)
+
+**What remembering saves.** Largest local rollout, 8.0 MB / 1,622 lines /
+467 events: plain ingest from zero 70–80 ms; compressed staged replay
+85 ms; every normalized event held in memory at once, 25 MB heap in the
+harness (2.8 MB as JSON). A move is a user action on a finished session.
+
+**Answers to #50.**
+
+1. *One rule covers the archive tests.* Session = UUID; `file_path` = the
+   path last ingested. A notification for another path of the same UUID
+   while the bound path still exists is ignored (logged once). When the
+   bound path is gone — unlink event, or missing at startup — look for
+   another path of that UUID under the two roots (the only discovery
+   left); found → rebind and reparse from zero (ids are content-derived,
+   item id or `uuid:decodedOffset`, so anchors and snapshots survive;
+   `session_index.jsonl` titles replay as today); not found → delete,
+   `keepSideChats` as today. Gone: the inode fact (`codex-source:`),
+   `bindCodexSessionFile`, the restoration pre-parse (parse into staging
+   first and swap only on success gives the same "an unreadable
+   replacement keeps the previous view" guarantee), the second startup
+   prune. Walked the 13 archive and 19 compression cases against the rule:
+   every assertion holds. Two test names ("persists a rename checkpoint")
+   describe a mechanism that would no longer exist; their assertions
+   (events equal, chats kept) still pass. The 2026-09-13 one-shot
+   migration of `<path>:offset` anchors can stay a one-shot or be dropped —
+   owner call.
+2. *Unchanged-source skip.* One stamp, `dev:ino:size:mtimeNs`, for plain
+   and compressed alike (today only compressed has one; plain relies on
+   `size <= offset`). Unarchive bumps mtime, so the stamp reparses after
+   unarchive — 80 ms, and inode binding would not have avoided the rebind
+   either. `codex-fingerprint:` and `codex-failed:` collapse into the stamp
+   plus a `source_error`: an error recorded for the current stamp means
+   "do not retry until the file changes".
+3. *Staging stays, the attached database does not.* Staging exists because
+   the decode yields between batches on the one shared connection and a
+   transaction cannot span those yields; decode-to-memory-then-one-txn is
+   bounded by rollout size, not batch size, and the 8 MiB record cap does
+   not bound the total. But the rows can stage in `main.messages` under a
+   suffixed session id and swap in one `DELETE` + `UPDATE session_id`
+   transaction: no `ATTACH`, no schema parameter on `appendTo`, no
+   `beginCodexReplay`/`endCodexReplay`; leftover staging rows from a crash
+   are cleared on open. Once plain from-zero reparses also batch and yield
+   (#52) they take the same staging path: incremental appends commit per
+   batch to main, every from-zero replace goes through staging.
+4. *Columns for per-session facts, one owner for the rest.*
+   `sessions.source_stamp`, `sessions.source_error` (derived table: adding
+   columns is free, deletion is the row delete). The Claude child facts
+   (`ended:`, `wfrun:`, `wfname:`) exist for order independence and stay
+   keyed, under one owner (`store/facts.ts` or a `child_facts` table) so
+   `deleteSession` calls one function.
+5. *What the ingester still needs from an adapter after 1–4:*
+   `sessionId(path)` (both have it), `siblings(id)` (discovery; Claude
+   none), `stamp(path)`, and `read(path, fromOffset, onBatch)` where the
+   compressed reader refuses `fromOffset > 0` and the plain reader is one
+   shared helper. `patchFile` stays; `resolveSessionFile` and `compressed`
+   go. ingest.ts then has one path: stamp unchanged → skip; plain and
+   grown → incremental; otherwise → staged replace. Rough size: ingest.ts
+   373 → ~250 lines, store.ts about −80, one startup prune.
+
+**Decision (2026-09-23): simplify**, one PR each, in this order — (a) the
+source rule and stamp columns (#53), (b) staging in `main` as the shared
+from-zero path (#52), (c) the adapter surface. ARCHITECTURE §4's Codex
+paragraph is rewritten as the rule in (a), in that PR.
