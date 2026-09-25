@@ -229,6 +229,22 @@ describe('incremental ingest', () => {
     return ingester.stop();
   });
 
+  it('deleting a session takes every kv fact that names it', () => {
+    const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_9');
+    fs.mkdirSync(wfDir, { recursive: true });
+    fs.writeFileSync(path.join(wfDir, 'agent-a.jsonl'), line('a', 'angle'));
+    const ack = JSON.stringify({ type: 'user', uuid: 'u2', timestamp: '2026-08-24T00:00:00.000Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_w', content: 'launched' }] },
+      toolUseResult: { status: 'async_launched', taskType: 'local_workflow', runId: 'wf_9', workflowName: 'deep-research' } }) + '\n';
+    fs.writeFileSync(file, line('u1', 'go') + ack
+      + line('u3', '<task-notification><tool-use-id>toolu_w</tool-use-id><status>completed</status></task-notification>'));
+    ingester.ingestFile(adapter(), file);
+    const facts = () => store.db.prepare('SELECT key FROM kv WHERE key LIKE ?').all(`%${SESSION}%`);
+    expect(facts().length).toBeGreaterThan(0);
+    store.deleteSession(SESSION);
+    expect(facts()).toEqual([]);
+  });
+
   it('sibling files that are not transcripts stay out', () => {
     const a = adapter();
     const dir = path.join(root, '-tmp-proj', SESSION, 'subagents');

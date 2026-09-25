@@ -111,7 +111,7 @@ describe('Codex subagent grouping', () => {
     const original = store.getEvents(CHILD);
     const chat = store.createSideChat(CHILD, `${CHILD}-u`, 'Review');
     store.db.prepare('UPDATE sessions SET parent_id = NULL WHERE id = ?').run(CHILD);
-    store.db.prepare("DELETE FROM kv WHERE key = 'codex-subagents-v1'").run();
+    store.db.pragma('user_version = 6');   // a pre-v7 database: derived rows rebuild on open, side chats stay
     await ingester.stop(); store.close(); stores.splice(stores.indexOf(store), 1);
     const reopened = new Store(path.join(home, 'sight.db')); stores.push(reopened);
     const restarted = new Ingester(reopened, [adapter], () => {}, () => false);

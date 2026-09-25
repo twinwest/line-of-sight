@@ -34,6 +34,9 @@ const prompt = (id: string | undefined, text: string) => entry('event_msg', {
 });
 
 describe('Codex archive lifecycle', () => {
+  /** Every fact about a session leaves with it — no kv row may name its id. */
+  const kvRowsMentioning = (id: string) =>
+    store.db.prepare('SELECT key FROM kv WHERE key LIKE ?').all(`%${id}%`);
   let home: string;
   let active: string;
   let archived: string;
@@ -62,7 +65,7 @@ describe('Codex archive lifecycle', () => {
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  it('honors keepSideChats after the final Codex source disappears, including startup prune', () => {
+  it('honors keepSideChats after the final Codex source disappears, including startup prune', async () => {
     ingester = new Ingester(store, [adapter], () => {}, () => true);
     ingester.ingestFile(adapter, active);
     const chat = store.createSideChat(ID, 'u1', 'archive evidence');
@@ -72,8 +75,9 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSideChatSnapshot(chat.id)).toEqual(snapshot);
     fs.unlinkSync(archived);
     ingester.start();
+    await ingester.stop();   // the start-up prune runs after the scan's queued work
     expect(store.getSession(ID)).toBeNull();
-    expect(store.getKv(`codex-source:${ID}`)).toBeNull();
+    expect(kvRowsMentioning(ID)).toEqual([]);
     expect(store.getSideChat(chat.id)).not.toBeNull();
     expect(store.getSideChatSnapshot(chat.id)).toEqual(snapshot);
     store.prune(false);
@@ -169,7 +173,7 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSession(ID)).toBeNull();
     expect(store.getSideChat(chat.id)).toBeNull();
     expect(store.search('evidence')).toEqual([]);
-    expect(store.getKv(`codex-source:${ID}`)).toBeNull();
+    expect(kvRowsMentioning(ID)).toEqual([]);
   });
 
   it('keeps fallback anchors when a copied source needs a from-zero reparse', () => {
@@ -186,21 +190,8 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSession(ID)?.messageCount).toBe(2);
   });
 
-  it('upgrades pre-fix path fallback IDs and their side-chat anchors on offline relocation', () => {
-    const content = prompt(undefined, 'legacy fallback');
-    fs.writeFileSync(active, content);
-    const events = adapter.parseLine(content.trim(), { filePath: active, byteOffset: 0 });
-    const legacyId = `${active}:0`;
-    store.upsertSession(adapter.sessionMeta(active, events));
-    store.appendEvents(ID, events.map(e => ({ ...e, id: legacyId })), Buffer.byteLength(content));
-    const chat = store.createSideChat(ID, legacyId, 'legacy fallback');
-    fs.renameSync(active, archived);
-    ingester.start();
-    expect(store.getEvents(ID).map(e => e.id)).toEqual([`${ID}:0`]);
-    expect(store.getSideChat(chat.id)?.anchorMessageId).toBe(`${ID}:0`);
-  });
 
-  it('persists a rename checkpoint across a daemon/database restart', async () => {
+  it('follows an offline rename across a daemon/database restart, rows and chats intact', async () => {
     store.close();
     const db = path.join(home, 'sight.db');
     store = new Store(db);
