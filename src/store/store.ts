@@ -11,7 +11,7 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 export type { SideChat, StoredEvent };
 
 /** Bump when sessions/messages/messages_fts change shape (see constructor). */
-const SCHEMA_VERSION = 7;  // 7: source_stamp/source_error columns replace the codex-* kv facts (6: claude pasted_content unwrapped; 5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
+const SCHEMA_VERSION = 8;  // 8: messages(session_id, seq) index (7: source_stamp/source_error columns replace the codex-* kv facts; 6: claude pasted_content unwrapped; 5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
   parent_id TEXT,
   PRIMARY KEY (session_id, id)
 );
+CREATE INDEX IF NOT EXISTS messages_session_seq ON messages(session_id, seq);  -- MAX(seq) per batch, tail reads
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
   text_content, content='messages', tokenize='trigram'
 );
@@ -57,9 +58,6 @@ CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
 export const MARK_START = '\u0001';
 export const MARK_END = '\u0002';
 
-/** Correlated on sessions.id — dialog rows only, matching the search index. */
-const MESSAGE_COUNT = `(SELECT count(*) FROM messages m
-  WHERE m.session_id = sessions.id AND m.role IN ('user','assistant'))`;
 
 const TITLE_PRIORITY: Record<TitleSource, number> = { prompt: 1, ai: 2, custom: 3 };
 
@@ -246,11 +244,12 @@ export class Store {
     this.db.prepare(`INSERT INTO messages (id, session_id, seq, role, ts, blocks_json, text_content, parent_id)
       SELECT id, session_id, seq, role, ts, blocks_json, text_content, parent_id
       FROM codex_replay.messages ORDER BY seq`).run();
-    this.db.prepare(`UPDATE sessions SET file_path = ?, byte_offset = ?, message_count = ?, updated_at = ?,
+    this.db.prepare(`UPDATE sessions SET file_path = ?, byte_offset = ?, updated_at = ?,
       started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END,
       turn_open = ?, turn_started_at = ?, source_stamp = ?, source_error = NULL WHERE id = ?`)
-      .run(meta.filePath, row.byte_offset, row.message_count, row.updated_at, row.started_at,
+      .run(meta.filePath, row.byte_offset, row.updated_at, row.started_at,
         row.turn_open, row.turn_started_at, stamp, meta.id);
+    this.recountMessages(meta.id);
     this.applyPatch(meta.id, { projectDir: row.project_dir ?? undefined,
       title: row.title, titleSource: row.title_source ?? undefined,
       parentId: row.parent_id ?? undefined });
@@ -293,15 +292,16 @@ export class Store {
   }
 
   /** The source is now a different file (moved, copied, restored): bind the
-   *  new path and replace every derived row with the given from-zero parse,
-   *  in one transaction. Ids are content-derived, so side-chat anchors and
-   *  snapshots survive; titles and other patches re-apply from the events. */
-  replaceSession = this.txn((id: string, filePath: string, events: NormalizedEvent[], newByteOffset: number): StoredEvent[] => {
+   *  new path, drop every derived row, and let `fill` append the from-zero
+   *  parse — all in one transaction, so a file that fails to read part-way
+   *  rolls back to the previous view. Ids are content-derived, so side-chat
+   *  anchors and snapshots survive; titles and other patches re-apply. */
+  replaceSession = this.txn((id: string, filePath: string, fill: () => void): void => {
     this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(id);
     this.db.prepare(`UPDATE sessions SET file_path = ?, byte_offset = 0, message_count = 0,
       turn_open = NULL, turn_started_at = NULL, updated_at = started_at,
       source_stamp = NULL, source_error = NULL WHERE id = ?`).run(filePath, id);
-    return this.appendTo(id, events, newByteOffset, 'main');
+    fill();
   });
 
   upsertSession(meta: SessionMeta): void {
@@ -445,15 +445,23 @@ export class Store {
         body: body ?? null,
       });
     }
-    // recount rather than add: a re-read from byte 0 (schema backfill) lands
-    // every row on DO UPDATE, which reports changes=1 just like an insert
+    // message_count is not touched here: a caller appends many batches per
+    // read and recounts once at the end (recountMessages)
     this.db.prepare(`
-      UPDATE ${schema}.sessions SET byte_offset = ?, message_count = ${MESSAGE_COUNT.replace('FROM messages m', `FROM ${schema}.messages m`)},
+      UPDATE ${schema}.sessions SET byte_offset = ?,
         updated_at = MAX(updated_at, ?),
         started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END
       WHERE id = ?
     `).run(newByteOffset, lastTs, events[0]?.ts ?? 0, sessionId);
     return stored;
+  }
+
+  /** Dialog rows only, matching the search index. A recount rather than a
+   *  running sum: a re-read from byte 0 lands every row on DO UPDATE, which
+   *  reports changes=1 just like an insert. Once per read, not per batch. */
+  recountMessages(sessionId: string): void {
+    this.db.prepare(`UPDATE sessions SET message_count = (SELECT count(*) FROM messages m
+      WHERE m.session_id = sessions.id AND m.role IN ('user','assistant')) WHERE id = ?`).run(sessionId);
   }
 
   /** Apply one patch outside the append flow (patch files, see Ingester). */

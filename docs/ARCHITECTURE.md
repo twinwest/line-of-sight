@@ -221,15 +221,26 @@ liveness, rather than inheriting Claude's parent process rule. Nested children
 are reached through their immediate parent; parent deletion removes all
 descendants.
 
-1. On daemon start: scan all adapter roots; for each transcript file, if
-   `(filePath, size, mtime)` differs from the stored checkpoint, incrementally
-   parse from the stored byte offset (files are append-only; if size shrank,
-   re-parse from 0).
-2. chokidar watches roots; on change, same incremental parse; new events go to
+1. On daemon start: scan all adapter roots and queue one ingest job per
+   transcript file; a file whose size exceeds the stored checkpoint is
+   parsed incrementally from that byte offset (files are append-only; if
+   size shrank, re-parse from 0).
+2. chokidar watches roots; on change, the same job, queued; new events go to
    (a) SQLite (messages + FTS) and (b) the SSE hub for live viewers.
-3. Parsing must be line-buffered and tolerant of a partial last line (the
+3. Parsing is line-buffered and tolerant of a partial last line (the
    checkpoint stays at the last complete newline; the tail is re-read once the
    newline arrives).
+4. Nothing holds the event loop for a whole file or a whole root. A plain
+   transcript is read 1 MiB at a time and committed per ≤256-line / ~512 KiB
+   batch with its checkpoint; queued jobs (scan, fs events) yield to the
+   loop between batches and between files, so health probes, SSE and the
+   viewer are served while a large root is still indexing. Measured
+   2026-09-24 on a 278 MB root: the loop's longest stall went from 6–7 s
+   (the wrapper's 1 s health budget expired and no viewer tab opened) to
+   under 0.1 s; a synthetic 210 MB transcript ingests in the same 51 s with
+   peak RSS 238 MB instead of 638 MB. A rebind (§4 source rule) is the one
+   whole-file transaction, without yields: a moved rollout is parsed in one
+   go so the previous rows are replaced atomically.
 
 Codex rollouts also live in the flat `~/.codex/archived_sessions/` directory,
 and — behind a CLI feature flag that is off by default on 0.153.4 — as
@@ -315,6 +326,7 @@ CREATE TABLE messages (
   parent_id TEXT,                 -- transcript tree; a fork marks the abandoned branch
   PRIMARY KEY (session_id, id)
 );
+CREATE INDEX messages_session_seq ON messages(session_id, seq);  -- MAX(seq) per batch, tail reads
 CREATE VIRTUAL TABLE messages_fts USING fts5(
   text_content, content='messages', tokenize='trigram'
 );  -- external content; AFTER INSERT/UPDATE/DELETE triggers on messages keep it in sync
@@ -340,7 +352,8 @@ CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- child facts a parent rec
   after the start-up scan. `sessions`, `messages` and the FTS index are dropped and
   rebuilt from the transcripts whenever `SCHEMA_VERSION` changes (tracked in
   `PRAGMA user_version`): an upgrade's first daemon start re-runs the initial
-  scan — seconds per hundred MB of transcripts. No column-level migrations
+  scan — seconds per hundred MB of transcripts, served throughout (§4 step
+  4). No column-level migrations
   on derived tables; the user-owned ones take additive columns, checked with
   `PRAGMA table_info` on open.
 

@@ -84,13 +84,14 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSideChat(chat.id)).toBeNull();
   });
 
-  it('discovers an archived-only rollout with its title, dialog search, and Ask context', () => {
+  it('discovers an archived-only rollout with its title, dialog search, and Ask context', async () => {
     fs.writeFileSync(active, fs.readFileSync(path.join(__dirname, 'fixtures/codex/archived.jsonl')));
     fs.renameSync(active, archived);
     fs.writeFileSync(path.join(home, 'session_index.jsonl'), JSON.stringify({
       id: ID, thread_name: 'Archived title', updated_at: '2026-09-08T16:32:28Z',
     }) + '\n');
     ingester.start();
+    await ingester.idle();
     expect(store.listSessions()).toHaveLength(1);
     expect(store.getSession(ID)).toMatchObject({ filePath: archived, title: 'Archived title', projectDir: '/repo' });
     expect(store.search('evidence')).toHaveLength(1);
@@ -110,6 +111,7 @@ describe('Codex archive lifecycle', () => {
         if (order === 'offline') {
           ingester = new Ingester(store, [adapter], () => {}, () => false);
           ingester.start();
+          await ingester.idle();
         } else {
           for (const p of order === 'unlink-first' ? [from, to] : [to, from]) ingester.ingestFile(adapter, p);
         }
@@ -205,6 +207,7 @@ describe('Codex archive lifecycle', () => {
     store = new Store(db);
     ingester = new Ingester(store, [adapter], () => {}, () => false);
     ingester.start();
+    await ingester.idle();
     expect(store.getSession(ID)?.filePath).toBe(archived);
     expect(store.getEvents(ID)).toEqual(original);
     expect(store.getSideChat(chat.id)).not.toBeNull();
@@ -238,7 +241,7 @@ describe('Codex archive lifecycle', () => {
     }
   });
 
-  it('does not mistake an unreadable replacement directory for transcript deletion', () => {
+  it('does not mistake an unreadable replacement directory for transcript deletion', async () => {
     ingester.ingestFile(adapter, active);
     const chat = store.createSideChat(ID, 'u1', 'archive evidence');
     fs.renameSync(active, archived);
@@ -251,10 +254,11 @@ describe('Codex archive lifecycle', () => {
     expect(store.getSession(ID)).not.toBeNull();
     expect(store.getSideChat(chat.id)).not.toBeNull();
     expect(() => ingester.start()).not.toThrow();
+    await ingester.idle();
     expect(store.getSideChat(chat.id)).not.toBeNull();
   });
 
-  it('keeps Claude transcript deletion and child/side-chat cleanup unchanged in a mixed daemon', () => {
+  it('keeps Claude transcript deletion and child/side-chat cleanup unchanged in a mixed daemon', async () => {
     const claudeRoot = path.join(home, 'claude-projects');
     const claudeId = '11111111-bbbb-cccc-dddd-eeeeeeeeeeee';
     const parent = path.join(claudeRoot, '-repo', `${claudeId}.jsonl`);
@@ -267,6 +271,7 @@ describe('Codex archive lifecycle', () => {
     const claude = claudeCodeAdapter(claudeRoot);
     ingester = new Ingester(store, [claude, adapter], () => {}, () => false);
     ingester.start();
+    await ingester.idle();
     const children = store.listChildren(claudeId);
     expect(children).toHaveLength(1);
     const parentChat = store.createSideChat(claudeId, 'cu1', 'Claude prompt');

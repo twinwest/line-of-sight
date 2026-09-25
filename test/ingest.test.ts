@@ -148,7 +148,7 @@ describe('incremental ingest', () => {
       .toBe(Date.parse('2026-08-24T00:00:00.000Z'));
   });
 
-  it('start() scans existing files, ingesting subagents as child sessions', () => {
+  it('start() scans existing files, ingesting subagents as child sessions', async () => {
     fs.writeFileSync(file, line('u1', 'scanned'));
     const subDir = path.join(root, '-tmp-proj', SESSION, 'subagents');
     fs.mkdirSync(subDir, { recursive: true });
@@ -157,6 +157,7 @@ describe('incremental ingest', () => {
       agentType: 'Explore', description: 'find the thing', toolUseId: 'toolu_1',
     }));
     ingester.start();
+    await ingester.idle();
     expect(store.getEvents(SESSION)).toHaveLength(1);
     // the list stays top-level only; the child hangs off its parent
     expect(store.listSessions()).toHaveLength(1);
@@ -179,7 +180,7 @@ describe('incremental ingest', () => {
     ]);
   });
 
-  it('workflow subagents land under the session, tagged with their run id', () => {
+  it('workflow subagents land under the session, tagged with their run id', async () => {
     const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_abc');
     fs.mkdirSync(wfDir, { recursive: true });
     fs.writeFileSync(path.join(wfDir, 'agent-w.jsonl'), line('w1', 'search angle'));
@@ -187,6 +188,7 @@ describe('incremental ingest', () => {
       JSON.stringify({ agentType: 'workflow-subagent', spawnDepth: 1 }));
     fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), '{"type":"started","agentId":"w"}\n');
     ingester.start();
+    await ingester.idle();
     expect(store.listChildren(SESSION)).toMatchObject([
       { id: 'agent-w', parentId: SESSION, toolUseId: null, workflowId: 'wf_abc', title: 'search angle' },
     ]);
@@ -214,7 +216,7 @@ describe('incremental ingest', () => {
     expect(s2.listChildren(SESSION)[0]!.endedAt).toBe(Date.parse('2026-08-24T00:00:00.000Z'));
   });
 
-  it('a Workflow run\'s notification ends every child under its run id', () => {
+  it('a Workflow run\'s notification ends every child under its run id', async () => {
     const wfDir = path.join(root, '-tmp-proj', SESSION, 'subagents', 'workflows', 'wf_9');
     fs.mkdirSync(wfDir, { recursive: true });
     for (const id of ['a', 'b']) fs.writeFileSync(path.join(wfDir, `agent-${id}.jsonl`), line(id, 'angle'));
@@ -224,6 +226,7 @@ describe('incremental ingest', () => {
     fs.writeFileSync(file, line('u1', 'go') + ack
       + line('u3', '<task-notification><tool-use-id>toolu_w</tool-use-id><status>completed</status></task-notification>'));
     ingester.start();
+    await ingester.idle();
     expect(store.listChildren(SESSION).map((c) => c.endedAt)).toEqual([1787529600000, 1787529600000]);
     expect(store.workflowNames(SESSION)).toEqual({ wf_9: 'deep-research' });
     return ingester.stop();
