@@ -11,6 +11,15 @@ export type IngestListener = (sessionId: string, events: StoredEvent[], reset?: 
 /** Files whose lines already produced a parse warning (log once per file). */
 const warned = new Set<string>();
 
+// Plain transcripts are read in bounded pieces, like compressed ones: 1 MiB
+// off the disk at a time, committed per ≤256 lines / ~512 KiB batch. Peak
+// memory follows the batch, not the transcript (a whole-file read cost
+// +250 MB RSS on a 278 MB root, measured 2026-09-24), and a crash between
+// batches resumes from the last committed line boundary.
+const READ_CHUNK = 1 << 20;
+const BATCH_LINES = 256;
+const BATCH_BYTES = 512 * 1024;
+
 export class Ingester {
   private watchers: FSWatcher[] = [];
   private listeners: IngestListener[] = [];
@@ -84,18 +93,21 @@ export class Ingester {
     }));
   }
 
+  /** Queue every transcript under a root, one job per file: the daemon
+   *  answers HTTP between files instead of after the whole root (a
+   *  synchronous scan of 278 MB held the loop 6–7 s, measured 2026-09-24,
+   *  past the wrapper's 1 s health budget — the viewer tab never opened). */
   private scanRoot(adapter: AgentAdapter, root: string): void {
     try {
       if (!fs.existsSync(root)) return;
       if (fs.statSync(root).isFile()) {
-        if (adapter.matches(root)) this.ingestFile(adapter, root);
+        if (adapter.matches(root)) void this.enqueue(() => this.ingestQueued(adapter, root));
       } else {
         const files = fs.readdirSync(root, { withFileTypes: true, recursive: true })
           .filter(entry => entry.isFile()).map(entry => path.join(entry.parentPath, entry.name));
         if (adapter.resolveSessionFile) files.sort();   // deterministic duplicate selection
-        for (const filePath of files) if (adapter.matches(filePath)) {
-          if (adapter.compressed?.matches(filePath)) void this.enqueue(() => this.ingestQueued(adapter, filePath));
-          else this.ingestFile(adapter, filePath);
+        for (const filePath of files) {
+          if (adapter.matches(filePath)) void this.enqueue(() => this.ingestQueued(adapter, filePath));
         }
       }
     } catch (e) {
@@ -108,6 +120,12 @@ export class Ingester {
     await Promise.all(this.watchers.map((w) => w.close()));
     for (const t of this.rechecks.values()) clearTimeout(t);
     this.rechecks.clear();
+    await this.idle();
+  }
+
+  /** Resolves once every queued job — including any a job enqueued while
+   *  running, e.g. a resolver retry — has finished. */
+  async idle(): Promise<void> {
     let pending = this.queue;
     for (;;) {
       await pending;
@@ -116,24 +134,24 @@ export class Ingester {
     }
   }
 
-  /** Serialize ingest work so concurrent fs events can't interleave on one file. */
+  /** Serialize ingest work so concurrent fs events can't interleave on one
+   *  file. Each job starts on a fresh macrotask, so I/O callbacks (health
+   *  probes, SSE writes, fs events) get the loop between jobs. */
   private enqueue(fn: () => void | Promise<void>): Promise<void> {
-    this.queue = this.queue.then(fn, (e) => this.log(`ingest error: ${String(e)}`));
+    this.queue = this.queue
+      .then(() => new Promise<void>((resolve) => setImmediate(resolve)))
+      .then(fn, (e) => this.log(`ingest error: ${String(e)}`));
     return this.queue;
   }
 
-  /** Ingest one file by path, whichever adapter claims it (queued like fs events). */
+  /** Ingest one file by path, whichever adapter claims it (queued like fs
+   *  events); resolves once the queue is idle — a source that moves during
+   *  the read enqueues a resolver retry, and Ask must see that too. */
   async reingest(filePath: string): Promise<void> {
     const adapter = this.adapters.find((a) => a.matches(filePath));
     if (!adapter) return;
-    let pending = this.enqueue(() => this.ingestQueued(adapter, filePath));
-    // A source that moves during the read can enqueue a resolver retry.
-    // Await that work too before Ask takes its fresh session snapshot.
-    for (;;) {
-      await pending;
-      if (pending === this.queue) return;
-      pending = this.queue;
-    }
+    void this.enqueue(() => this.ingestQueued(adapter, filePath));
+    await this.idle();
   }
 
   ingestFile(adapter: AgentAdapter, filePath: string): void | Promise<void> {
@@ -211,48 +229,70 @@ export class Ingester {
     const offset = session?.byteOffset ?? 0;
     if (session && size <= offset) return;
 
-    let parsed: { events: NormalizedEvent[]; consumed: number };
-    try {
-      parsed = this.parseFrom(adapter, filePath, offset, size);
-    } catch (e) {
-      if (!rebind) throw e;
-      // parse before rebinding: an unreadable replacement leaves the
-      // previous view bound to its old path, with a passive error that
-      // shows in the viewer and blocks Ask until the file reads
-      this.store.setSourceError(rebind, null, `Cannot read restored Codex transcript: ${String(e).slice(0, 300)}`);
-      this.log(`Codex restoration failed: ${String(e)}`);
-      return;
-    }
-    const { events, consumed } = parsed;
-    if (!session) {
-      if (rebind) session = { id: rebind, byteOffset: 0 };
-      else {
-        const meta = adapter.sessionMeta(filePath, events.slice(0, 5));
-        this.store.upsertSession(meta);
-        session = { id: meta.id, byteOffset: 0 };
+    const id = rebind ?? session?.id ?? adapter.sessionMeta(filePath, []).id;
+    const batches = this.readBatches(adapter, filePath, offset, size);
+    // Each batch commits with its checkpoint; an append is visible to
+    // viewers batch by batch (the shape of a live session anyway).
+    const step = ({ events, consumed }: { events: NormalizedEvent[]; consumed: number }): void => {
+      if (!session) {
+        this.store.upsertSession(adapter.sessionMeta(filePath, events.slice(0, 5)));
+        session = { id, byteOffset: 0 };
       }
-    }
-    if (consumed === 0 && !rebind) return;
-    for (const e of events) {
-      if (e.kind !== 'message') continue;
-      if (e.workflowRun) this.store.noteWorkflowRun(session.id, e.workflowRun.toolUseId, e.workflowRun.runId, e.workflowRun.name);
-      if (e.taskEnd) this.store.endChildren(session.id, e.taskEnd, e.ts);
-    }
-    const stored = rebind
-      ? this.store.replaceSession(session.id, filePath, events, consumed)
-      : this.store.appendEvents(session.id, events, offset + consumed);
-    // A new rollout can arrive after its name was already indexed. Replay
-    // the tiny title carrier so first archive creation gets its AI title too.
-    if (offset === 0) {
-      for (const root of adapter.roots()) {
-        if (adapter.patchFile?.(root) && fs.existsSync(root)) this.ingestPatchFile(adapter, root);
+      for (const e of events) {
+        if (e.kind !== 'message') continue;
+        if (e.workflowRun) this.store.noteWorkflowRun(id, e.workflowRun.toolUseId, e.workflowRun.runId, e.workflowRun.name);
+        if (e.taskEnd) this.store.endChildren(id, e.taskEnd, e.ts);
       }
-    }
+      const stored = this.store.appendEvents(id, events, offset + consumed);
+      if (!rebind && stored.length) for (const fn of this.listeners) fn(id, stored);
+    };
+    const finish = (): void => {
+      // a file with no complete line yet is still a session (its tail is
+      // re-read once the newline arrives)
+      if (!session) this.store.upsertSession(adapter.sessionMeta(filePath, []));
+      this.store.recountMessages(id);
+      // A new rollout can arrive after its name was already indexed. Replay
+      // the tiny title carrier so first archive creation gets its AI title too.
+      if (offset === 0) {
+        for (const root of adapter.roots()) {
+          if (adapter.patchFile?.(root) && fs.existsSync(root)) this.ingestPatchFile(adapter, root);
+        }
+      }
+    };
     if (rebind) {
+      // one transaction, no yielding inside it: the previous rows go only if
+      // the whole file reads. An unreadable replacement leaves the previous
+      // view bound to its old path, with a passive error that shows in the
+      // viewer and blocks Ask. ponytail: a move of a very large rollout
+      // blocks for its parse; stage it if that is ever measured to matter.
+      try {
+        this.store.replaceSession(id, filePath, () => { session = { id, byteOffset: 0 }; for (const b of batches) step(b); });
+      } catch (e) {
+        this.store.setSourceError(id, null, `Cannot read restored Codex transcript: ${String(e).slice(0, 300)}`);
+        this.log(`Codex restoration failed: ${String(e)}`);
+        return;
+      }
+      finish();
       // the view was replaced, not appended: viewers reload from a tail
       // rather than receive the whole session over SSE
-      for (const fn of this.listeners) fn(session.id, this.store.getEvents(session.id, { limit: 200 }), true);
-    } else if (stored.length) for (const fn of this.listeners) fn(session.id, stored);
+      for (const fn of this.listeners) fn(id, this.store.getEvents(id, { limit: 200 }), true);
+      return;
+    }
+    if (!queued) {
+      // direct callers (tests, the start-up prune's second look) read whole
+      for (const b of batches) step(b);
+      finish();
+      return;
+    }
+    // queued (scan, fs events): the loop gets a turn between batches, so a
+    // large file does not hold health probes and SSE for its whole parse
+    return (async () => {
+      for (const b of batches) {
+        step(b);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      finish();
+    })();
   }
 
   private async ingestCompressed(adapter: AgentAdapter, filePath: string, id: string): Promise<void> {
@@ -317,43 +357,61 @@ export class Ingester {
    *  last-wins patches is idempotent; a patch for a session whose transcript
    *  lands later (dropped by patchSession) self-heals on the next pass. */
   private ingestPatchFile(adapter: AgentAdapter, filePath: string): void {
-    const { events } = this.parseFrom(adapter, filePath, 0, fs.statSync(filePath).size);
-    for (const e of events) {
-      if (e.kind === 'meta' && e.sessionPatch?.sessionId) {
-        this.store.patchSession(e.sessionPatch.sessionId, e.sessionPatch);
+    for (const { events } of this.readBatches(adapter, filePath, 0, fs.statSync(filePath).size)) {
+      for (const e of events) {
+        if (e.kind === 'meta' && e.sessionPatch?.sessionId) {
+          this.store.patchSession(e.sessionPatch.sessionId, e.sessionPatch);
+        }
       }
     }
   }
 
-  /** Read [offset, size), split complete lines (partial tail stays unconsumed). */
-  private parseFrom(adapter: AgentAdapter, filePath: string, offset: number, size: number):
-      { events: NormalizedEvent[]; consumed: number } {
+  /** Read [offset, size) in READ_CHUNK pieces and yield the parsed events
+   *  per batch, with `consumed` = bytes from `offset` up to the end of the
+   *  batch's last complete line (the checkpoint). A partial last line stays
+   *  unconsumed. A batch with lines but no events (all dropped) is still
+   *  yielded, so the checkpoint advances. */
+  private *readBatches(adapter: AgentAdapter, filePath: string, offset: number, size: number):
+      Generator<{ events: NormalizedEvent[]; consumed: number }> {
     const fd = fs.openSync(filePath, 'r');
-    let buf: Buffer;
     try {
-      buf = Buffer.alloc(size - offset);
-      fs.readSync(fd, buf, 0, buf.length, offset);
+      const chunk = Buffer.allocUnsafe(Math.min(READ_CHUNK, Math.max(size - offset, 1)));
+      let carry = Buffer.alloc(0);    // partial line left by the previous chunk
+      let pos = offset;               // absolute position of carry[0] / data[0]
+      let read = 0;
+      let events: NormalizedEvent[] = [];
+      let lines = 0, bytes = 0, consumed = 0;
+      while (read < size - offset) {
+        const n = fs.readSync(fd, chunk, 0, Math.min(chunk.length, size - offset - read), offset + read);
+        if (n === 0) break;
+        read += n;
+        const data = carry.length ? Buffer.concat([carry, chunk.subarray(0, n)]) : chunk.subarray(0, n);
+        let start = 0;
+        for (let nl = data.indexOf(0x0a); nl !== -1; nl = data.indexOf(0x0a, start)) {
+          const line = data.toString('utf8', start, nl).replace(/\r$/, '');
+          if (line.trim()) {
+            const evs = adapter.parseLine(line, { filePath, byteOffset: pos + start });
+            if (evs.some((e) => e.kind === 'unknown') && !warned.has(filePath)) {
+              warned.add(filePath);
+              this.log(`unrecognized line(s) in ${filePath} (rendering raw)`);
+            }
+            events.push(...evs);
+          }
+          lines++;
+          bytes += nl + 1 - start;
+          consumed = pos + nl + 1 - offset;
+          start = nl + 1;
+          if (lines >= BATCH_LINES || bytes >= BATCH_BYTES) {
+            yield { events, consumed };
+            events = []; lines = 0; bytes = 0;
+          }
+        }
+        carry = Buffer.from(data.subarray(start));   // copy: `chunk` is reused
+        pos += start;
+      }
+      if (lines) yield { events, consumed };
     } finally {
       fs.closeSync(fd);
     }
-    const lastNewline = buf.lastIndexOf(0x0a);
-    if (lastNewline === -1) return { events: [], consumed: 0 };
-
-    const events: NormalizedEvent[] = [];
-    let lineStart = 0;
-    while (lineStart <= lastNewline) {
-      const nl = buf.indexOf(0x0a, lineStart);
-      const line = buf.toString('utf8', lineStart, nl).replace(/\r$/, '');
-      if (line.trim()) {
-        const evs = adapter.parseLine(line, { filePath, byteOffset: offset + lineStart });
-        if (evs.some((e) => e.kind === 'unknown') && !warned.has(filePath)) {
-          warned.add(filePath);
-          this.log(`unrecognized line(s) in ${filePath} (rendering raw)`);
-        }
-        events.push(...evs);
-      }
-      lineStart = nl + 1;
-    }
-    return { events, consumed: lastNewline + 1 };
   }
 }
