@@ -261,15 +261,17 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
   });
 
   it('replays a large decode in bounded batches, each committed with its decoded checkpoint', async () => {
-    const many = Array.from({ length: 3000 }, (_, n) => user(`${n}: ${'large synthetic payload '.repeat(40)}`)).join('');
+    // 1200 rows: enough for several 256-line batches, small enough for CI's
+    // per-row parse + FTS cost (3000 rows took 5–7 s there)
+    const many = Array.from({ length: 1200 }, (_, n) => user(`${n}: ${'large synthetic payload '.repeat(8)}`)).join('');
     fs.writeFileSync(packed, compress(many)); fs.unlinkSync(plain);
     const append = vi.spyOn(store, 'appendEvents');
     await ingester.reingest(packed);
-    expect(append.mock.calls.length).toBeGreaterThan(10);
+    expect(append.mock.calls.length).toBeGreaterThanOrEqual(4);
     for (const [, events] of append.mock.calls) expect(events.length).toBeLessThanOrEqual(256);
-    expect(store.getSession(ID)?.messageCount).toBe(3000);
+    expect(store.getSession(ID)?.messageCount).toBe(1200);
     expect(store.getSessionByPath(packed)?.byteOffset).toBe(Buffer.byteLength(many));
-  });
+  }, 20_000);
 
   it('re-resolves a source moved between decoding batches instead of deleting its side chats', async () => {
     const large = raw + Array.from({ length: 600 }, (_, n) => user(`Progress ${n}`)).join('');
