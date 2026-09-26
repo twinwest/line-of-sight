@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { codexAdapter } from '../src/adapters/codex.js';
-import { codexFingerprint, readCompressedCodex } from '../src/adapters/codexRollout.js';
+import { codexFingerprint, compressedLines } from '../src/adapters/codexRollout.js';
 import { Ingester } from '../src/daemon/ingest.js';
 import { Store } from '../src/store/store.js';
 import { codexPrompt } from '../src/responders/codexCli.js';
@@ -221,11 +221,11 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
     } finally { await app.close(); }
   });
 
-  it('decodes the sanitized streaming fixture with no advertised content size', async () => {
+  it('decodes the sanitized streaming fixture with no advertised content size', () => {
     const fixture = path.join(__dirname, 'fixtures/codex/compression', name + '.zst');
-    let text = '';
-    const decoded = await readCompressedCodex(fixture, lines => { text += lines.map(l => l.text + '\n').join(''); });
-    expect(text).toContain('violet-otter-742'); expect(decoded.consumed).toBe(37708);
+    let text = '', end = 0;
+    for (const line of compressedLines(fixture)) { text += line.text + '\n'; end = line.end; }
+    expect(text).toContain('violet-otter-742'); expect(end).toBe(37708);
   });
 
   it('shows a passive error for a new corrupt source without publishing partial messages', async () => {
@@ -260,31 +260,30 @@ describe.skipIf(!zstd)('compressed Codex lifecycle', () => {
     await ingester.reingest(packed); expect(store.getSession(ID)?.messageCount).toBe(3);
   });
 
-  it('uses bounded batches while the main thread remains available during a large decode', async () => {
-    const many = Array.from({ length: 3000 }, (_, n) => user(`${n}: ${'large synthetic payload '.repeat(40)}`)).join('');
-    fs.writeFileSync(packed, compress(many));
-    let batches = 0, count = 0, ticks = 0;
-    const timer = setInterval(() => ticks++, 1);
-    try {
-      const decoded = await readCompressedCodex(packed, async lines => {
-        batches++; count += lines.length; expect(lines.length).toBeLessThanOrEqual(256);
-        await new Promise<void>(resolve => setTimeout(resolve, 1));
-      });
-      expect(decoded.consumed).toBe(Buffer.byteLength(many)); expect(count).toBe(3000);
-      expect(batches).toBeGreaterThan(10); expect(ticks).toBeGreaterThan(0);
-    } finally { clearInterval(timer); }
-  });
+  it('replays a large decode in bounded batches, each committed with its decoded checkpoint', async () => {
+    // 1200 rows: enough for several 256-line batches, small enough for CI's
+    // per-row parse + FTS cost (3000 rows took 5–7 s there)
+    const many = Array.from({ length: 1200 }, (_, n) => user(`${n}: ${'large synthetic payload '.repeat(8)}`)).join('');
+    fs.writeFileSync(packed, compress(many)); fs.unlinkSync(plain);
+    const append = vi.spyOn(store, 'appendEvents');
+    await ingester.reingest(packed);
+    expect(append.mock.calls.length).toBeGreaterThanOrEqual(4);
+    for (const [, events] of append.mock.calls) expect(events.length).toBeLessThanOrEqual(256);
+    expect(store.getSession(ID)?.messageCount).toBe(1200);
+    expect(store.getSessionByPath(packed)?.byteOffset).toBe(Buffer.byteLength(many));
+  }, 20_000);
 
   it('re-resolves a source moved between decoding batches instead of deleting its side chats', async () => {
     const large = raw + Array.from({ length: 600 }, (_, n) => user(`Progress ${n}`)).join('');
     fs.writeFileSync(plain, large); ingester.ingestFile(adapter, plain);
     const chat = store.createSideChat(ID, store.getEvents(ID)[0]!.id, 'evidence');
     fs.writeFileSync(packed, compress(large)); fs.unlinkSync(plain);
-    const stage = store.stageCodexEvents;
+    const append = store.appendEvents;
     let moved = false;
-    vi.spyOn(store, 'stageCodexEvents').mockImplementation((...args) => {
-      stage(...args);
+    vi.spyOn(store, 'appendEvents').mockImplementation((...args) => {
+      const stored = append(...args);
       if (!moved) { moved = true; fs.renameSync(packed, archive); }
+      return stored;
     });
     ingester.start(); await ingester.reingest(packed);
     expect(store.getSession(ID)).toMatchObject({ filePath: archive, messageCount: 602 });

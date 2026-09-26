@@ -238,9 +238,10 @@ descendants.
    2026-09-24 on a 278 MB root: the loop's longest stall went from 6–7 s
    (the wrapper's 1 s health budget expired and no viewer tab opened) to
    under 0.1 s; a synthetic 210 MB transcript ingests in the same 51 s with
-   peak RSS 238 MB instead of 638 MB. A rebind (§4 source rule) is the one
-   whole-file transaction, without yields: a moved rollout is parsed in one
-   go so the previous rows are replaced atomically.
+   peak RSS 238 MB instead of 638 MB. A whole replay — a rebind (§4 source
+   rule) or a compressed source — is the one whole-file transaction, without
+   yields: the file is parsed in one go so the previous rows are replaced
+   atomically.
 
 Codex rollouts also live in the flat `~/.codex/archived_sessions/` directory,
 and — behind a CLI feature flag that is off by default on 0.153.4 — as
@@ -276,31 +277,31 @@ The start-up prune runs after the scan and everything it queued, and gives a
 relocatable session one more resolution before deleting it. Ask awaits that
 reconciliation and refreshes its source before the responder runs.
 
-Compressed sources cannot be read by byte offset, so they replay whole:
-decoded UTF-8 positions are the checkpoint and the fallback-id coordinate.
-`sessions.source_stamp` (dev/inode/size/mtimeNs/ctimeNs of the physical
-file) says whether a replay is needed: same stamp at the same path, or the
-same stamp after a failure, is skipped; anything else replays from the
-frame start, and rename changes ctime, so archive/unarchive replay too
-(85 ms measured). Before publishing, the open file and the selected path
-are revalidated. No compressed-size comparison or seek uses decoded offsets.
+Compressed sources cannot be read by byte offset, so they replay whole,
+through the same reader and the same replace transaction as a plain rebind
+(decided 2026-09-25): the adapter's `compressed.lines()` is a synchronous
+generator of decoded lines with decoded offsets — the checkpoint and the
+fallback-id coordinate — and the ingester batches them exactly as it
+batches plain lines. `sessions.source_stamp` (dev/inode/size/mtimeNs/ctimeNs
+of the physical file) says whether a replay is needed: same stamp at the
+same path, or the same stamp after a failure, is skipped; anything else
+replays from the frame start, and rename changes ctime, so archive/unarchive
+replay too (85 ms measured). The replay is one transaction: an incomplete
+frame, a partial last record, a file that changed underneath the read, or a
+resolver that names another path by the end all throw, and the previous
+rows stay. No compressed-size comparison or seek uses decoded offsets. The
+ceiling is the plain rebind's: no yielding inside the transaction (see §4
+step 4).
 
 The optional `zstd-napi` low-level decoder loads only on compressed reads.
-It runs inline (native decode is far cheaper than the per-batch JSON parse
-that follows it) and limits history to 8 MiB, input slices to 4 KiB, output slices to
-128 KiB, records to 8 MiB, and in-flight batches to 256 records / roughly
-512 KiB (a single larger record is still bounded by the record limit).
-The daemon yields between parse/database batches. SQLite's anonymous attached
-temporary database holds normalized replay rows with a 2 MiB page-cache
-budget; it has no raw JSONL copy or user-owned data. Complete frame and
-JSONL-tail validation precedes atomic replacement of the main derived rows.
-Detach/connection close/process death removes staging. Side chats, frozen
-snapshots, and title precedence survive replacement. Corruption keeps the
-previous derived view, records the failed stamp and a passive
-`source_error` (bounds repeated decoding and logging; blocks Ask), and
-heals when the file changes; a new corrupt source shows the error with no
-partial messages. Manual reingestion (`sight reingest`) forgets the stamp
-without deleting the last valid view.
+It runs inline (native decode is far cheaper than the JSON parse that
+follows it) and limits history to 8 MiB, input slices to 4 KiB, output
+slices to 128 KiB and records to 8 MiB. Side chats, frozen snapshots, and
+title precedence survive replacement. Corruption keeps the previous derived
+view, records the failed stamp and a passive `source_error` (bounds repeated
+decoding and logging; blocks Ask), and heals when the file changes; a new
+corrupt source shows the error with no partial messages. Manual reingestion
+(`sight reingest`) forgets the stamp without deleting the last valid view.
 
 This adds no archive controls, runtime downloads, or Sight-owned retention.
 

@@ -807,3 +807,17 @@ harness (2.8 MB as JSON). A move is a user action on a finished session.
 source rule and stamp columns (#53), (b) staging in `main` as the shared
 from-zero path (#52), (c) the adapter surface. ARCHITECTURE §4's Codex
 paragraph is rewritten as the rule in (a), in that PR.
+
+## Addendum 2026-09-25 — one reader for plain and compressed rollouts (#59)
+
+The compressed reader is now a synchronous generator (`compressedLines`),
+batched by the ingester like plain lines and replayed through the plain
+rebind's transaction; the attached-database staging is gone. Re-checked by
+hand against a Codex-written file, since Codex refuses to archive or
+compress the sanitized fixtures (their `session_meta` lacks fields it
+requires): in a throwaway `CODEX_HOME` with `local_thread_store_compression`
+enabled, `codex archive` on 0.153.4 compressed the 2026-09-08 rollout to
+300,097 bytes; the built helper (`dist/responders/readCodexRollout.js`)
+decoded it to 620 lines / 1,950,448 bytes, equal to the plain file, and a
+copy truncated at 100,000 bytes failed with "Incomplete compressed frame",
+exit 1.
