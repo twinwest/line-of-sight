@@ -11,7 +11,7 @@ import type { NormalizedEvent, RenderBlock, SessionMeta, SessionPatch, SideChat,
 export type { SideChat, StoredEvent };
 
 /** Bump when sessions/messages/messages_fts change shape (see constructor). */
-const SCHEMA_VERSION = 8;  // 8: messages(session_id, seq) index (7: source_stamp/source_error columns replace the codex-* kv facts; 6: claude pasted_content unwrapped; 5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
+const SCHEMA_VERSION = 9;  // 9: unknown-type triage (claude worktree state dropped; codex Desktop voice/agent/mcp/compaction) (8: messages(session_id, seq) index; 7: source_stamp/source_error columns replace the codex-* kv facts; 6: claude pasted_content unwrapped; 5: claude pr-link dropped; 4: claude isMeta user lines → meta; 3: codex escalated exec → approval row; 2: 0.153 token_usage_record/web.search)
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (

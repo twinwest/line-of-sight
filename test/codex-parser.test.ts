@@ -185,6 +185,76 @@ describe('codexAdapter.parseLine', () => {
       .toMatchObject({ kind: 'unknown' });
   });
 
+  // Codex Desktop app sessions (same rollout root, shapes seen 2026-09-08..14)
+  const item = (it: object) => line('event_msg', { type: 'item_completed', item: it });
+
+  it('Desktop voice chat: transcript segments are the conversation, delegation is plumbing', () => {
+    const rt = (p: object) => line('realtime_item', { realtime_session_id: 'r1', ...p });
+    expect(adapter.parseLine(rt({ id: 'seg1', type: 'transcript_segment', role: 'user', text: 'can you see my screen' }), ctx))
+      .toEqual([{ kind: 'message', id: 'seg1', ts: expect.any(Number), role: 'user',
+        blocks: [{ type: 'text', markdown: 'can you see my screen' }] }]);
+    expect(adapter.parseLine(rt({ id: 'seg2', type: 'transcript_segment', role: 'assistant', text: 'let me look' }), ctx)[0])
+      .toMatchObject({ kind: 'message', role: 'assistant', blocks: [{ type: 'text', markdown: 'let me look' }] });
+    expect(adapter.parseLine(rt({ id: 'r', type: 'realtime_session_started' }), ctx)[0])
+      .toMatchObject({ kind: 'meta', label: 'voice chat started' });
+    expect(adapter.parseLine(rt({ id: 'r', type: 'realtime_session_closed', outcome: 'ended' }), ctx)[0])
+      .toMatchObject({ kind: 'meta', label: 'voice chat ended' });
+    expect(adapter.parseLine(rt({ id: 'b', type: 'bem_item_promoted', item_id: 'x' }), ctx)).toEqual([]);
+    expect(adapter.parseLine(rt({ id: 'f', type: 'future_realtime' }), ctx)[0]).toMatchObject({ kind: 'unknown' });
+    // the voice model hands the user's words to the agent: already shown as
+    // the user's segment, so a meta row, not a second user bubble
+    const [handoff] = adapter.parseLine(item({ type: 'UserMessage', id: 'u1', content: [{ type: 'text',
+      text: '<realtime_delegation>\n  <input>can you see my screen</input>\n  <transcript_delta>user: can</transcript_delta>\n</realtime_delegation>' }] }), ctx);
+    expect(handoff).toMatchObject({ kind: 'meta', id: 'u1', label: 'voice → agent: can you see my screen' });
+    expect(handoff).not.toHaveProperty('sessionPatch');
+  });
+
+  it('Desktop multi-agent: agent_message → use + result; activity echoes and metadata dropped', () => {
+    const [ev] = adapter.parseLine(line('response_item', { type: 'agent_message', id: 'amsg_1',
+      author: '/root/standards_review', recipient: '/root',
+      content: [{ type: 'input_text', text: 'Message Type: FINAL_ANSWER\nNo findings.' },
+        { type: 'encrypted_content', encrypted_content: 'gAAAA' }] }), ctx);
+    expect(ev).toMatchObject({ kind: 'message', id: 'amsg_1', role: 'assistant' });
+    if (ev?.kind !== 'message') throw new Error('unreachable');
+    expect(ev.blocks[0]).toMatchObject({ type: 'tool_use', id: 'amsg_1', toolName: 'agent_message',
+      summary: 'agent_message /root/standards_review → /root' });
+    expect(ev.blocks[1]).toMatchObject({ type: 'tool_result', toolUseId: 'amsg_1', isError: false,
+      summary: 'Message Type: FINAL_ANSWER', output: 'Message Type: FINAL_ANSWER\nNo findings.' });
+    // echoes of the spawn_agent / wait_agent function_calls (same call_id)
+    expect(adapter.parseLine(item({ type: 'SubAgentActivity', id: 'call_1', kind: 'started',
+      agent_path: '/root/x' }), ctx)).toEqual([]);
+    expect(adapter.parseLine(item({ type: 'CollabAgentToolCall', id: 'call_2', tool: 'wait',
+      status: 'completed' }), ctx)).toEqual([]);
+    expect(adapter.parseLine(line('inter_agent_communication_metadata', { trigger_turn: true }), ctx)).toEqual([]);
+  });
+
+  it('Desktop McpToolCall → use + result with the text content', () => {
+    const [ev] = adapter.parseLine(item({ type: 'McpToolCall', id: 'exec-9', server: 'codex_app',
+      tool: 'capture_screen_context', arguments: {}, status: 'completed',
+      result: { content: [{ type: 'text', text: 'Captured screen.\n<appshot/>' }], isError: false } }), ctx);
+    expect(ev).toMatchObject({ kind: 'message', id: 'exec-9', role: 'assistant' });
+    if (ev?.kind !== 'message') throw new Error('unreachable');
+    expect(ev.blocks[0]).toMatchObject({ type: 'tool_use', id: 'exec-9',
+      toolName: 'codex_app.capture_screen_context', summary: 'codex_app.capture_screen_context', input: {} });
+    expect(ev.blocks[1]).toMatchObject({ type: 'tool_result', toolUseId: 'exec-9',
+      summary: 'Captured screen.', output: 'Captured screen.\n<appshot/>', isError: false });
+    const [failed] = adapter.parseLine(item({ type: 'McpToolCall', id: 'exec-10', server: 's', tool: 't',
+      status: 'failed', result: null }), ctx);
+    if (failed?.kind !== 'message') throw new Error('unreachable');
+    expect(failed.blocks[1]).toMatchObject({ isError: true });
+  });
+
+  it('compaction: one visible marker per event; the history copy and inherited blob drop', () => {
+    // `compacted` carries a copy of the conversation and always lands next to
+    // the ContextCompaction item (or the context_compacted event_msg)
+    expect(adapter.parseLine(line('compacted', { message: '', replacement_history: [] }), ctx)).toEqual([]);
+    expect(adapter.parseLine(item({ type: 'ContextCompaction', id: 'cc1' }), ctx)[0])
+      .toMatchObject({ kind: 'meta', id: 'cc1', label: 'context compacted' });
+    // a forked session opens with its parent's encrypted compaction: not an event here
+    expect(adapter.parseLine(line('response_item', { type: 'compaction', id: 'cmp_1',
+      encrypted_content: 'gAAAA' }), ctx)).toEqual([]);
+  });
+
   it('unknown shapes fall through to unknown, never crash', () => {
     expect(adapter.parseLine('not json', ctx)[0]).toMatchObject({ kind: 'unknown' });
     expect(adapter.parseLine(line('future_type', { x: 1 }), ctx)[0]).toMatchObject({ kind: 'unknown' });

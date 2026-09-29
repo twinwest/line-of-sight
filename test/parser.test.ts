@@ -113,6 +113,12 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(adapter.parseLine(cost, ctx)).toHaveLength(0);
     const pr = JSON.stringify({ type: 'pr-link', sessionId: 's1', prNumber: 1, prUrl: 'https://github.com/o/r/pull/1' });
     expect(adapter.parseLine(pr, ctx)).toHaveLength(0);
+    // worktree session state, re-written per save; the Enter/ExitWorktree
+    // tool results already carry path and branch
+    const moved = JSON.stringify({ type: 'relocated', relocatedCwd: '/repo/.claude/worktrees/w', sessionId: 's1' });
+    expect(adapter.parseLine(moved, ctx)).toHaveLength(0);
+    const wt = JSON.stringify({ type: 'worktree-state', worktreeSession: null, sessionId: 's1' });
+    expect(adapter.parseLine(wt, ctx)).toHaveLength(0);
     // the fixture attachment is date_change — reminder-class, dropped
     expect(byType('attachment')).toHaveLength(0);
     // the fixture system line is turn_duration — timing bookkeeping, dropped

@@ -43,6 +43,10 @@ it, and otherwise behaves exactly like `claude`.
 - `sight codex [args...]` — same wrapper for Codex CLI. (Full Codex
   transcript parsing, planned for v1.5, **shipped 2026-08-27** — adapter,
   dialect, and responder; see SPIKE_NOTES of that date.)
+  Codex Desktop app sessions share the same rollout root and are
+  supported best effort: their extra line types (voice chat, agent-to-agent
+  messages, MCP calls, compaction) render, nothing Desktop-only is promised
+  (decided 2026-09-29).
 - `sight start` / `sight stop` / `sight status` — daemon lifecycle; `status`
   also lists transcript lines no adapter parsed, by type (format drift).
 - `sight open` — start the daemon if needed and open the viewer in the
