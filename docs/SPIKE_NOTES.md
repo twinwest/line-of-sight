@@ -821,3 +821,37 @@ enabled, `codex archive` on 0.153.4 compressed the 2026-09-08 rollout to
 decoded it to 620 lines / 1,950,448 bytes, equal to the plain file, and a
 copy truncated at 100,000 bytes failed with "Incomplete compressed frame",
 exit 1.
+
+## Addendum 2026-09-29 — unknown-type triage: Codex Desktop lines, Claude worktree state
+
+Found with the `sight status` unknown census: 381 unparsed rows, 14 types.
+Twelve were Codex **Desktop app** lines (`session_meta.originator` "Codex
+Desktop" / "codex_work_desktop", codex 0.153.4, same `~/.codex/sessions`
+root). Desktop sessions are supported best effort. Each shape and what the
+adapter now does with it:
+
+| Line | Shape | Treatment |
+|---|---|---|
+| `realtime_item` / `transcript_segment` | `{role: user\|assistant, text}`: what was said in a voice chat | message of that role |
+| `realtime_item` / `realtime_session_started`, `_closed` | `{realtime_session_id, outcome?}` | meta "voice chat started" / "ended" |
+| `realtime_item` / `bem_item_promoted` | `{item_id}` pointing at an item already shown | dropped |
+| `UserMessage` item starting `<realtime_delegation>` | `<input>` = the user's words handed to the agent, plus `<transcript_delta>` | meta "voice → agent: …". The same words are already the user's segment |
+| `response_item` / `agent_message` | `{author, recipient, content: [input_text…, encrypted_content]}`: agent-to-agent message, e.g. a sub-agent's FINAL_ANSWER to `/root` | `agent_message` tool use + result (the plaintext) |
+| `SubAgentActivity`, `CollabAgentToolCall` items | `{id: call_…, kind\|tool, …}` | dropped: the `spawn_agent` / `wait_agent` function_calls (same `call_id`) already show them |
+| `inter_agent_communication_metadata` | `{trigger_turn}` | dropped |
+| `McpToolCall` item | `{server, tool, arguments, status, result: {content, isError}}`; made from code-mode scripts, no function_call of its own | `<server>.<tool>` tool use + result |
+| `compacted` | `{message, replacement_history}`: a copy of the conversation | dropped. It always lands beside a `ContextCompaction` item or a `context_compacted` event_msg, which is the one marker shown |
+| `ContextCompaction` item | `{id}` | meta "context compacted" |
+| `response_item` / `compaction` | encrypted, line 2 of forked sessions: the parent's compaction | dropped |
+
+Claude Code's `relocated` (`{relocatedCwd}`) and `worktree-state`
+(`{worktreeSession: {worktreeName, worktreeBranch, worktreePath,
+originalBranch, originalHeadCommit, …} | null}`) are worktree session state.
+In the one observed session they were re-written 56 times for 2 real
+transitions. The EnterWorktree / ExitWorktree tool results already show path
+and branch, so both are dropped as rows. They are meant to come back as
+session state for a header chip (#18). A session launched with `claude -w`
+has no EnterWorktree call, so that case needs checking against a real
+transcript then.
+
+After the change, all 354 local transcripts parse with zero unknown lines.

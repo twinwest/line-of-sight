@@ -29,7 +29,12 @@ const UUID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.js
 // ingested as patch-only carriers (see parseLine) so liveness can tell a
 // generating session from an open-but-idle TUI.
 // token_usage_record (0.153+) is token_count promoted to a top-level line.
-const DROP_TYPES = new Set(['world_state', 'turn_context', 'token_usage_record']);
+// Desktop (2026-09-29): inter_agent_communication_metadata is {trigger_turn};
+// `compacted` copies the conversation into replacement_history and always
+// lands beside the ContextCompaction item or context_compacted event, which
+// is the one marker shown.
+const DROP_TYPES = new Set(['world_state', 'turn_context', 'token_usage_record',
+  'inter_agent_communication_metadata', 'compacted']);
 const DROP_EVENTS = new Set(['token_count', 'thread_settings_applied']);
 // response_item types fully echoed by their item_completed projection
 // (verified over every local session: reasoning 33/33, messages/commands
@@ -78,6 +83,13 @@ function itemToEvents(item: Json, ts: number, fallbackId: string): NormalizedEve
     case 'UserMessage': {
       const text = contentText(item.content);
       if (!text.trim()) return [];
+      // Desktop voice chat: the voice model hands the user's words to the
+      // agent. The user already spoke them as a transcript_segment, so this
+      // is plumbing, not a second user bubble.
+      if (text.trimStart().startsWith('<realtime_delegation>')) {
+        const input = /<input>([\s\S]*?)<\/input>/.exec(text)?.[1]?.trim() ?? '';
+        return [{ kind: 'meta', id, ts, label: truncate(`voice → agent: ${input}`.trim(), 100), raw: item }];
+      }
       const patch: SessionPatch = {};
       // items are pre-filtered by the CLI, but keep the '<' guard anyway
       if (!text.trimStart().startsWith('<')) {
@@ -155,6 +167,26 @@ function itemToEvents(item: Json, ts: number, fallbackId: string): NormalizedEve
       ];
       return [{ kind: 'message', id, ts, role: 'assistant', blocks }];
     }
+    case 'McpToolCall': {
+      // Desktop: MCP calls made from a code-mode script have no function_call
+      // of their own; this item is the only record
+      const name = `${str(item.server) ?? 'mcp'}.${str(item.tool) ?? 'tool'}`;
+      const result = object(item.result);
+      const output = contentText(result.content);
+      const blocks: RenderBlock[] = [
+        { type: 'tool_use', id, toolName: name, summary: truncate(name, 100), input: item.arguments ?? null },
+        { type: 'tool_result', toolUseId: id, summary: truncate(output.split('\n', 1)[0] ?? '', 100),
+          output, isError: result.isError === true || item.status !== 'completed' },
+      ];
+      return [{ kind: 'message', id, ts, role: 'assistant', blocks }];
+    }
+    case 'ContextCompaction':
+      return [{ kind: 'meta', id, ts, label: 'context compacted', raw: item }];
+    // Desktop multi-agent: echoes of the spawn_agent / wait_agent
+    // function_calls already shown (same call_id)
+    case 'SubAgentActivity':
+    case 'CollabAgentToolCall':
+      return [];
     default:
       return [{ kind: 'unknown', id, ts, raw: item }];
   }
@@ -316,6 +348,22 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
 
       if (type && DROP_TYPES.has(type)) return [];
 
+      if (type === 'realtime_item') {
+        // Desktop voice chat. transcript_segment is what was said, in both
+        // directions; the agent work it triggers arrives as ordinary items.
+        const sub = str(payload.type);
+        const id = str(payload.id) ?? fallbackId;
+        const role = payload.role;
+        const text = str(payload.text)?.trim();
+        if (sub === 'transcript_segment' && (role === 'user' || role === 'assistant') && text) {
+          return [{ kind: 'message', id, ts, role, blocks: [{ type: 'text', markdown: text }] }];
+        }
+        if (sub === 'realtime_session_started') return [{ kind: 'meta', id, ts, label: 'voice chat started', raw: payload }];
+        if (sub === 'realtime_session_closed') return [{ kind: 'meta', id, ts, label: 'voice chat ended', raw: payload }];
+        if (sub === 'bem_item_promoted') return [];   // points at an item already shown
+        return [{ kind: 'unknown', id, ts, raw: line }];
+      }
+
       if (type === 'event_msg') {
         const sub = str(payload.type);
         if (sub && DROP_EVENTS.has(sub)) return [];
@@ -344,6 +392,23 @@ export function codexAdapter(root = path.join(os.homedir(), '.codex', 'sessions'
       if (type === 'response_item') {
         const sub = str(payload.type);
         if (sub && ECHOED.has(sub)) return [];
+        // Desktop: a forked session opens with its parent's encrypted
+        // compaction; not an event of this session
+        if (sub === 'compaction') return [];
+        if (sub === 'agent_message') {
+          // Desktop multi-agent: one agent's message to another (a sub-agent's
+          // final answer, the root's instructions); the only plaintext copy
+          const id = str(payload.id) ?? fallbackId;
+          const output = (Array.isArray(payload.content) ? payload.content as Json[] : [])
+            .filter((c) => c.type === 'input_text').map((c) => str(c.text) ?? '').filter(Boolean).join('\n');
+          const route = `${str(payload.author) ?? '?'} → ${str(payload.recipient) ?? '?'}`;
+          return [{ kind: 'message', id, ts, role: 'assistant', blocks: [
+            { type: 'tool_use', id, toolName: 'agent_message', summary: truncate(`agent_message ${route}`, 100),
+              input: { author: payload.author ?? null, recipient: payload.recipient ?? null } },
+            { type: 'tool_result', toolUseId: id, summary: truncate(output.split('\n', 1)[0] ?? '', 100),
+              output, isError: false },
+          ] }];
+        }
         if (sub === 'custom_tool_call') {
           // exec with sandbox_permissions:require_escalated is the approval
           // prompt: codex parks on the user until the output line lands

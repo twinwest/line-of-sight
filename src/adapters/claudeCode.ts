@@ -24,6 +24,11 @@ const DROP_TYPES = new Set([
   // PR created in the session ({prNumber, prUrl}; seen on CLI 2.1.266+, re-written
   // per PR); the URL is already in the tool output that created it
   'pr-link',
+  // worktree session state ({relocatedCwd} / {worktreeSession|null}), re-written
+  // many times per session (2 transitions + 54 repeats in one); the
+  // Enter/ExitWorktree tool results already show path and branch. Wanted
+  // later as session state for a header chip (#18), not as rows.
+  'relocated', 'worktree-state',
 ]);
 
 // Attachment subtypes that are pure bookkeeping/reminders (SPIKE_NOTES and
