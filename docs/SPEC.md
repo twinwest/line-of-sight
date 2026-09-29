@@ -43,7 +43,8 @@ it, and otherwise behaves exactly like `claude`.
 - `sight codex [args...]` — same wrapper for Codex CLI. (Full Codex
   transcript parsing, planned for v1.5, **shipped 2026-08-27** — adapter,
   dialect, and responder; see SPIKE_NOTES of that date.)
-- `sight start` / `sight stop` / `sight status` — daemon lifecycle.
+- `sight start` / `sight stop` / `sight status` — daemon lifecycle; `status`
+  also lists transcript lines no adapter parsed, by type (format drift).
 - `sight open` — start the daemon if needed and open the viewer in the
   browser. The primary entry point (decided 2026-09-16).
 - `sight stats` — print the local usage stats (daily viewer-opens and

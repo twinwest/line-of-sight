@@ -185,6 +185,21 @@ function blocksText(blocks: RenderBlock[], anchor: boolean): string {
   }).filter(Boolean).join('\n');
 }
 
+/** Transcript lines no adapter understood, by type — how upstream format
+ *  drift shows up. Takes a bare handle so `sight status` can read it without
+ *  a Store (whose constructor may rebuild the schema under a running daemon).
+ *  The label adds codex's payload.type or claude's subtype when present. */
+export function unknownCensus(db: Database.Database): { adapter: string; type: string; count: number }[] {
+  return db.prepare(`
+    SELECT s.adapter AS adapter,
+      COALESCE(json_extract(m.blocks_json, '$.type'), '?')
+        || COALESCE('/' || json_extract(m.blocks_json, '$.payload.type'), '/' || json_extract(m.blocks_json, '$.subtype'), '') AS type,
+      COUNT(*) AS count
+    FROM messages m JOIN sessions s ON s.id = m.session_id
+    WHERE m.role = 'unknown'
+    GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2`).all() as { adapter: string; type: string; count: number }[];
+}
+
 export class Store {
   readonly db: Database.Database;
 

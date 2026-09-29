@@ -71,7 +71,8 @@ the setting off again clears the kept side chats on the next start.
 
 ## Help
 
-`sight status` checks the background service; `sight stop` stops it.
+`sight status` checks the background service and lists any transcript
+entries it could not parse; `sight stop` stops it.
 `sight open`, `sight start`, or either wrapper starts it again.
 See `sight --help` for all commands and `~/.sight/daemon.log` for startup errors.
 
