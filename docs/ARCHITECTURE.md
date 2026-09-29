@@ -341,9 +341,9 @@ CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event
 CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);  -- child facts a parent records before the child is scanned (ended:/wfrun:/wfname:, store.ts CHILD_FACT)
 ```
 
-- Only the daemon opens the DB through `Store`. Anything else (`sight stats`)
-  opens it read-only: the constructor's rebuild must never run underneath a
-  running daemon.
+- Only the daemon opens the DB through `Store`. Anything else (`sight stats`,
+  `sight status`) opens it read-only: the constructor's rebuild must never run
+  underneath a running daemon.
 - The DB is derived data **except** `side_chats`, `stats` and `kv` (user-owned;
   a rebuild never wipes them). A side chat leaves only with its session —
   unless `keepSideChats` (config), the single opt-in exception to B9.

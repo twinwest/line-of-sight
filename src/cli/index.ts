@@ -178,6 +178,20 @@ async function cmdStatus(): Promise<void> {
     console.log(pid ? `daemon not responding (stale pidfile, pid ${pid})` : 'daemon not running');
     process.exitCode = 1;
   }
+  // read-only, straight from the DB like `stats`; a DB mid-rebuild or from an
+  // older schema just skips the census
+  const { DB_FILE } = await import('../shared/paths.js');
+  if (!fs.existsSync(DB_FILE)) return;
+  try {
+    const { default: Database } = await import('better-sqlite3');
+    const { unknownCensus } = await import('../store/store.js');
+    const db = new Database(DB_FILE, { readonly: true });
+    const rows = unknownCensus(db);
+    db.close();
+    if (!rows.length) return;
+    console.log(`unknown transcript lines: ${rows.reduce((n, r) => n + r.count, 0)} (render as raw; a CLI format this version does not parse)`);
+    for (const r of rows) console.log(`  ${r.adapter.padEnd(12)} ${r.type.padEnd(48)} ${r.count}`);
+  } catch { /* census is advisory */ }
 }
 
 async function cmdReingest(id: string | undefined): Promise<void> {

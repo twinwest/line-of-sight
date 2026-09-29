@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { claudeCodeAdapter } from '../src/adapters/claudeCode.js';
 import { Ingester } from '../src/daemon/ingest.js';
-import { Store } from '../src/store/store.js';
+import { Store, unknownCensus } from '../src/store/store.js';
 
 const SESSION = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
@@ -106,6 +106,21 @@ describe('incremental ingest', () => {
     expect(store.getSession(SESSION)).toBeNull();
     expect(store.getSession('child')).toBeNull();      // reached only via its parent
     expect(store.listSideChats('ghost')).toHaveLength(0);
+  });
+
+  it('unknownCensus tallies unparsed lines by type, subtype when present', () => {
+    const unknown = (uuid: string, extra: object) =>
+      JSON.stringify({ uuid, timestamp: '2026-08-24T01:00:00.000Z', ...extra }) + '\n';
+    fs.writeFileSync(file,
+      line('u1', 'hi')
+      + unknown('x1', { type: 'future-row' })
+      + unknown('x2', { type: 'future-row' })
+      + unknown('x3', { type: 'future-kind', subtype: 'beta' }));
+    ingester.ingestFile(adapter(), file);
+    expect(unknownCensus(store.db)).toEqual([
+      { adapter: 'claude-code', type: 'future-row', count: 2 },
+      { adapter: 'claude-code', type: 'future-kind/beta', count: 1 },
+    ]);
   });
 
   it('a partial last line is not consumed until the newline arrives', () => {
