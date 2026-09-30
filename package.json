@@ -32,7 +32,7 @@
     "sight": "dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc && vite build web",
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc && vite build web",
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
     "test": "vitest run test",
     "dev": "vite web",
