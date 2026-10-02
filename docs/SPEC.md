@@ -165,6 +165,7 @@ Rules:
 - The Ask input shows the answering model and effort when the responder
   supports them. Codex changes are saved before the next question can be sent
   and never alter the working agent's session configuration.
+- Each answer shows the model that wrote it, when the responder reports one.
 - Ask always uses the session's own CLI, with no cross-engine override or fallback.
 - If that CLI is unavailable, the Ask
   button still appears but the panel shows a one-time setup hint (install a

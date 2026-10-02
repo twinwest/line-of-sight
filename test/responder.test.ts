@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLAUDE_ARGS, statusFromStreamLine, textFromStreamLine } from '../src/responders/claudeCli.js';
+import { CLAUDE_ARGS, modelFromStreamLine, statusFromStreamLine, textFromStreamLine } from '../src/responders/claudeCli.js';
 import { candidates } from '../src/responders/index.js';
 import { composePrompt } from '../src/responders/prompt.js';
 import { Store } from '../src/store/store.js';
@@ -104,6 +104,15 @@ describe('claude-cli command construction', () => {
     expect(CLAUDE_ARGS('P', '/t')).not.toContain('--effort');
     const args = CLAUDE_ARGS('P', '/t', { model: 'claude-sonnet-5', effort: 'low' });
     expect(args.slice(-4)).toEqual(['--model', 'claude-sonnet-5', '--effort', 'low']);
+  });
+
+  it('reads the model that answered from the init line', () => {
+    // an alias (--model sonnet) comes back resolved to the full id
+    expect(modelFromStreamLine(JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-sonnet-5-5' })))
+      .toBe('claude-sonnet-5-5');
+    expect(modelFromStreamLine(JSON.stringify({ type: 'system', subtype: 'status', model: 'x' }))).toBe('');
+    expect(modelFromStreamLine(JSON.stringify({ type: 'system', subtype: 'init' }))).toBe('');
+    expect(modelFromStreamLine('not json')).toBe('');
   });
 
   it('narrates tool activity for progress display', () => {

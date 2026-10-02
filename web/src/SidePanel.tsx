@@ -11,6 +11,12 @@ const WIDTH_KEY = 'sight:panel-width';
 
 const PRESETS = ['What is this?', 'Why did the agent do this?', 'Any problems with this?'];
 
+/** The engine's choices, plus the stored value when it isn't one of them (an
+ *  older release's pick, or a hand-edited config) — the select shows what the
+ *  next ask actually uses. */
+const withCurrent = (choices: string[], current: string) =>
+  current && !choices.includes(current) ? [current, ...choices] : choices;
+
 export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChanged }: {
   chat: SideChat;
   /** the viewed session's agent — asks route to its matching engine */
@@ -181,6 +187,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             {t.role === 'assistant'
               ? <div className="md"><Markdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{t.text}</Markdown></div>
               : <div>{t.text}</div>}
+            {t.model && <div className="turn-model">{t.model}</div>}
           </div>
         ))}
         {busy && (
@@ -238,8 +245,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             onChange={(e) => {
               void saveResponderConfig({ responderModel: e.target.value });
             }}>
-            {(status.engine === 'codex-cli' ? status.options.models : ['', ...status.options.models])
-              .map((m) => <option key={m} value={m}>{m || 'model: default'}</option>)}
+            {withCurrent(status.options.models, status.responderModel)
+              .map((m) => <option key={m} value={m}>{status.options?.modelLabels?.[m] ?? m}</option>)}
           </select>
           <select
             title="responder effort"
@@ -248,8 +255,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
             onChange={(e) => {
               void saveResponderConfig({ responderEffort: e.target.value });
             }}>
-            {(status.engine === 'codex-cli' ? status.options.efforts : ['', ...status.options.efforts])
-              .map((ef) => <option key={ef} value={ef}>{ef || 'effort: default'}</option>)}
+            {withCurrent(status.options.efforts, status.responderEffort)
+              .map((ef) => <option key={ef} value={ef}>{ef}</option>)}
           </select>
           </>}
           <button type="submit" disabled={busy || savingConfig || !status?.engine || !input.trim()} title="Ask (Enter)">↑</button>

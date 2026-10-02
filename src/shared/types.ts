@@ -88,6 +88,8 @@ export interface SideChatTurn {
   role: 'user' | 'assistant';
   text: string;
   ts: number;
+  /** Assistant turns: the model that answered, when the engine reported it. */
+  model?: string;
 }
 
 export interface SideChat {

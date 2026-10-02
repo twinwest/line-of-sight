@@ -1,11 +1,22 @@
 export interface ResponderOptions {
   models: string[];
   efforts: string[];
+  /** Display text per model id; an id without one shows as-is. */
+  modelLabels?: Record<string, string>;
 }
 
+// CLI aliases, not versioned ids: the installed claude resolves each to its
+// newest model (ANTHROPIC_DEFAULT_<ALIAS>_MODEL can remap it), so the list
+// doesn't go stale between releases. The id that answered is reported per
+// answer (Responder.answer onModel).
+const CLAUDE_ALIASES = ['sonnet', 'haiku', 'opus', 'fable'];
+
 export const ANTHROPIC_OPTIONS: ResponderOptions = {
-  models: ['claude-sonnet-5', 'claude-haiku-4-5', 'claude-opus-5'],
-  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+  models: CLAUDE_ALIASES,
+  // side chat is look-up-and-summarize: xhigh/max add minutes of thinking
+  // per tool round for no visible gain (decided 2026-10-02)
+  efforts: ['low', 'medium', 'high'],
+  modelLabels: Object.fromEntries(CLAUDE_ALIASES.map((m) => [m, `${m} · latest`])),
 };
 
 export const CODEX_OPTIONS: ResponderOptions = {
@@ -26,9 +37,12 @@ export interface Responder {
    *  surface a failed pre-spawn. */
   prewarm?(chatId: string, projectDir: string | null, sessionFilePath: string): void;
   /** Streamed answer. MUST be read-only (per-engine enforcement).
-   *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>". */
+   *  onStatus (optional): human-readable progress, e.g. "Grep <pattern>".
+   *  onModel (optional): the model id that is answering, as the engine
+   *  resolved it — an alias like `sonnet` comes back as its full id. */
   answer(req: ResponderRequest, onChunk: (s: string) => void,
-         signal: AbortSignal, onStatus?: (s: string) => void): Promise<string>;
+         signal: AbortSignal, onStatus?: (s: string) => void,
+         onModel?: (model: string) => void): Promise<string>;
 }
 
 export interface ResponderRequest {

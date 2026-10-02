@@ -623,6 +623,9 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   animation: generating-pulse 1.6s ease-in-out infinite;
 }
 .cancel { margin-top: 0.4rem; }
+/* the model that answered (an alias resolved to its full id): provenance,
+   not content — as quiet as the activity line */
+.turn-model { color: var(--fg-dim); font-size: 0.75rem; margin-top: 0.2rem; }
 
 .setup-hint, .panel-error {
   font-size: 0.82rem; padding: 0.5rem 0.7rem; border-radius: 8px;

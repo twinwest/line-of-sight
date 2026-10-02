@@ -12,7 +12,10 @@ vi.mock('node:child_process', async (orig) => ({
 }));
 
 let config: { responderModel?: string; responderEffort?: string } = {};
-vi.mock('../src/shared/config.js', () => ({ readConfig: () => config }));
+vi.mock('../src/shared/config.js', async (orig) => ({
+  ...(await orig<typeof import('../src/shared/config.js')>()),
+  readConfig: () => config,
+}));
 
 class FakeChild extends EventEmitter {
   stdout = new PassThrough();
@@ -104,6 +107,19 @@ describe('pre-spawned responder (#12)', () => {
     await expect(answer).resolves.toBe('cold');
   });
 
+  it('an unconfigured ask runs sonnet/medium and reports the model that answered', async () => {
+    const models: string[] = [];
+    const answer = claudeCliResponder.answer(ask('no-config'), () => {},
+      new AbortController().signal, undefined, (m) => models.push(m));
+    const args = (spawn.mock.calls[0] as unknown as [string, string[]])[1];
+    expect(args.slice(-4)).toEqual(['--model', 'sonnet', '--effort', 'medium']);
+    const child = lastChild();
+    child.stdout.write(`${JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-sonnet-5-5' })}\n`);
+    finish(child, 'ok');
+    await expect(answer).resolves.toBe('ok');
+    expect(models).toEqual(['claude-sonnet-5-5']);
+  });
+
   it('a warm process belonging to another chat is not used', async () => {
     // it was spawned in that chat's project directory — Read/Grep there would
     // resolve against the wrong repo
@@ -140,7 +156,7 @@ describe('pre-spawned responder (#12)', () => {
     expect(spawn).toHaveBeenCalledTimes(2);
     expect(stale.written).toBe('');                // the stale standby got nothing
     const args = (spawn.mock.calls[1] as unknown as [string, string[]])[1];
-    expect(args.slice(-2)).toEqual(['--model', 'claude-opus-5']);
+    expect(args.slice(-4)).toEqual(['--model', 'claude-opus-5', '--effort', 'medium']);
     finish(lastChild(), 'cold');
     await expect(answer).resolves.toBe('cold');
   });

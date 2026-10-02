@@ -27,6 +27,7 @@ describe('the ask registry outlives the panel', () => {
       question: 'why?', streaming: '',
     });
 
+    push({ model: 'claude-sonnet-5-5' });
     push({ status: 'Read' });
     push({ text: 'be' });
     push({ text: 'cause' });
@@ -35,7 +36,8 @@ describe('the ask registry outlives the panel', () => {
     close();
     await done;
     expect(getAsk('c1')).toMatchObject({
-      turns: [{ text: 'earlier' }, { text: 'why?' }, { role: 'assistant', text: 'because' }],
+      turns: [{ text: 'earlier' }, { text: 'why?' },
+        { role: 'assistant', text: 'because', model: 'claude-sonnet-5-5' }],
       streaming: null, progress: '',
     });
   });

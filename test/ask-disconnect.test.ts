@@ -6,7 +6,8 @@ let answering: { resolve: (s: string) => void; signal: AbortSignal } | null = nu
 const fake: Responder = {
   id: 'fake' as Responder['id'],
   available: async () => true,
-  answer: (_req, onChunk, signal) => new Promise((resolve, reject) => {
+  answer: (_req, onChunk, signal, _onStatus, onModel) => new Promise((resolve, reject) => {
+    onModel?.('claude-test-1');
     onChunk('partial');
     answering = { resolve, signal };
     signal.addEventListener('abort', () => reject(new Error('canceled')));
@@ -64,7 +65,9 @@ describe('an ask outlives its HTTP connection', () => {
 
     await vi.waitFor(() => {
       expect(store.getSideChat(chat.id)!.turns).toMatchObject([
-        { role: 'user', text: 'why?' }, { role: 'assistant', text: 'the answer' },
+        { role: 'user', text: 'why?' },
+        // the model that answered is kept with its answer
+        { role: 'assistant', text: 'the answer', model: 'claude-test-1' },
       ]);
     });
     expect(await (await fetch(chatUrl)).json()).toMatchObject({ answering: false });
