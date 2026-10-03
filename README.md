@@ -67,9 +67,10 @@ separate place to question it, while the working conversation stays untouched.
   of the conversation around it live in `~/.sight`. There is no telemetry.
 - **Model access.** Sight uses your CLI's authentication and model service.
   Questions, transcript context, and project content read by the responder
-  are sent to that service, using your account's quota or billing. Claude
-  Code answers may also run web searches through Anthropic; a search query
-  can contain words from your session.
+  are sent to that service, using your account's quota or billing. Answers
+  may also run web searches through the same provider (Anthropic's search
+  for Claude Code, OpenAI's search index for Codex); a search query can
+  contain words from your session.
 - **Retention.** Sight mirrors the transcripts on disk. If a transcript is
   deleted, its session and saved side chats are removed from Sight too.
   Claude Code deletes transcripts itself after `cleanupPeriodDays` (30 by
@@ -116,8 +117,8 @@ you want, then resume it from the CLI as usual.
 
 **Does anything leave my machine?**
 Only the questions you ask, which go through your own CLI to its model
-service, plus any web searches the Claude Code responder runs through that
-same service. There is no telemetry and no other network access.
+service, plus any web searches the responder runs through that same
+provider. There is no telemetry and no other network access.
 
 ## Uninstall
 

@@ -19,9 +19,11 @@ export const ANTHROPIC_OPTIONS: ResponderOptions = {
   modelLabels: Object.fromEntries(CLAUDE_ALIASES.map((m) => [m, `${m} · latest`])),
 };
 
+/** The models are a fallback: the Codex responder offers what Codex's own
+ *  picker lists (codexModels) and uses these only when that is unreadable. */
 export const CODEX_OPTIONS: ResponderOptions = {
   models: ['gpt-5.6-terra', 'gpt-5.6-luna'],
-  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+  efforts: ['low', 'medium', 'high'],
 };
 
 export interface Responder {

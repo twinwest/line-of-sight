@@ -898,3 +898,24 @@ Same CLI (2.1.288), flags as above plus WebSearch in `--tools`:
   guard: Grep/Read only, no WebSearch call, the injection reported as a risk.
   WebFetch does not exist in the run either way.
 
+## Addendum 2026-10-02 (later) — Codex model cache and web search (codex-cli 0.153.4)
+
+`~/.codex/models_cache.json` (~220 KB) is Codex's own copy of its model
+catalog: `{fetched_at, etag, client_version, models: [...]}`. Each model has
+`slug`, `display_name`, `description`, `visibility` (`"list"` = shown in
+Codex's picker, `"hide"` = internal, e.g. `codex-auto-review`), `priority`
+(file order follows it), `default_reasoning_level` and
+`supported_reasoning_levels` (`[{effort, …}]`; `gpt-5.5` stops at `xhigh`,
+some go to `ultra`), plus context-window and tool fields. Observed listed:
+gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5; Terra and
+Luna are described as "Older".
+
+Web search: `codex exec --sandbox read-only` with no search flag and no
+`web_search` key ran `web_search` items (`item.started`/`item.completed`,
+`{query, action: {type: "search", query}}`) and cited URLs. Per the config
+reference the default is `cached` (OpenAI-maintained index, no external
+access) and becomes `live` under full-access sandboxes. With a CODEX_HOME
+whose config.toml said `web_search = "disabled"`, the same run reported no
+web tool; adding `--config 'web_search="cached"'` brought the searches
+back: command-line config wins over config.toml.
+

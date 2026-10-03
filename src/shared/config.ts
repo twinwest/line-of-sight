@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { codexModels } from './codexModels.js';
 import { SIGHT_DIR } from './paths.js';
 
 export interface SightConfig {
@@ -7,7 +8,7 @@ export interface SightConfig {
   responderModel?: string;
   /** Effort used only for Claude Ask invocations. Sight defaults to medium. */
   responderEffort?: string;
-  /** Model used only for Codex Ask invocations. Sight defaults to Terra. */
+  /** Model used only for Codex Ask invocations. Sight defaults to Terra (see codexDefaultModel). */
   codexResponderModel?: string;
   /** Effort used only for Codex Ask invocations. Sight defaults to medium. */
   codexResponderEffort?: string;
@@ -20,6 +21,12 @@ export interface SightConfig {
 export type ResponderEngine = 'claude-cli' | 'codex-cli';
 
 export const CODEX_ASK_DEFAULTS = { model: 'gpt-5.6-terra', effort: 'medium' } as const;
+/** Sight's Codex default while Codex still lists it (or the list is unknown);
+ *  once Codex retires it, Codex's own first pick — so a stale default does not
+ *  fail every ask of a user who never opened the model picker. */
+export function codexDefaultModel(listed: string[]): string {
+  return listed.length && !listed.includes(CODEX_ASK_DEFAULTS.model) ? listed[0]! : CODEX_ASK_DEFAULTS.model;
+}
 /** An alias, not a versioned id: the installed claude resolves it to its
  *  newest Sonnet. Never left to the CLI's own default, which skips the user's
  *  settings here (--setting-sources '') and can be the slowest model. */
@@ -32,7 +39,7 @@ export function responderSettings(engine: ResponderEngine, config: SightConfig):
     { model: string; effort: string } {
   if (engine === 'codex-cli') {
     return {
-      model: config.codexResponderModel || CODEX_ASK_DEFAULTS.model,
+      model: config.codexResponderModel || codexDefaultModel(codexModels()),
       effort: config.codexResponderEffort || CODEX_ASK_DEFAULTS.effort,
     };
   }
