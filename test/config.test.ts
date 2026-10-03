@@ -35,12 +35,17 @@ describe('writeConfig merge semantics', () => {
     });
   });
 
-  it('resolves engine-specific settings with a Terra/medium Codex default', () => {
+  it('resolves engine-specific settings with Sight defaults for both engines', () => {
     expect(responderSettings('codex-cli', {})).toEqual({ model: 'gpt-5.6-terra', effort: 'medium' });
     expect(responderSettings('codex-cli', {
       codexResponderModel: '', codexResponderEffort: '',
     })).toEqual({ model: 'gpt-5.6-terra', effort: 'medium' });
-    expect(responderSettings('claude-cli', {})).toEqual({ model: '', effort: '' });
+    // an unset Claude model must not fall through to the CLI's built-in
+    // default, which can be the slowest model on the account
+    expect(responderSettings('claude-cli', {})).toEqual({ model: 'sonnet', effort: 'medium' });
+    expect(responderSettings('claude-cli', {
+      responderModel: '', responderEffort: '',
+    })).toEqual({ model: 'sonnet', effort: 'medium' });
     const config = {
       responderModel: 'claude-haiku-4-5',
       responderEffort: 'low',

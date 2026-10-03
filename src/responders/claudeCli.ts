@@ -1,6 +1,6 @@
 import { type ChildProcess, type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import path from 'node:path';
-import { readConfig } from '../shared/config.js';
+import { readConfig, responderSettings } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
 import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './types.js';
 
@@ -52,6 +52,8 @@ export const CLAUDE_ARGS = (prompt: string | null, transcriptDir: string,
 
 interface StreamLine {
   type?: string;
+  subtype?: string;
+  model?: string;
   event?: { type?: string; delta?: { type?: string; text?: string } };
   message?: { content?: unknown };
   result?: string;
@@ -72,6 +74,19 @@ export function textFromStreamLine(line: string): string {
     return parsed.event.delta.text ?? '';
   }
   return '';
+}
+
+/** The model that is answering, from the stream's opening `system/init`
+ *  line ('' if none) — resolved, so `--model sonnet` reports the full id. */
+export function modelFromStreamLine(line: string): string {
+  let parsed: StreamLine;
+  try {
+    parsed = JSON.parse(line) as StreamLine;
+  } catch {
+    return '';
+  }
+  return parsed.type === 'system' && parsed.subtype === 'init' && typeof parsed.model === 'string'
+    ? parsed.model : '';
 }
 
 /** Progress line for the panel: "Grep welcome page", "Read /path/to.jsonl" ('' if none).
@@ -195,8 +210,7 @@ export const claudeCliResponder: Responder = {
    *  failure here is silent and the ask spawns cold, as it always did. */
   prewarm(chatId: string, projectDir: string | null, sessionFilePath: string): void {
     dropWarm();
-    const { responderModel, responderEffort } = readConfig();
-    const opts = { model: responderModel, effort: responderEffort };
+    const opts = responderSettings('claude-cli', readConfig());
     const transcriptDir = path.dirname(sessionFilePath);
     let child: ChildProcessWithoutNullStreams;
     try {
@@ -214,9 +228,8 @@ export const claudeCliResponder: Responder = {
   },
 
   answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal,
-         onStatus?: (s: string) => void): Promise<string> {
-    const { responderModel, responderEffort } = readConfig();
-    const opts = { model: responderModel, effort: responderEffort };
+         onStatus?: (s: string) => void, onModel?: (model: string) => void): Promise<string> {
+    const opts = responderSettings('claude-cli', readConfig());
     const prompt = composePrompt(req);
     // no project known: the transcript dir is the cwd, so --restricted still
     // fences the run in (home as cwd would have been no fence at all)
@@ -242,6 +255,8 @@ export const claudeCliResponder: Responder = {
           buf = buf.slice(nl + 1);
           const text = textFromStreamLine(line);
           if (text) { answer += text; onChunk(text); continue; }
+          const model = modelFromStreamLine(line);
+          if (model) { onModel?.(model); continue; }
           const status = statusFromStreamLine(line, req);
           if (status) onStatus?.(status);
         }

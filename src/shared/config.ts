@@ -3,9 +3,9 @@ import path from 'node:path';
 import { SIGHT_DIR } from './paths.js';
 
 export interface SightConfig {
-  /** Model for responder invocations (claude-cli --model). Engine default if unset. */
+  /** Model used only for Claude Ask invocations (claude --model). Sight defaults to sonnet. */
   responderModel?: string;
-  /** Effort for responder invocations: low | medium | high | xhigh | max. Engine default if unset. */
+  /** Effort used only for Claude Ask invocations. Sight defaults to medium. */
   responderEffort?: string;
   /** Model used only for Codex Ask invocations. Sight defaults to Terra. */
   codexResponderModel?: string;
@@ -20,6 +20,10 @@ export interface SightConfig {
 export type ResponderEngine = 'claude-cli' | 'codex-cli';
 
 export const CODEX_ASK_DEFAULTS = { model: 'gpt-5.6-terra', effort: 'medium' } as const;
+/** An alias, not a versioned id: the installed claude resolves it to its
+ *  newest Sonnet. Never left to the CLI's own default, which skips the user's
+ *  settings here (--setting-sources '') and can be the slowest model. */
+export const CLAUDE_ASK_DEFAULTS = { model: 'sonnet', effort: 'medium' } as const;
 
 /** Settings shown by the panel and used by the next Ask invocation. Keeping
  * this mapping here prevents either responder from reading the other one's
@@ -33,8 +37,8 @@ export function responderSettings(engine: ResponderEngine, config: SightConfig):
     };
   }
   return {
-    model: config.responderModel ?? '',
-    effort: config.responderEffort ?? '',
+    model: config.responderModel || CLAUDE_ASK_DEFAULTS.model,
+    effort: config.responderEffort || CLAUDE_ASK_DEFAULTS.effort,
   };
 }
 

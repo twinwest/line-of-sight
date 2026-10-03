@@ -334,7 +334,7 @@ CREATE VIRTUAL TABLE messages_fts USING fts5(
 CREATE TABLE side_chats (
   id TEXT PRIMARY KEY, session_id TEXT, anchor_message_id TEXT,
   anchor_text TEXT, created_at INTEGER,
-  turns_json TEXT,                -- [{role:'user'|'assistant', text, ts}]
+  turns_json TEXT,                -- [{role:'user'|'assistant', text, ts, model?}] (model: id that answered)
   excerpt_json TEXT               -- AskSnapshot: the excerpt rows frozen at creation (store.ts)
 );
 CREATE TABLE stats (day TEXT, event TEXT, count INTEGER, PRIMARY KEY (day, event));
@@ -372,9 +372,11 @@ export interface Responder {
   id: 'claude-cli' | 'codex-cli';
   available(): Promise<boolean>;        // e.g. `which claude`
   /** Streamed answer. MUST be read-only (see per-engine notes).
-   *  onStatus: optional tool-activity progress for the panel. */
+   *  onStatus: optional tool-activity progress for the panel.
+   *  onModel: optional, the resolved model id that is answering. */
   answer(req: ResponderRequest, onChunk: (s: string) => void,
-         signal: AbortSignal, onStatus?: (s: string) => void): Promise<string>;
+         signal: AbortSignal, onStatus?: (s: string) => void,
+         onModel?: (model: string) => void): Promise<string>;
 }
 
 export interface ResponderRequest {
@@ -409,8 +411,19 @@ claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
   --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
   --restricted --add-dir <dirname(sessionFilePath)> \
   --no-session-persistence --setting-sources "" \
-  --output-format stream-json --include-partial-messages --verbose
+  --output-format stream-json --include-partial-messages --verbose \
+  --model <responderModel> --effort <responderEffort>
 ```
+
+Model and effort are always passed (decided 2026-10-02). With settings
+skipped, an unset model would fall to the CLI's built-in default, which on a
+subscription can be the slowest model on the account (measured: Opus). Sight
+defaults to `sonnet`/`medium` instead. The panel offers CLI aliases
+(`sonnet`, `haiku`, `opus`, `fable`), which the installed `claude` resolves to
+its newest model of that family (`ANTHROPIC_DEFAULT_<ALIAS>_MODEL` remaps
+one), and efforts `low`/`medium`/`high`. The stream's opening `system/init`
+line carries the resolved id; it is reported through `onModel`, sent as a
+`{model}` SSE frame, stored on the assistant turn, and shown under the answer.
 
 Reads are fenced as well as writes (decided 2026-09-16): `--restricted` makes
 the file tools refuse any path outside cwd and `--add-dir`, as a tool error
@@ -429,7 +442,7 @@ decided 2026-08-24: --allowedTools alone only auto-denies, while
 prompt-injection exfiltration of transcript text.)
 
 Stdout is jsonl; answer text = `stream_event` lines with
-`content_block_delta`/`text_delta` (ignore `system`, hook, and snapshot
+`content_block_delta`/`text_delta` (ignore other `system`, hook, and snapshot
 lines — `-p` runs the user's hooks, which is accepted noise; `--bare` would
 skip them but breaks OAuth auth).
 
@@ -483,8 +496,8 @@ No normalized full-session projection is needed under strict routing.
 
 ### Engine config
 
-- Claude: optional `"responderModel"` and `"responderEffort"`; its CLI
-  defaults apply when unset.
+- Claude: optional `"responderModel"` and `"responderEffort"`; Sight
+  defaults to `sonnet` and `medium` (CLI aliases, see claude-cli responder).
 - Codex: optional `"codexResponderModel"` and `"codexResponderEffort"`;
   Sight defaults to `gpt-5.6-terra` and `medium`. The panel shows the
   effective values and saves changes before enabling the next Ask.
@@ -518,7 +531,7 @@ GET  /api/sessions/:id/stream             → SSE: new NormalizedEvents as they 
 GET  /api/search?q=                       → [{ sessionId, sessionTitle, messageId, snippet }]  (match ranges U+0001…U+0002-delimited, no HTML — decided 2026-08-24 M4)
 GET  /api/side-chats?sessionId=           → SideChat[] (for margin markers)
 POST /api/side-chats                      → create { sessionId, anchorMessageId, anchorText }
-POST /api/side-chats/:id/ask              → body { question }; response = SSE stream of chunks; persists turn on completion
+POST /api/side-chats/:id/ask              → body { question }; response = SSE stream ({engine}, {model}, {status}, {text} chunks, {done} | {error}); persists turn on completion
 POST /api/side-chats/:id/cancel
 DELETE /api/side-chats/:id
 POST /api/stats/:event                    → increment (viewer_open | question_asked)

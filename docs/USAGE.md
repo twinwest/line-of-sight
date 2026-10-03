@@ -37,15 +37,23 @@ there is no cross-engine fallback. Settings live in `~/.sight/config.json`.
 
 | Setting | Effect |
 | --- | --- |
-| `responderModel` | Claude Ask model; also selectable in the Ask panel. |
-| `responderEffort` | Claude Ask effort; also selectable in the Ask panel. |
+| `responderModel` | Claude Ask model; defaults to `sonnet`. |
+| `responderEffort` | Claude Ask effort; defaults to `medium`. |
 | `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |
 | `codexResponderEffort` | Codex Ask effort; defaults to `medium`. |
 | `keepSideChats` | `true` keeps side chats after their transcript is gone (default: off, they go with the session). |
 
-Codex Ask model and effort are selectable in the Ask panel and stay separate
-from the active Codex session and Claude Ask settings. A change applies to the
-next question.
+Ask model and effort are selectable in the Ask panel, separately per CLI, and
+never change the working session's own settings. A change applies to the next
+question.
+
+Claude Ask models are Claude Code aliases (`sonnet`, `haiku`, `opus`, `fable`),
+not versioned model ids: your installed `claude` resolves each one to the
+newest model it knows, so updating Claude Code moves Ask to a newer model.
+`ANTHROPIC_DEFAULT_SONNET_MODEL` (and its `HAIKU`, `OPUS` and `FABLE` variants)
+remaps an alias. Each answer shows the model that actually wrote it. The panel
+offers Claude efforts up to `high`; a value set by hand in the config file
+still applies.
 Set `SIGHT_PORT` to use a different port, for example `SIGHT_PORT=5121 sight open`.
 
 ## Your side chats

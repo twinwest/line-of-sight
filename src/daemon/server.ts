@@ -362,10 +362,12 @@ export function buildServer(store: Store, hub: SseHub,
       // excerpt = window too small; review with `sight stats`
       let toolRounds = 0;
       const t0 = Date.now();
+      let model: string | undefined;
       try {
         const answer = await engine.answer(request, (text) => send({ text }), ctrl.signal,
-          (status) => { toolRounds++; send({ status }); });
-        store.appendSideChatTurn(chat.id, { role: 'assistant', text: answer, ts: Date.now() });
+          (status) => { toolRounds++; send({ status }); },
+          (m) => { model = m; send({ model: m }); });
+        store.appendSideChatTurn(chat.id, { role: 'assistant', text: answer, ts: Date.now(), model });
         const secs = (Date.now() - t0) / 1000;
         store.incrementStat(`ask_rounds_${toolRounds === 0 ? '0' : toolRounds <= 3 ? '1_3' : '4p'}`);
         store.incrementStat(`ask_secs_${secs <= 10 ? '0_10' : secs <= 30 ? '10_30' : '30p'}`);

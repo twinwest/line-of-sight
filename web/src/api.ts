@@ -89,7 +89,7 @@ export interface ResponderStatus {
   /** Display name for engines that do not expose selectors. */
   label: string | null;
   /** engine-declared model/effort choices; null = engine takes neither */
-  options: { models: string[]; efforts: string[] } | null;
+  options: { models: string[]; efforts: string[]; modelLabels?: Record<string, string> } | null;
   responderModel: string;
   responderEffort: string;
 }
@@ -146,16 +146,18 @@ export async function runAsk(chatId: string, question: string, baseTurns: SideCh
   });
   askSubs.forEach((f) => f());
   let acc = '';
+  let model: string | undefined;
   await askStream(chatId, question, {
     chunk: (t) => { acc += t; patchAsk(chatId, { streaming: acc }); },
     status: (s) => patchAsk(chatId, { progress: s }),
+    model: (m) => { model = m; },
     error: (msg) => patchAsk(chatId, { error: msg }),
   });
   const cur = asks.get(chatId)!;
   patchAsk(chatId, {
     streaming: null,
     progress: '',
-    turns: acc ? [...cur.turns, { role: 'assistant', text: acc, ts: Date.now() }] : cur.turns,
+    turns: acc ? [...cur.turns, { role: 'assistant', text: acc, ts: Date.now(), model }] : cur.turns,
   });
 }
 
@@ -163,7 +165,8 @@ export async function runAsk(chatId: string, question: string, baseTurns: SideCh
 export async function askStream(
   chatId: string,
   question: string,
-  on: { chunk: (t: string) => void; error: (msg: string) => void; status?: (s: string) => void },
+  on: { chunk: (t: string) => void; error: (msg: string) => void; status?: (s: string) => void;
+        model?: (m: string) => void },
 ): Promise<void> {
   const res = await fetch(`/api/side-chats/${chatId}/ask`, {
     method: 'POST',
@@ -187,9 +190,10 @@ export async function askStream(
       buf = buf.slice(nl + 2);
       if (!line.startsWith('data:')) continue;
       const ev = JSON.parse(line.slice(5)) as
-        { text?: string; error?: string; engine?: string; status?: string };
+        { text?: string; error?: string; engine?: string; status?: string; model?: string };
       if (ev.text) on.chunk(ev.text);
       if (ev.status) on.status?.(ev.status);
+      if (ev.model) on.model?.(ev.model);
       if (ev.error) on.error(ev.engine ? `[${ev.engine}] ${ev.error}` : ev.error);
     }
   }
