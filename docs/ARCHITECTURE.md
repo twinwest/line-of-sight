@@ -407,9 +407,9 @@ Spawn per question (cwd = projectDir if available, else the transcript's
 directory):
 
 ```
-claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
-  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
-  --tools "Read,Grep,Glob" \
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebSearch" \
+  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch" \
+  --tools "Read,Grep,Glob,WebSearch" \
   --restricted --add-dir <dirname(sessionFilePath)> \
   --no-session-persistence --setting-sources "" --strict-mcp-config \
   --output-format stream-json --include-partial-messages --verbose \
@@ -425,6 +425,14 @@ none needing permission in `-p` mode; a probe made EnterWorktree create a
 worktree and branch in the repo, and SendMessage can reach the user's other
 sessions. The claude.ai connectors (Gmail, Drive, Docs) loaded despite
 `--setting-sources ""`. `--disallowedTools` stays as a second wall.
+
+WebSearch is in the set (decided 2026-10-02): about 4% of asked questions
+were web lookups about what the session researched (a company, a release
+date, a source link) and answers said they could not check. The query goes
+through `api.anthropic.com` to Anthropic's search (a run makes no new
+connection for it), so unlike WebFetch it cannot send transcript text to a
+URL the model picks; an injected "search for <secret>" can reach only that
+search. It must be in `--allowedTools` too: unapproved, `-p` denies it.
 
 Model and effort are always passed (decided 2026-10-02). With settings
 skipped, an unset model would fall to the CLI's built-in default, which on a
@@ -527,7 +535,7 @@ No normalized full-session projection is needed under strict routing.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--tools "Read,Grep,Glob"` (the only tools that exist) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
+| claude-cli | `--tools "Read,Grep,Glob,WebSearch"` (the only tools that exist; WebSearch queries go to Anthropic's search) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
 | codex-cli | `--sandbox read-only` — blocks writes and network (verified 2026-09-16: DNS fails inside the sandbox), not reads; Codex has no read fence, so its responder can read any file the user can |
 
 If an engine cannot guarantee read-only, it must not be offered as a
