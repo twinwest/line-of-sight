@@ -409,11 +409,22 @@ directory):
 ```
 claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
   --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
+  --tools "Read,Grep,Glob" \
   --restricted --add-dir <dirname(sessionFilePath)> \
-  --no-session-persistence --setting-sources "" \
+  --no-session-persistence --setting-sources "" --strict-mcp-config \
   --output-format stream-json --include-partial-messages --verbose \
   --model <responderModel> --effort <responderEffort>
 ```
+
+The tool set is an allow-list (decided 2026-10-02): `--tools` makes Read,
+Grep and Glob the only tools that exist in the run, and `--strict-mcp-config`
+(with no `--mcp-config`) loads no MCP servers. A deny-list cannot keep up
+with a CLI that keeps adding tools: on 2.1.288 the run also had
+EnterWorktree, SendMessage, PushNotification, CronDelete, Task* and others,
+none needing permission in `-p` mode; a probe made EnterWorktree create a
+worktree and branch in the repo, and SendMessage can reach the user's other
+sessions. The claude.ai connectors (Gmail, Drive, Docs) loaded despite
+`--setting-sources ""`. `--disallowedTools` stays as a second wall.
 
 Model and effort are always passed (decided 2026-10-02). With settings
 skipped, an unset model would fall to the CLI's built-in default, which on a
@@ -516,7 +527,7 @@ No normalized full-session projection is needed under strict routing.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--allowedTools "Read,Grep,Glob"` + `--disallowedTools` on all mutating/exfiltrating tools; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
+| claude-cli | `--tools "Read,Grep,Glob"` (the only tools that exist) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
 | codex-cli | `--sandbox read-only` — blocks writes and network (verified 2026-09-16: DNS fails inside the sandbox), not reads; Codex has no read fence, so its responder can read any file the user can |
 
 If an engine cannot guarantee read-only, it must not be offered as a

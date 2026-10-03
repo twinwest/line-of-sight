@@ -22,7 +22,8 @@ release only.
 - **No remote loads from rendered content.** Transcripts and answers are
   untrusted. A Content Security Policy stops them from loading remote images.
 - **Responder safeguards.** Claude Code runs with only `Read`, `Grep`, and
-  `Glob`; write, shell, subagent, and web tools are blocked, and `--restricted`
+  `Glob` (`--tools`; every other tool, including ones added by future CLI
+  versions, does not exist in the run) and no MCP servers, and `--restricted`
   makes those read tools refuse any path outside the project and the
   session's transcript directory. Codex runs model-generated commands under
   `--sandbox read-only`; commands that stay inside that sandbox cannot write

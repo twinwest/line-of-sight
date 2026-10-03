@@ -76,14 +76,20 @@ describe('claude-cli command construction', () => {
       '-p', 'PROMPT',
       '--allowedTools', 'Read,Grep,Glob',
       '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch',
+      // the only tools that exist in the run: a deny-list missed every tool
+      // added after it was written (EnterWorktree, SendMessage, …)
+      '--tools', 'Read,Grep,Glob',
       // reads fenced to cwd + the transcript dir (#36)
       '--restricted', '--add-dir', '/t',
       '--no-session-persistence',
       '--setting-sources', '',
+      // no MCP servers either: claude.ai connectors load without settings
+      '--strict-mcp-config',
       '--output-format', 'stream-json',
       '--include-partial-messages',
       '--verbose',
     ]);
+    expect(args[args.indexOf('--tools') + 1]).toBe(args[args.indexOf('--allowedTools') + 1]);
     const allowed = args[args.indexOf('--allowedTools') + 1]!;
     const disallowed = args[args.indexOf('--disallowedTools') + 1]!;
     for (const banned of ['Write', 'Edit', 'Bash', 'WebFetch']) {
