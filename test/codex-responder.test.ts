@@ -54,4 +54,16 @@ describe('statusFromJsonLine', () => {
       .toBe('exec ls');
     expect(statusFromJsonLine('junk')).toBe('');
   });
+
+  it('narrates web searches: the query only arrives on completion', () => {
+    // lines from real `codex exec --json` runs (0.153.4, web_search="cached")
+    const started = '{"type":"item.started","item":{"id":"item_1","type":"web_search","query":"","action":{"type":"other"}}}';
+    const searched = '{"type":"item.completed","item":{"id":"item_1","type":"web_search","query":"Mindsera journaling app founder","action":{"type":"search","query":"Mindsera journaling app founder"}}}';
+    const opened = '{"type":"item.completed","item":{"id":"item_2","type":"web_search","query":"https://nodejs.org/en/about/previous-releases","action":{"type":"other"}}}';
+    expect(statusFromJsonLine(started)).toBe('searching the web');
+    expect(statusFromJsonLine(searched)).toBe('searching the web for Mindsera journaling app founder');
+    expect(statusFromJsonLine(opened)).toBe('reading https://nodejs.org/en/about/previous-releases');
+    // a completed search with no query adds nothing over the started line
+    expect(statusFromJsonLine('{"type":"item.completed","item":{"type":"web_search","query":""}}')).toBe('');
+  });
 });

@@ -27,7 +27,7 @@ export const CODEX_ARGS = (prompt: string,
 
 interface JsonEvent {
   type?: string;
-  item?: { type?: string; text?: string; command?: string };
+  item?: { type?: string; text?: string; command?: string; query?: string };
 }
 
 /** Only Codex sees this decoder instruction; Claude's prompt/tools stay intact. */
@@ -66,13 +66,24 @@ export function textFromJsonLine(line: string): string {
 }
 
 /** Progress line for the panel from `item.started` command executions:
- *  `/bin/zsh -lc "sed -n '1,200p' x.py"` → `sed -n '1,200p' x.py`. */
+ *  `/bin/zsh -lc "sed -n '1,200p' x.py"` → `sed -n '1,200p' x.py`.
+ *  Web searches too, in the panel's reading language like claude's: their
+ *  query is empty until `item.completed` (0.153.4), so the start says "the
+ *  web" and the completion says what — a URL query is a page opened. */
 export function statusFromJsonLine(line: string): string {
   const ev = parse(line);
-  if (ev?.type !== 'item.started' || ev.item?.type !== 'command_execution'
-      || typeof ev.item.command !== 'string') return '';
-  const cmd = /^\S+ -lc "?([\s\S]*?)"?$/.exec(ev.item.command)?.[1] ?? ev.item.command;
-  const s = `exec ${cmd}`.trim();
+  let s = '';
+  if (ev?.item?.type === 'web_search') {
+    const q = typeof ev.item.query === 'string' ? ev.item.query : '';
+    if (ev.type === 'item.started') s = 'searching the web';
+    else if (ev.type === 'item.completed' && q) {
+      s = /^https?:\/\//.test(q) ? `reading ${q}` : `searching the web for ${q}`;
+    }
+  } else if (ev?.type === 'item.started' && ev.item?.type === 'command_execution'
+      && typeof ev.item.command === 'string') {
+    const cmd = /^\S+ -lc "?([\s\S]*?)"?$/.exec(ev.item.command)?.[1] ?? ev.item.command;
+    s = `exec ${cmd}`.trim();
+  }
   return s.length > 80 ? s.slice(0, 79) + '…' : s;
 }
 

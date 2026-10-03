@@ -898,3 +898,12 @@ Same CLI (2.1.288), flags as above plus WebSearch in `--tools`:
   guard: Grep/Read only, no WebSearch call, the injection reported as a risk.
   WebFetch does not exist in the run either way.
 
+## Addendum 2026-10-02 (later) — Codex `web_search` events (codex-cli 0.153.4)
+
+In `codex exec --json`, a search is an `item.started` / `item.completed`
+pair of `{type: "web_search", id, query, action}`. The started item always
+had `query: ""` and `action: {type: "other"}`; the query arrives only on
+completion. Two shapes seen on completion: `action: {type: "search", query}`
+with a text query, and `action: {type: "other"}` with the query set to a
+URL (a page opened, here from a `web_search="cached"` run).
+
