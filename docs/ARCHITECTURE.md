@@ -487,6 +487,7 @@ skip them but breaks OAuth auth).
 ```
 codex exec --model <codexResponderModel> \
   --config 'model_reasoning_effort="<codexResponderEffort>"' \
+  --config 'web_search="cached"' \
   --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
 ```
 
@@ -500,6 +501,22 @@ command executions feed the progress line. `responderModel`/
 `codexResponderModel`/`codexResponderEffort` settings, defaulting to
 `gpt-5.6-terra`/`medium`; both are supplied explicitly so the viewed Codex
 session's defaults cannot affect Ask. Updated 2026-09-08.
+
+Model choices come from Codex itself (decided 2026-10-02): the panel offers
+the models Codex's own picker lists, read per request from
+`~/.codex/models_cache.json` (`visibility: "list"`, in file order; format in
+SPIKE_NOTES), so new models appear without a Sight release. An unreadable
+cache falls back to a fixed list. Once Codex stops listing the default,
+an unconfigured ask uses Codex's first listed model instead of failing.
+Efforts offered: `low`/`medium`/`high`.
+
+Web search is pinned to `cached` (decided 2026-10-02). Codex searches by
+default; under a read-only sandbox the default mode is `cached`, which
+answers from an OpenAI-maintained index and opens no page. A user's
+`web_search = "live"` would otherwise reach Ask and let an injected prompt
+have pages fetched, carrying transcript text in the URL. `--config` beats
+`config.toml` (verified on 0.153.4 against `web_search = "disabled"`), so
+this also turns search on for a user who disabled it in Codex.
 
 ### Compressed Codex Ask (2026-09-13)
 
@@ -518,8 +535,9 @@ No normalized full-session projection is needed under strict routing.
 - Claude: optional `"responderModel"` and `"responderEffort"`; Sight
   defaults to `sonnet` and `medium` (CLI aliases, see claude-cli responder).
 - Codex: optional `"codexResponderModel"` and `"codexResponderEffort"`;
-  Sight defaults to `gpt-5.6-terra` and `medium`. The panel shows the
-  effective values and saves changes before enabling the next Ask.
+  Sight defaults to `gpt-5.6-terra` (Codex's first listed model once it
+  drops Terra) and `medium`. The panel offers Codex's own model list, shows
+  the effective values and saves changes before enabling the next Ask.
 - Settings are read per Ask — no daemon restart is needed.
 - No engine pin. Routing is the session's adapter, full stop (decided
   2026-09-13); a `responder` key in an older config is ignored.

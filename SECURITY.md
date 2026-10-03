@@ -26,9 +26,11 @@ release only.
   CLI versions, does not exist in the run) and no MCP servers. Web search
   queries go to Anthropic's search service; there is no tool that fetches an
   arbitrary URL. `--restricted` makes the read tools refuse any path outside
-  the project and the session's transcript directory. Codex runs model-generated commands under
-  `--sandbox read-only`; commands that stay inside that sandbox cannot write
-  files or use command-level network access. See the Codex limitations below.
+  the project and the session's transcript directory. Codex runs
+  model-generated commands under `--sandbox read-only`; commands that stay
+  inside that sandbox cannot write files or use command-level network access.
+  Its web search is pinned to `cached` (OpenAI's index; no page is fetched),
+  whatever the Codex configuration says. See the Codex limitations below.
 - **No telemetry.** Sight itself makes no telemetry or application network
   requests. When you ask a question, it launches your own agent CLI; that CLI
   talks to its model service and may use capabilities enabled in its own
@@ -50,8 +52,8 @@ release only.
   file available to the Codex process, including files outside the project.
   The Claude Code responder is confined (see above).
 - **Codex configuration is inherited.** The Codex responder may load user and
-  trusted-project configuration. Configured web search, apps, MCP servers,
-  hooks, or approval behavior are separate capability surfaces and are not
+  trusted-project configuration. Configured apps, MCP servers, hooks, or
+  approval behavior are separate capability surfaces and are not
   confined by `--sandbox read-only`, which applies to model-generated
   commands. Only use Codex Ask with configuration you trust.
 - **Local processes running as you are out of scope.** They can already read

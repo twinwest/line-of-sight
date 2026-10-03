@@ -39,7 +39,7 @@ there is no cross-engine fallback. Settings live in `~/.sight/config.json`.
 | --- | --- |
 | `responderModel` | Claude Ask model; defaults to `sonnet`. |
 | `responderEffort` | Claude Ask effort; defaults to `medium`. |
-| `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`. |
+| `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`, or to the first model Codex lists once it no longer lists Terra. |
 | `codexResponderEffort` | Codex Ask effort; defaults to `medium`. |
 | `keepSideChats` | `true` keeps side chats after their transcript is gone (default: off, they go with the session). |
 
@@ -51,9 +51,13 @@ Claude Ask models are Claude Code aliases (`sonnet`, `haiku`, `opus`, `fable`),
 not versioned model ids: your installed `claude` resolves each one to the
 newest model it knows, so updating Claude Code moves Ask to a newer model.
 `ANTHROPIC_DEFAULT_SONNET_MODEL` (and its `HAIKU`, `OPUS` and `FABLE` variants)
-remaps an alias. Each answer shows the model that actually wrote it. The panel
-offers Claude efforts up to `high`; a value set by hand in the config file
-still applies.
+remaps an alias. Each answer shows the model that actually wrote it.
+
+The Codex model picker shows the models your installed Codex lists in its
+own picker, so new ones appear as Codex learns about them.
+
+The panel offers efforts up to `high` for both CLIs; a value set by hand in
+the config file still applies.
 Set `SIGHT_PORT` to use a different port, for example `SIGHT_PORT=5121 sight open`.
 
 ## Your side chats

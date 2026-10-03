@@ -1,10 +1,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import {
+import { describe, expect, it, vi } from 'vitest';
+
+// Codex's model cache lives in the real ~/.codex; pin it so the defaults
+// asserted below don't depend on the machine running the tests
+let listed: string[] = [];
+vi.mock('../src/shared/codexModels.js', () => ({ codexModels: () => listed }));
+
+const {
   readConfig, responderConfigPatch, responderSettings, writeConfig,
-} from '../src/shared/config.js';
+} = await import('../src/shared/config.js');
 
 describe('writeConfig merge semantics', () => {
   it('partial update keeps other keys; empty string clears; undefined untouched', () => {
@@ -54,6 +60,15 @@ describe('writeConfig merge semantics', () => {
     };
     expect(responderSettings('codex-cli', config)).toEqual({ model: 'gpt-5.6-luna', effort: 'high' });
     expect(responderSettings('claude-cli', config)).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
+  });
+
+  it('an unconfigured Codex ask follows Codex once it retires the default', () => {
+    listed = ['gpt-6-astra', 'gpt-6-luna'];
+    expect(responderSettings('codex-cli', {})).toEqual({ model: 'gpt-6-astra', effort: 'medium' });
+    // a model the user picked is theirs, listed or not
+    expect(responderSettings('codex-cli', { codexResponderModel: 'gpt-5.6-terra' }).model)
+      .toBe('gpt-5.6-terra');
+    listed = [];
   });
 
   it('maps panel updates onto only the selected responder', () => {

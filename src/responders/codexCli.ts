@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { codexModels } from '../shared/codexModels.js';
 import { CODEX_ASK_DEFAULTS, readConfig, responderSettings } from '../shared/config.js';
 import { composePrompt } from './prompt.js';
 import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js';
@@ -12,12 +13,17 @@ import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js
 // it every ask would appear as a session, the M5 pollution lesson).
 // --json streams item-level events on stdout. Model and effort are always
 // supplied from Sight's Codex-only Ask settings so the main session's config
-// cannot leak into the side channel.
+// cannot leak into the side channel. Web search is pinned for the same reason
+// (decided 2026-10-02): `cached` answers from OpenAI's index without fetching
+// pages — the default under a read-only sandbox, but a user's
+// `web_search = "live"` in config.toml would otherwise let an injected prompt
+// have pages fetched, a URL-borne exfiltration channel.
 export const CODEX_ARGS = (prompt: string,
     opts: { model?: string; effort?: string } = {}): string[] => [
   'exec',
   '--model', opts.model ?? CODEX_ASK_DEFAULTS.model,
   '--config', `model_reasoning_effort="${opts.effort ?? CODEX_ASK_DEFAULTS.effort}"`,
+  '--config', 'web_search="cached"',
   '--sandbox', 'read-only',
   '--ephemeral',
   '--json',
@@ -78,7 +84,12 @@ export function statusFromJsonLine(line: string): string {
 
 export const codexCliResponder: Responder = {
   id: 'codex-cli',
-  options: CODEX_OPTIONS,
+  // read per call: Codex refreshes its cache, and new models show up without
+  // a Sight release
+  get options() {
+    const listed = codexModels();
+    return listed.length ? { ...CODEX_OPTIONS, models: listed } : CODEX_OPTIONS;
+  },
 
   available(): Promise<boolean> {
     return new Promise((resolve) => {

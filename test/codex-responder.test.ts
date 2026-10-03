@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import {
+import { describe, expect, it, vi } from 'vitest';
+
+let listed: string[] = [];
+vi.mock('../src/shared/codexModels.js', () => ({ codexModels: () => listed }));
+
+const {
   CODEX_ARGS, codexCliResponder, statusFromJsonLine, textFromJsonLine,
-} from '../src/responders/codexCli.js';
+} = await import('../src/responders/codexCli.js');
 
 // Stream lines pinned from a real `codex exec --json` run (0.150.1,
 // SPIKE_NOTES 2026-08-27).
@@ -16,6 +20,9 @@ describe('CODEX_ARGS', () => {
     expect(args).toContain('--ephemeral');          // no rollout in ~/.codex/sessions
     expect(args).toContain('--json');
     expect(args.join(' ')).toContain('--sandbox read-only');
+    // pinned: a user's `web_search = "live"` must not reach Ask — live mode
+    // fetches pages, cached reads OpenAI's index only
+    expect(args.join(' ')).toContain('--config web_search="cached"');
     expect(args[args.length - 1]).toBe('q');
   });
 
@@ -28,11 +35,17 @@ describe('CODEX_ARGS', () => {
 });
 
 describe('codex Ask choices', () => {
-  it('offers the fast and balanced Codex models in the side panel', () => {
+  it("offers the models Codex's own picker lists, efforts up to high", () => {
+    listed = ['gpt-6-astra', 'gpt-5.6-terra'];
     expect(codexCliResponder.options).toEqual({
-      models: ['gpt-5.6-terra', 'gpt-5.6-luna'],
-      efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      models: ['gpt-6-astra', 'gpt-5.6-terra'],
+      efforts: ['low', 'medium', 'high'],
     });
+    listed = [];
+  });
+
+  it('falls back to a fixed list when the cache is unreadable', () => {
+    expect(codexCliResponder.options?.models).toEqual(['gpt-5.6-terra', 'gpt-5.6-luna']);
   });
 });
 
