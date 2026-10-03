@@ -919,3 +919,12 @@ whose config.toml said `web_search = "disabled"`, the same run reported no
 web tool; adding `--config 'web_search="cached"'` brought the searches
 back: command-line config wins over config.toml.
 
+## Addendum 2026-10-02 (later) — Codex `web_search` events (codex-cli 0.153.4)
+
+In `codex exec --json`, a search is an `item.started` / `item.completed`
+pair of `{type: "web_search", id, query, action}`. The started item always
+had `query: ""` and `action: {type: "other"}`; the query arrives only on
+completion. Two shapes seen on completion: `action: {type: "search", query}`
+with a text query, and `action: {type: "other"}` with the query set to a
+URL (a page opened, here from a `web_search="cached"` run).
+
