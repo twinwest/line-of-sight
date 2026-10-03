@@ -21,11 +21,12 @@ release only.
   `Origin` are refused.
 - **No remote loads from rendered content.** Transcripts and answers are
   untrusted. A Content Security Policy stops them from loading remote images.
-- **Responder safeguards.** Claude Code runs with only `Read`, `Grep`, and
-  `Glob` (`--tools`; every other tool, including ones added by future CLI
-  versions, does not exist in the run) and no MCP servers, and `--restricted`
-  makes those read tools refuse any path outside the project and the
-  session's transcript directory. Codex runs model-generated commands under
+- **Responder safeguards.** Claude Code runs with only `Read`, `Grep`, `Glob`
+  and `WebSearch` (`--tools`; every other tool, including ones added by future
+  CLI versions, does not exist in the run) and no MCP servers. Web search
+  queries go to Anthropic's search service; there is no tool that fetches an
+  arbitrary URL. `--restricted` makes the read tools refuse any path outside
+  the project and the session's transcript directory. Codex runs model-generated commands under
   `--sandbox read-only`; commands that stay inside that sandbox cannot write
   files or use command-level network access. See the Codex limitations below.
 - **No telemetry.** Sight itself makes no telemetry or application network
