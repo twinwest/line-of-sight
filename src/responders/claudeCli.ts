@@ -7,9 +7,12 @@ import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './type
 // Read-only cage (product promise B5): no Write/Edit/Bash. WebFetch is also
 // excluded — transcript content is untrusted, and WebFetch would let an
 // injected prompt exfiltrate transcript text to an arbitrary URL.
-// Belt and braces: --allowedTools auto-approves the read-only set (anything
-// else is auto-denied in -p mode), and --disallowedTools hard-blocks every
-// mutating/exfiltrating tool even if permission defaults ever change.
+// --tools is the cage: the run has Read/Grep/Glob and nothing else, so a tool
+// the CLI adds later never reaches it. The deny-list alone did not hold
+// (verified 2026-10-02 on CLI 2.1.288): EnterWorktree created a worktree and
+// branch in the repo and SendMessage reached other sessions, neither asking
+// permission. --allowedTools auto-approves the three; --disallowedTools stays
+// as a second wall should --tools ever be ignored.
 const ALLOWED_TOOLS = 'Read,Grep,Glob';
 const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch';
 
@@ -34,6 +37,7 @@ export const CLAUDE_ARGS = (prompt: string | null, transcriptDir: string,
   '-p', ...(prompt === null ? ['--input-format', 'stream-json'] : [prompt]),
   '--allowedTools', ALLOWED_TOOLS,
   '--disallowedTools', DISALLOWED_TOOLS,
+  '--tools', ALLOWED_TOOLS,
   '--restricted', '--add-dir', transcriptDir,
   // responder runs must not appear as sessions: the Q&A already lives in
   // side_chats (B6); without this the run writes its own transcript into
@@ -43,6 +47,10 @@ export const CLAUDE_ARGS = (prompt: string | null, transcriptDir: string,
   // user's interactive sessions, not this throwaway QA run — measured ~1.3s
   // off cold start; OAuth auth is unaffected (unlike --bare)
   '--setting-sources', '',
+  // …which leaves the claude.ai connectors (Gmail, Drive, Docs) loaded:
+  // tools the cage must not offer, and "needs authorization" notes that
+  // leaked into answers. No --mcp-config is passed, so this loads none.
+  '--strict-mcp-config',
   '--output-format', 'stream-json',
   '--include-partial-messages',
   '--verbose',

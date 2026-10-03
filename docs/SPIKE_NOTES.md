@@ -855,3 +855,28 @@ has no EnterWorktree call, so that case needs checking against a real
 transcript then.
 
 After the change, all 354 local transcripts parse with zero unknown lines.
+
+## Addendum 2026-10-02 — the responder deny-list leaked (Claude Code 2.1.288)
+
+The `system/init` line of a responder run lists the tools it has. Under the
+then-current flags (`--allowedTools Read,Grep,Glob`, `--disallowedTools` on
+the 2026-08 mutating set, `--restricted`, `--setting-sources ""`) it listed
+Read, Grep and Glob plus CronDelete, CronList, DesignSync, EnterWorktree,
+ExitWorktree, ListAgents, PushNotification, ReportFindings, ScheduleWakeup,
+SendMessage, Skill, TaskCreate/Get/List/Stop/Update and ToolSearch. The
+claude.ai connectors (Claude Docs connected; Gmail, Drive, Calendar
+needs-auth) loaded too, and one real answer ended with a note that they need
+authorization.
+
+Probe in a scratch git repo, asking for each call by name:
+- EnterWorktree ran: a worktree under `.claude/worktrees/probe` on a new
+  branch `worktree-probe`. A write to the repo, no permission asked.
+- SendMessage ran and failed only on the unknown recipient; a real
+  recipient (ListAgents names them) would have received the message.
+- `permission_denials` was empty: `-p` auto-denies only tools that ask.
+
+With `--tools Read,Grep,Glob --strict-mcp-config` added, init lists
+`["Glob","Grep","Read"]` and no MCP servers; the same calls fail with "No such
+tool available: <name>"; Grep still works; `--restricted` still refuses
+`/etc/hosts` and `/etc`. Adopted.
+
