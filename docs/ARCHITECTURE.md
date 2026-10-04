@@ -496,8 +496,10 @@ Same prompt template, spawned with stdin IGNORED (a piped stdin makes
 `--no-session-persistence` analog — without it each ask writes a rollout
 into `~/.codex/sessions`. `--json` has no token deltas: completed
 `agent_message` items are the answer (item-sized chunks); `item.started`
-command executions feed the progress line. `responderModel`/
-`responderEffort` remain claude-cli settings. Codex uses the separate
+command executions feed the progress line, and so do `web_search` items:
+"searching the web" when one starts (its query is still empty then), the
+query, or "reading <url>" for an opened page, when it completes.
+`responderModel`/`responderEffort` remain claude-cli settings. Codex uses the separate
 `codexResponderModel`/`codexResponderEffort` settings, defaulting to
 `gpt-5.6-terra`/`medium`; both are supplied explicitly so the viewed Codex
 session's defaults cannot affect Ask. Updated 2026-09-08.
