@@ -13,17 +13,18 @@ import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js
 // it every ask would appear as a session, the M5 pollution lesson).
 // --json streams item-level events on stdout. Model and effort are always
 // supplied from Sight's Codex-only Ask settings so the main session's config
-// cannot leak into the side channel. Web search is pinned for the same reason
-// (decided 2026-10-02): `cached` answers from OpenAI's index without fetching
-// pages — the default under a read-only sandbox, but a user's
-// `web_search = "live"` in config.toml would otherwise let an injected prompt
-// have pages fetched, a URL-borne exfiltration channel.
+// cannot leak into the side channel. Web search is pinned off for the same
+// reason (decided 2026-10-04): Ask answers from the transcript and project,
+// but Codex searches by default (`cached` under a read-only sandbox), and a
+// user's `web_search = "live"` in config.toml would let an injected prompt
+// have pages fetched, a URL-borne exfiltration channel. --config beats
+// config.toml (verified on 0.153.4).
 export const CODEX_ARGS = (prompt: string,
     opts: { model?: string; effort?: string } = {}): string[] => [
   'exec',
   '--model', opts.model ?? CODEX_ASK_DEFAULTS.model,
   '--config', `model_reasoning_effort="${opts.effort ?? CODEX_ASK_DEFAULTS.effort}"`,
-  '--config', 'web_search="cached"',
+  '--config', 'web_search="disabled"',
   '--sandbox', 'read-only',
   '--ephemeral',
   '--json',
@@ -33,7 +34,7 @@ export const CODEX_ARGS = (prompt: string,
 
 interface JsonEvent {
   type?: string;
-  item?: { type?: string; text?: string; command?: string; query?: string };
+  item?: { type?: string; text?: string; command?: string };
 }
 
 /** Only Codex sees this decoder instruction; Claude's prompt/tools stay intact. */
@@ -72,24 +73,13 @@ export function textFromJsonLine(line: string): string {
 }
 
 /** Progress line for the panel from `item.started` command executions:
- *  `/bin/zsh -lc "sed -n '1,200p' x.py"` → `sed -n '1,200p' x.py`.
- *  Web searches too, in the panel's reading language like claude's: their
- *  query is empty until `item.completed` (0.153.4), so the start says "the
- *  web" and the completion says what — a URL query is a page opened. */
+ *  `/bin/zsh -lc "sed -n '1,200p' x.py"` → `sed -n '1,200p' x.py`. */
 export function statusFromJsonLine(line: string): string {
   const ev = parse(line);
-  let s = '';
-  if (ev?.item?.type === 'web_search') {
-    const q = typeof ev.item.query === 'string' ? ev.item.query : '';
-    if (ev.type === 'item.started') s = 'searching the web';
-    else if (ev.type === 'item.completed' && q) {
-      s = /^https?:\/\//.test(q) ? `reading ${q}` : `searching the web for ${q}`;
-    }
-  } else if (ev?.type === 'item.started' && ev.item?.type === 'command_execution'
-      && typeof ev.item.command === 'string') {
-    const cmd = /^\S+ -lc "?([\s\S]*?)"?$/.exec(ev.item.command)?.[1] ?? ev.item.command;
-    s = `exec ${cmd}`.trim();
-  }
+  if (ev?.type !== 'item.started' || ev.item?.type !== 'command_execution'
+      || typeof ev.item.command !== 'string') return '';
+  const cmd = /^\S+ -lc "?([\s\S]*?)"?$/.exec(ev.item.command)?.[1] ?? ev.item.command;
+  const s = `exec ${cmd}`.trim();
   return s.length > 80 ? s.slice(0, 79) + '…' : s;
 }
 

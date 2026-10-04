@@ -20,9 +20,10 @@ describe('CODEX_ARGS', () => {
     expect(args).toContain('--ephemeral');          // no rollout in ~/.codex/sessions
     expect(args).toContain('--json');
     expect(args.join(' ')).toContain('--sandbox read-only');
-    // pinned: a user's `web_search = "live"` must not reach Ask — live mode
-    // fetches pages, cached reads OpenAI's index only
-    expect(args.join(' ')).toContain('--config web_search="cached"');
+    // pinned off: Codex searches by default (cached), and a user's
+    // `web_search = "live"` would fetch pages — Ask answers from the
+    // transcript and project only
+    expect(args.join(' ')).toContain('--config web_search="disabled"');
     expect(args[args.length - 1]).toBe('q');
   });
 
@@ -66,17 +67,5 @@ describe('statusFromJsonLine', () => {
     expect(statusFromJsonLine('{"type":"item.started","item":{"type":"command_execution","command":"ls"}}'))
       .toBe('exec ls');
     expect(statusFromJsonLine('junk')).toBe('');
-  });
-
-  it('narrates web searches: the query only arrives on completion', () => {
-    // lines from real `codex exec --json` runs (0.153.4, web_search="cached")
-    const started = '{"type":"item.started","item":{"id":"item_1","type":"web_search","query":"","action":{"type":"other"}}}';
-    const searched = '{"type":"item.completed","item":{"id":"item_1","type":"web_search","query":"Mindsera journaling app founder","action":{"type":"search","query":"Mindsera journaling app founder"}}}';
-    const opened = '{"type":"item.completed","item":{"id":"item_2","type":"web_search","query":"https://nodejs.org/en/about/previous-releases","action":{"type":"other"}}}';
-    expect(statusFromJsonLine(started)).toBe('searching the web');
-    expect(statusFromJsonLine(searched)).toBe('searching the web for Mindsera journaling app founder');
-    expect(statusFromJsonLine(opened)).toBe('reading https://nodejs.org/en/about/previous-releases');
-    // a completed search with no query adds nothing over the started line
-    expect(statusFromJsonLine('{"type":"item.completed","item":{"type":"web_search","query":""}}')).toBe('');
   });
 });

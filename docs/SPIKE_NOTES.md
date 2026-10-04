@@ -882,6 +882,9 @@ tool available: <name>"; Grep still works; `--restricted` still refuses
 
 ## Addendum 2026-10-02 (later) — WebSearch in the responder cage
 
+(Kept as a record. Ask does not use web search: removed 2026-10-04 before
+release, see ARCHITECTURE.)
+
 Same CLI (2.1.288), flags as above plus WebSearch in `--tools`:
 - Without WebSearch in `--allowedTools` the call is denied (`permission_denials`
   lists it; the answer says it could not search). With it, results arrive
@@ -920,6 +923,8 @@ web tool; adding `--config 'web_search="cached"'` brought the searches
 back: command-line config wins over config.toml.
 
 ## Addendum 2026-10-02 (later) — Codex `web_search` events (codex-cli 0.153.4)
+
+(Kept as a record; Ask now pins `web_search="disabled"`, so it sees none.)
 
 In `codex exec --json`, a search is an `item.started` / `item.completed`
 pair of `{type: "web_search", id, query, action}`. The started item always
