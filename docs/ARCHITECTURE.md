@@ -407,9 +407,9 @@ Spawn per question (cwd = projectDir if available, else the transcript's
 directory):
 
 ```
-claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebSearch" \
-  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch" \
-  --tools "Read,Grep,Glob,WebSearch" \
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
+  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
+  --tools "Read,Grep,Glob" \
   --restricted --add-dir <dirname(sessionFilePath)> \
   --no-session-persistence --setting-sources "" --strict-mcp-config \
   --output-format stream-json --include-partial-messages --verbose \
@@ -426,13 +426,14 @@ worktree and branch in the repo, and SendMessage can reach the user's other
 sessions. The claude.ai connectors (Gmail, Drive, Docs) loaded despite
 `--setting-sources ""`. `--disallowedTools` stays as a second wall.
 
-WebSearch is in the set (decided 2026-10-02): about 4% of asked questions
-were web lookups about what the session researched (a company, a release
-date, a source link) and answers said they could not check. The query goes
-through `api.anthropic.com` to Anthropic's search (a run makes no new
-connection for it), so unlike WebFetch it cannot send transcript text to a
-URL the model picks; an injected "search for <secret>" can reach only that
-search. It must be in `--allowedTools` too: unapproved, `-p` denies it.
+No web tools (decided 2026-10-04, after WebSearch was tried and dropped
+before release). Ask explains what happened in a session, grounded in the
+transcript and the project; web results dilute that. The web-lookup
+questions that motivated it (about 4% of asked questions) were mostly
+general questions, not about the agent's output, and what the session
+itself had researched was usually already in the transcript. With a search
+tool present, a transcript discussing Ask's tool limits also left the model
+denying it had one.
 
 Model and effort are always passed (decided 2026-10-02). With settings
 skipped, an unset model would fall to the CLI's built-in default, which on a
@@ -487,7 +488,7 @@ skip them but breaks OAuth auth).
 ```
 codex exec --model <codexResponderModel> \
   --config 'model_reasoning_effort="<codexResponderEffort>"' \
-  --config 'web_search="cached"' \
+  --config 'web_search="disabled"' \
   --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
 ```
 
@@ -496,9 +497,7 @@ Same prompt template, spawned with stdin IGNORED (a piped stdin makes
 `--no-session-persistence` analog — without it each ask writes a rollout
 into `~/.codex/sessions`. `--json` has no token deltas: completed
 `agent_message` items are the answer (item-sized chunks); `item.started`
-command executions feed the progress line, and so do `web_search` items:
-"searching the web" when one starts (its query is still empty then), the
-query, or "reading <url>" for an opened page, when it completes.
+command executions feed the progress line.
 `responderModel`/`responderEffort` remain claude-cli settings. Codex uses the separate
 `codexResponderModel`/`codexResponderEffort` settings, defaulting to
 `gpt-5.6-terra`/`medium`; both are supplied explicitly so the viewed Codex
@@ -512,13 +511,12 @@ cache falls back to a fixed list. Once Codex stops listing the default,
 an unconfigured ask uses Codex's first listed model instead of failing.
 Efforts offered: `low`/`medium`/`high`.
 
-Web search is pinned to `cached` (decided 2026-10-02). Codex searches by
-default; under a read-only sandbox the default mode is `cached`, which
-answers from an OpenAI-maintained index and opens no page. A user's
-`web_search = "live"` would otherwise reach Ask and let an injected prompt
-have pages fetched, carrying transcript text in the URL. `--config` beats
-`config.toml` (verified on 0.153.4 against `web_search = "disabled"`), so
-this also turns search on for a user who disabled it in Codex.
+Web search is pinned off (decided 2026-10-04), as on the Claude side.
+Left alone, Codex searches by default (`cached` under a read-only sandbox,
+an OpenAI-maintained index), and a user's `web_search = "live"` would reach
+Ask and let an injected prompt have pages fetched, carrying transcript text
+in the URL. `--config` beats `config.toml` (verified on 0.153.4 against
+`web_search = "disabled"`).
 
 ### Compressed Codex Ask (2026-09-13)
 
@@ -555,7 +553,7 @@ No normalized full-session projection is needed under strict routing.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--tools "Read,Grep,Glob,WebSearch"` (the only tools that exist; WebSearch queries go to Anthropic's search) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
+| claude-cli | `--tools "Read,Grep,Glob"` (the only tools that exist) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
 | codex-cli | `--sandbox read-only` — blocks writes and network (verified 2026-09-16: DNS fails inside the sandbox), not reads; Codex has no read fence, so its responder can read any file the user can |
 
 If an engine cannot guarantee read-only, it must not be offered as a

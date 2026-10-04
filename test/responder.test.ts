@@ -74,13 +74,12 @@ describe('claude-cli command construction', () => {
     const args = CLAUDE_ARGS('PROMPT', '/t');
     expect(args).toEqual([
       '-p', 'PROMPT',
-      // WebSearch: queries go to Anthropic's search, not to a URL the model
-      // picks — unlike WebFetch, which stays out (exfiltration)
-      '--allowedTools', 'Read,Grep,Glob,WebSearch',
-      '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch',
+      // no web tools: answers stay grounded in the transcript and project
+      '--allowedTools', 'Read,Grep,Glob',
+      '--disallowedTools', 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch',
       // the only tools that exist in the run: a deny-list missed every tool
       // added after it was written (EnterWorktree, SendMessage, …)
-      '--tools', 'Read,Grep,Glob,WebSearch',
+      '--tools', 'Read,Grep,Glob',
       // reads fenced to cwd + the transcript dir (#36)
       '--restricted', '--add-dir', '/t',
       '--no-session-persistence',
@@ -135,8 +134,6 @@ describe('claude-cli command construction', () => {
       .toBe('reading web/src/SidePanel.tsx');
     expect(statusFromStreamLine(tool('Read', { file_path: '/etc/hosts' }), ctx)).toBe('reading hosts');
     expect(statusFromStreamLine(tool('LS', { path: '/home/u/elsewhere' }), ctx)).toBe('LS elsewhere');
-    expect(statusFromStreamLine(tool('WebSearch', { query: 'mindsera launch date' }), ctx))
-      .toBe('searching the web for mindsera launch date');
     expect(statusFromStreamLine(JSON.stringify({
       type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] },
     }))).toBe('');

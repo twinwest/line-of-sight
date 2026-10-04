@@ -7,18 +7,18 @@ import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './type
 // Read-only cage (product promise B5): no Write/Edit/Bash. WebFetch is also
 // excluded — transcript content is untrusted, and WebFetch would let an
 // injected prompt exfiltrate transcript text to an arbitrary URL.
-// --tools is the cage: the run has Read/Grep/Glob/WebSearch and nothing else,
-// so a tool the CLI adds later never reaches it. WebSearch (decided
-// 2026-10-02): readers ask about what the session researched; the query goes
-// through api.anthropic.com to Anthropic's search, never to a URL the model
-// picks, so it is no exfiltration channel the way WebFetch is. The deny-list alone did not hold
+// No web tools at all (decided 2026-10-04): Ask explains what happened in the
+// session, from the transcript and the project; web results dilute that
+// grounding, and a search tool beside a transcript about tool limits left the
+// model unsure what it could do.
+// --tools is the cage: the run has Read/Grep/Glob and nothing else, so a tool
+// the CLI adds later never reaches it. The deny-list alone did not hold
 // (verified 2026-10-02 on CLI 2.1.288): EnterWorktree created a worktree and
 // branch in the repo and SendMessage reached other sessions, neither asking
-// permission. --allowedTools auto-approves the set (WebSearch asks otherwise,
-// and -p denies it); --disallowedTools stays as a second wall should --tools
-// ever be ignored.
-const ALLOWED_TOOLS = 'Read,Grep,Glob,WebSearch';
-const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch';
+// permission. --allowedTools auto-approves the three; --disallowedTools stays
+// as a second wall should --tools ever be ignored.
+const ALLOWED_TOOLS = 'Read,Grep,Glob';
+const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch';
 
 // Reads are confined too (#36): --restricted makes the file tools refuse any
 // path outside the working directory and --add-dir (verified 2026-09-16 on
@@ -105,9 +105,7 @@ export function modelFromStreamLine(line: string): string {
  *  Complete tool_use blocks arrive on `assistant` snapshot lines. */
 /** Tool verbs in reading language — the panel narrates ("searching the
  *  transcript"), it does not print commands (owner call, 2026-09-01). */
-const VERBS: Record<string, string> = {
-  Grep: 'searching', Glob: 'searching', Read: 'reading', WebSearch: 'searching the web for',
-};
+const VERBS: Record<string, string> = { Grep: 'searching', Glob: 'searching', Read: 'reading' };
 
 /** Humanize the tool target: the session transcript (matched by its uuid
  *  basename, so offset-reads and subagent paths still hit) → "the
