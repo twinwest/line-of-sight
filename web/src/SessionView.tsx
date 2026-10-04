@@ -533,6 +533,9 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
       <DialectCtx.Provider value={dialect}>
       <OutcomesCtx.Provider value={outcomesCtx}>
       <div className="view-split">
+        {/* the pane, not the viewport, anchors ↓ Latest: an open side panel
+            would otherwise sit on top of it */}
+        <div className="transcript-pane">
         <div className="transcript" ref={scrollRef} onScroll={onScroll} onMouseUp={onMouseUp}>
           {(events[0]?.seq ?? 1) > 1 && (
             <button className="load-earlier" onClick={loadEarlier}>Load earlier</button>
@@ -597,6 +600,10 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
           ))}
           <ReplyDraft key={id} sessionId={id} events={events} dialect={dialect} />
         </div>
+        {targetMessageId && (
+          <button className="jump-latest" onClick={() => nav(`/s/${id}`)}>↓ Latest</button>
+        )}
+        </div>
         {openChat && (
           <SidePanel
             key={openChat.id}
@@ -611,9 +618,6 @@ export function SessionView({ id, targetMessageId = null, highlightQuery = null 
       </div>
       </OutcomesCtx.Provider>
       </DialectCtx.Provider>
-      {targetMessageId && (
-        <button className="jump-latest" onClick={() => nav(`/s/${id}`)}>↓ Latest</button>
-      )}
       {askBtn && (
         <button
           className="ask-btn"
