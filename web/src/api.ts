@@ -92,6 +92,8 @@ export interface ResponderStatus {
   options: { models: string[]; efforts: string[]; modelLabels?: Record<string, string> } | null;
   responderModel: string;
   responderEffort: string;
+  /** Ask may search the web (one switch for both CLIs; off by default). */
+  responderWebSearch: boolean;
 }
 
 export async function fetchResponderStatus(adapter?: SessionMeta['adapter']): Promise<ResponderStatus | null> {
@@ -101,14 +103,15 @@ export async function fetchResponderStatus(adapter?: SessionMeta['adapter']): Pr
 }
 
 export async function putResponderConfig(engine: NonNullable<ResponderStatus['engine']>,
-    cfg: { responderModel?: string; responderEffort?: string }): Promise<{ model: string; effort: string }> {
+    cfg: { responderModel?: string; responderEffort?: string; responderWebSearch?: boolean }):
+    Promise<{ model: string; effort: string; webSearch: boolean }> {
   const res = await fetch('/api/responder/config', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ engine, ...cfg }),
   });
   if (!res.ok) throw new Error(`save responder config: ${res.status}`);
-  return res.json() as Promise<{ model: string; effort: string }>;
+  return res.json() as Promise<{ model: string; effort: string; webSearch: boolean }>;
 }
 
 /** An in-flight (and then finished) ask lives here rather than in the panel, so

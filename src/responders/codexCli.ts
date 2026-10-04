@@ -14,16 +14,17 @@ import { CODEX_OPTIONS, type Responder, type ResponderRequest } from './types.js
 // --json streams item-level events on stdout. Model and effort are always
 // supplied from Sight's Codex-only Ask settings so the main session's config
 // cannot leak into the side channel. Web search is pinned for the same reason
-// (decided 2026-10-02): `cached` answers from OpenAI's index without fetching
-// pages — the default under a read-only sandbox, but a user's
-// `web_search = "live"` in config.toml would otherwise let an injected prompt
-// have pages fetched, a URL-borne exfiltration channel.
+// (decided 2026-10-02): `disabled` unless the reader turned Ask web search on,
+// then `cached`, which answers from OpenAI's index without fetching pages.
+// Never `live`: a user's `web_search = "live"` in config.toml would otherwise
+// let an injected prompt have pages fetched, a URL-borne exfiltration channel.
+// --config beats config.toml (verified on 0.153.4).
 export const CODEX_ARGS = (prompt: string,
-    opts: { model?: string; effort?: string } = {}): string[] => [
+    opts: { model?: string; effort?: string; webSearch?: boolean } = {}): string[] => [
   'exec',
   '--model', opts.model ?? CODEX_ASK_DEFAULTS.model,
   '--config', `model_reasoning_effort="${opts.effort ?? CODEX_ASK_DEFAULTS.effort}"`,
-  '--config', 'web_search="cached"',
+  '--config', `web_search="${opts.webSearch ? 'cached' : 'disabled'}"`,
   '--sandbox', 'read-only',
   '--ephemeral',
   '--json',
@@ -99,9 +100,9 @@ export const codexCliResponder: Responder = {
 
   answer(req: ResponderRequest, onChunk: (s: string) => void, signal: AbortSignal,
          onStatus?: (s: string) => void): Promise<string> {
-    const { model, effort } = responderSettings('codex-cli', readConfig());
+    const settings = responderSettings('codex-cli', readConfig());
     return new Promise((resolve, reject) => {
-      const child = spawn('codex', CODEX_ARGS(codexPrompt(req), { model, effort }), {
+      const child = spawn('codex', CODEX_ARGS(codexPrompt(req), settings), {
         cwd: req.projectDir ?? os.homedir(),
         // stdin MUST be ignored: with a piped stdin, `codex exec` waits for
         // EOF to append it to the prompt and never starts (measured)

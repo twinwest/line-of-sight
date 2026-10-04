@@ -7,17 +7,20 @@ import { ANTHROPIC_OPTIONS, type Responder, type ResponderRequest } from './type
 // Read-only cage (product promise B5): no Write/Edit/Bash. WebFetch is also
 // excluded — transcript content is untrusted, and WebFetch would let an
 // injected prompt exfiltrate transcript text to an arbitrary URL.
-// --tools is the cage: the run has Read/Grep/Glob/WebSearch and nothing else,
-// so a tool the CLI adds later never reaches it. WebSearch (decided
-// 2026-10-02): readers ask about what the session researched; the query goes
-// through api.anthropic.com to Anthropic's search, never to a URL the model
-// picks, so it is no exfiltration channel the way WebFetch is. The deny-list alone did not hold
-// (verified 2026-10-02 on CLI 2.1.288): EnterWorktree created a worktree and
-// branch in the repo and SendMessage reached other sessions, neither asking
-// permission. --allowedTools auto-approves the set (WebSearch asks otherwise,
-// and -p denies it); --disallowedTools stays as a second wall should --tools
-// ever be ignored.
-const ALLOWED_TOOLS = 'Read,Grep,Glob,WebSearch';
+// --tools is the cage: the run has Read/Grep/Glob (plus WebSearch when the
+// reader turned web search on) and nothing else, so a tool the CLI adds later
+// never reaches it. The deny-list alone did not hold (verified 2026-10-02 on
+// CLI 2.1.288): EnterWorktree created a worktree and branch in the repo and
+// SendMessage reached other sessions, neither asking permission.
+// --allowedTools auto-approves the set (WebSearch asks otherwise, and -p
+// denies it); --disallowedTools stays as a second wall should --tools ever be
+// ignored.
+// WebSearch is opt-in (decided 2026-10-02): the query goes through
+// api.anthropic.com to Anthropic's search, never to a URL the model picks, so
+// it is no exfiltration channel the way WebFetch is — but it still carries
+// words from the session off the machine, so it is off until the reader
+// turns it on.
+const READ_TOOLS = 'Read,Grep,Glob';
 const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch';
 
 // Reads are confined too (#36): --restricted makes the file tools refuse any
@@ -37,11 +40,11 @@ const DISALLOWED_TOOLS = 'Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch';
 // question and reads it from stdin later (SPIKE_NOTES S2, 2026-09-04). Same
 // cage, same output format either way — only where the prompt comes from.
 export const CLAUDE_ARGS = (prompt: string | null, transcriptDir: string,
-    opts: { model?: string; effort?: string } = {}): string[] => [
+    opts: { model?: string; effort?: string; webSearch?: boolean } = {}): string[] => [
   '-p', ...(prompt === null ? ['--input-format', 'stream-json'] : [prompt]),
-  '--allowedTools', ALLOWED_TOOLS,
-  '--disallowedTools', DISALLOWED_TOOLS,
-  '--tools', ALLOWED_TOOLS,
+  '--allowedTools', opts.webSearch ? `${READ_TOOLS},WebSearch` : READ_TOOLS,
+  '--disallowedTools', opts.webSearch ? DISALLOWED_TOOLS : `${DISALLOWED_TOOLS},WebSearch`,
+  '--tools', opts.webSearch ? `${READ_TOOLS},WebSearch` : READ_TOOLS,
   '--restricted', '--add-dir', transcriptDir,
   // responder runs must not appear as sessions: the Q&A already lives in
   // side_chats (B6); without this the run writes its own transcript into
@@ -157,10 +160,10 @@ const WARM_IDLE_MS = 60_000;
 interface Warm { chatId: string; child: ChildProcessWithoutNullStreams; key: string; timer: NodeJS.Timeout }
 let warm: Warm | null = null;
 
-/** Model/effort at spawn time — a warm process pinned to stale settings must
- *  not answer a question asked after the reader changed them. */
-function configKey(opts: { model?: string; effort?: string }): string {
-  return `${opts.model ?? ''}|${opts.effort ?? ''}`;
+/** Settings at spawn time — a warm process pinned to a stale model, effort or
+ *  tool set must not answer a question asked after the reader changed them. */
+function configKey(opts: { model?: string; effort?: string; webSearch?: boolean }): string {
+  return `${opts.model ?? ''}|${opts.effort ?? ''}|${opts.webSearch ? 'web' : ''}`;
 }
 
 /** Release the slot without killing: the process is already gone. */

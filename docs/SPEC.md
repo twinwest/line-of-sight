@@ -166,6 +166,8 @@ Rules:
   supports them. Codex changes are saved before the next question can be sent
   and never alter the working agent's session configuration.
 - Each answer shows the model that wrote it, when the responder reports one.
+- Web search in Ask is opt-in: off by default, one switch under the Ask
+  input for both CLIs.
 - Ask always uses the session's own CLI, with no cross-engine override or fallback.
 - If that CLI is unavailable, the Ask
   button still appears but the panel shows a one-time setup hint (install a

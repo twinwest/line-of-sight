@@ -671,6 +671,12 @@ pre.fold-body { font-size: 0.94rem; line-height: 1.45; }
   cursor: pointer;
 }
 .input-foot select:hover { background: var(--user-bg); color: var(--fg); }
+.web-toggle {
+  display: inline-flex; align-items: center; gap: 0.25rem; flex: none;
+  color: var(--fg-dim); padding: 0.1rem 0.2rem; border-radius: 5px; cursor: pointer;
+}
+.web-toggle:hover { background: var(--user-bg); color: var(--fg); }
+.web-toggle input { margin: 0; accent-color: var(--accent); cursor: inherit; }
 .input-foot button {
   margin-left: auto; flex: none;
   width: 1.6rem; height: 1.6rem; border-radius: 50%;

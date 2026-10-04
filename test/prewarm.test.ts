@@ -11,7 +11,7 @@ vi.mock('node:child_process', async (orig) => ({
   spawn: (...args: unknown[]) => spawn(...(args as [])),
 }));
 
-let config: { responderModel?: string; responderEffort?: string } = {};
+let config: { responderModel?: string; responderEffort?: string; responderWebSearch?: boolean } = {};
 vi.mock('../src/shared/config.js', async (orig) => ({
   ...(await orig<typeof import('../src/shared/config.js')>()),
   readConfig: () => config,
@@ -157,6 +157,21 @@ describe('pre-spawned responder (#12)', () => {
     expect(stale.written).toBe('');                // the stale standby got nothing
     const args = (spawn.mock.calls[1] as unknown as [string, string[]])[1];
     expect(args.slice(-4)).toEqual(['--model', 'claude-opus-5', '--effort', 'medium']);
+    finish(lastChild(), 'cold');
+    await expect(answer).resolves.toBe('cold');
+  });
+
+  it('turning web search on after the pre-spawn falls back to a cold process', async () => {
+    claudeCliResponder.prewarm!('warm-web', '/proj', '/p/abc.jsonl');
+    const stale = lastChild();
+    config = { responderWebSearch: true };
+
+    const answer = claudeCliResponder.answer(ask('warm-web'), () => {},
+      new AbortController().signal);
+    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(stale.written).toBe('');
+    const args = (spawn.mock.calls[1] as unknown as [string, string[]])[1];
+    expect(args[args.indexOf('--tools') + 1]).toBe('Read,Grep,Glob,WebSearch');
     finish(lastChild(), 'cold');
     await expect(answer).resolves.toBe('cold');
   });

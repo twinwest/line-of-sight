@@ -110,6 +110,7 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
   const saveResponderConfig = async (patch: {
     responderModel?: string;
     responderEffort?: string;
+    responderWebSearch?: boolean;
   }) => {
     if (!status?.engine || savingConfig) return;
     const engine = status.engine;
@@ -125,7 +126,8 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
     try {
       const saved = await putResponderConfig(engine, patch);
       setStatus((current) => current?.engine === engine
-        ? { ...current, responderModel: saved.model, responderEffort: saved.effort }
+        ? { ...current, responderModel: saved.model, responderEffort: saved.effort,
+            responderWebSearch: saved.webSearch }
         : current);
     } catch {
       setConfigError('Could not save the Ask model setting.');
@@ -259,6 +261,16 @@ export function SidePanel({ chat, adapter, siblings, onSwitch, onClose, onChange
               .map((ef) => <option key={ef} value={ef}>{ef}</option>)}
           </select>
           </>}
+          {/* opt-in, beside the other answer settings: where the reader is
+              when an answer says it could not look something up */}
+          {status?.engine && (
+            <label className="web-toggle"
+              title="Let answers search the web. Search queries go to the CLI's provider and can contain words from this session.">
+              <input type="checkbox" checked={status.responderWebSearch} disabled={savingConfig}
+                onChange={(e) => { void saveResponderConfig({ responderWebSearch: e.target.checked }); }} />
+              web search
+            </label>
+          )}
           <button type="submit" disabled={busy || savingConfig || !status?.engine || !input.trim()} title="Ask (Enter)">↑</button>
         </div>
       </form>

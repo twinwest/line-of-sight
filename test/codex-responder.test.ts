@@ -20,9 +20,10 @@ describe('CODEX_ARGS', () => {
     expect(args).toContain('--ephemeral');          // no rollout in ~/.codex/sessions
     expect(args).toContain('--json');
     expect(args.join(' ')).toContain('--sandbox read-only');
-    // pinned: a user's `web_search = "live"` must not reach Ask — live mode
-    // fetches pages, cached reads OpenAI's index only
-    expect(args.join(' ')).toContain('--config web_search="cached"');
+    // pinned either way, so neither a user's `web_search = "live"` (fetches
+    // pages) nor Codex's own default reaches Ask: off unless turned on
+    expect(args.join(' ')).toContain('--config web_search="disabled"');
+    expect(CODEX_ARGS('q', { webSearch: true }).join(' ')).toContain('--config web_search="cached"');
     expect(args[args.length - 1]).toBe('q');
   });
 

@@ -231,13 +231,15 @@ export function buildServer(store: Store, hub: SseHub,
   app.get<{ Querystring: { adapter?: string } }>('/api/responder/status', async (req) => {
     // Unknown/missing context has no answering engine.
     const engine = await resolveResponder(req.query.adapter as SessionMeta['adapter'] | undefined);
-    const settings = engine ? responderSettings(engine.id, readConfig()) : { model: '', effort: '' };
+    const settings = engine
+      ? responderSettings(engine.id, readConfig()) : { model: '', effort: '', webSearch: false };
     return {
       engine: engine?.id ?? null,
       label: engine ? engine.label?.() ?? engine.id : null,
       options: engine?.options ?? null,
       responderModel: settings.model,
       responderEffort: settings.effort,
+      responderWebSearch: settings.webSearch,
       error: engine ? null : req.query.adapter === 'codex'
         ? 'Codex CLI is unavailable. Install Codex CLI to ask about this session.'
         : req.query.adapter === 'claude-code'
@@ -248,19 +250,24 @@ export function buildServer(store: Store, hub: SseHub,
 
   const EFFORTS = new Set(['', ...ANTHROPIC_OPTIONS.efforts, ...CODEX_OPTIONS.efforts]);
 
-  app.put<{ Body: { engine?: ResponderEngine; responderModel?: string; responderEffort?: string } }>(
+  app.put<{ Body: {
+    engine?: ResponderEngine; responderModel?: string; responderEffort?: string; responderWebSearch?: boolean;
+  } }>(
     '/api/responder/config', (req, reply) => {
-      const { engine, responderModel, responderEffort } = req.body ?? {};
+      const { engine, responderModel, responderEffort, responderWebSearch } = req.body ?? {};
       if (engine !== 'claude-cli' && engine !== 'codex-cli') {
         return reply.code(400).send({ error: 'valid engine required' });
       }
       if (responderEffort !== undefined && !EFFORTS.has(responderEffort)) {
         return reply.code(400).send({ error: 'invalid effort' });
       }
-      const config = writeConfig(responderConfigPatch(engine, {
-        model: responderModel,
-        effort: responderEffort,
-      }));
+      if (responderWebSearch !== undefined && typeof responderWebSearch !== 'boolean') {
+        return reply.code(400).send({ error: 'invalid web search setting' });
+      }
+      const config = writeConfig({
+        ...responderConfigPatch(engine, { model: responderModel, effort: responderEffort }),
+        responderWebSearch,
+      });
       return { ok: true, ...responderSettings(engine, config) };
     });
 

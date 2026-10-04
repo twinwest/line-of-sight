@@ -41,6 +41,7 @@ there is no cross-engine fallback. Settings live in `~/.sight/config.json`.
 | `responderEffort` | Claude Ask effort; defaults to `medium`. |
 | `codexResponderModel` | Codex Ask model; defaults to `gpt-5.6-terra`, or to the first model Codex lists once it no longer lists Terra. |
 | `codexResponderEffort` | Codex Ask effort; defaults to `medium`. |
+| `responderWebSearch` | `true` lets Ask answers search the web, for both CLIs (default: off). Also a switch in the Ask panel. |
 | `keepSideChats` | `true` keeps side chats after their transcript is gone (default: off, they go with the session). |
 
 Ask model and effort are selectable in the Ask panel, separately per CLI, and
@@ -58,6 +59,12 @@ own picker, so new ones appear as Codex learns about them.
 
 The panel offers efforts up to `high` for both CLIs; a value set by hand in
 the config file still applies.
+
+Web search is off by default. Tick **web search** under the Ask box to let
+answers look things up: Claude Code uses Anthropic's web search, Codex uses
+OpenAI's cached search index. A search query can contain words from the
+session. The choice applies to both CLIs and overrides their own web search
+settings, so a Codex `web_search = "live"` never reaches Ask.
 Set `SIGHT_PORT` to use a different port, for example `SIGHT_PORT=5121 sight open`.
 
 ## Your side chats

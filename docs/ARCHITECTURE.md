@@ -407,9 +407,9 @@ Spawn per question (cwd = projectDir if available, else the transcript's
 directory):
 
 ```
-claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob,WebSearch" \
-  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch" \
-  --tools "Read,Grep,Glob,WebSearch" \
+claude -p "<composed prompt>" --allowedTools "Read,Grep,Glob" \
+  --disallowedTools "Write,Edit,MultiEdit,NotebookEdit,Bash,Task,WebFetch,WebSearch" \
+  --tools "Read,Grep,Glob" \
   --restricted --add-dir <dirname(sessionFilePath)> \
   --no-session-persistence --setting-sources "" --strict-mcp-config \
   --output-format stream-json --include-partial-messages --verbose \
@@ -426,13 +426,17 @@ worktree and branch in the repo, and SendMessage can reach the user's other
 sessions. The claude.ai connectors (Gmail, Drive, Docs) loaded despite
 `--setting-sources ""`. `--disallowedTools` stays as a second wall.
 
-WebSearch is in the set (decided 2026-10-02): about 4% of asked questions
-were web lookups about what the session researched (a company, a release
-date, a source link) and answers said they could not check. The query goes
-through `api.anthropic.com` to Anthropic's search (a run makes no new
-connection for it), so unlike WebFetch it cannot send transcript text to a
-URL the model picks; an injected "search for <secret>" can reach only that
-search. It must be in `--allowedTools` too: unapproved, `-p` denies it.
+With web search turned on (`responderWebSearch`, off by default — decided
+2026-10-02), WebSearch joins `--tools` and `--allowedTools` (unapproved, `-p`
+denies it) and leaves `--disallowedTools`. About 4% of asked questions were
+web lookups about what the session researched (a company, a release date, a
+source link). The query goes through `api.anthropic.com` to Anthropic's
+search (a run makes no new connection for it), so unlike WebFetch it cannot
+send transcript text to a URL the model picks; an injected "search for
+<secret>" can reach only that search. It is still words from the session
+leaving the machine, which a local-first viewer does not do by default.
+The switch is part of the pre-spawn key, so a warm process started before
+a toggle is not used.
 
 Model and effort are always passed (decided 2026-10-02). With settings
 skipped, an unset model would fall to the CLI's built-in default, which on a
@@ -487,7 +491,7 @@ skip them but breaks OAuth auth).
 ```
 codex exec --model <codexResponderModel> \
   --config 'model_reasoning_effort="<codexResponderEffort>"' \
-  --config 'web_search="cached"' \
+  --config 'web_search="<disabled|cached>"' \
   --sandbox read-only --ephemeral --json --skip-git-repo-check "<composed prompt>"
 ```
 
@@ -510,13 +514,13 @@ cache falls back to a fixed list. Once Codex stops listing the default,
 an unconfigured ask uses Codex's first listed model instead of failing.
 Efforts offered: `low`/`medium`/`high`.
 
-Web search is pinned to `cached` (decided 2026-10-02). Codex searches by
-default; under a read-only sandbox the default mode is `cached`, which
-answers from an OpenAI-maintained index and opens no page. A user's
-`web_search = "live"` would otherwise reach Ask and let an injected prompt
-have pages fetched, carrying transcript text in the URL. `--config` beats
-`config.toml` (verified on 0.153.4 against `web_search = "disabled"`), so
-this also turns search on for a user who disabled it in Codex.
+Web search is pinned (decided 2026-10-02): `disabled` unless the reader
+turned Ask web search on, then `cached`, which answers from an
+OpenAI-maintained index and, per Codex's docs, opens no page. Never `live`:
+a user's `web_search = "live"` would otherwise reach Ask and let an injected
+prompt have pages fetched, carrying transcript text in the URL. Left alone,
+Codex searches by default (`cached` under a read-only sandbox). `--config`
+beats `config.toml` (verified on 0.153.4 against `web_search = "disabled"`).
 
 ### Compressed Codex Ask (2026-09-13)
 
@@ -532,6 +536,8 @@ No normalized full-session projection is needed under strict routing.
 
 ### Engine config
 
+- Both: optional `"responderWebSearch"` (default `false`), one switch for
+  both CLIs, set from the panel.
 - Claude: optional `"responderModel"` and `"responderEffort"`; Sight
   defaults to `sonnet` and `medium` (CLI aliases, see claude-cli responder).
 - Codex: optional `"codexResponderModel"` and `"codexResponderEffort"`;
@@ -553,7 +559,7 @@ No normalized full-session projection is needed under strict routing.
 
 | Engine | Mechanism |
 |---|---|
-| claude-cli | `--tools "Read,Grep,Glob,WebSearch"` (the only tools that exist; WebSearch queries go to Anthropic's search) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
+| claude-cli | `--tools "Read,Grep,Glob"` (the only tools that exist; plus WebSearch, whose queries go to Anthropic's search, when the reader turns it on) + `--strict-mcp-config` (no MCP servers), with `--allowedTools`/`--disallowedTools` as before; `--restricted --add-dir <transcript dir>` fences reads to the project and the transcript directory |
 | codex-cli | `--sandbox read-only` — blocks writes and network (verified 2026-09-16: DNS fails inside the sandbox), not reads; Codex has no read fence, so its responder can read any file the user can |
 
 If an engine cannot guarantee read-only, it must not be offered as a
@@ -572,8 +578,8 @@ POST /api/side-chats/:id/ask              → body { question }; response = SSE 
 POST /api/side-chats/:id/cancel
 DELETE /api/side-chats/:id
 POST /api/stats/:event                    → increment (viewer_open | question_asked)
-GET  /api/responder/status                → { engine, options, responderModel, responderEffort } (effective engine values)
-PUT  /api/responder/config                → { engine, responderModel?, responderEffort? } → engine-specific keys in ~/.sight/config.json
+GET  /api/responder/status                → { engine, options, responderModel, responderEffort, responderWebSearch } (effective engine values)
+PUT  /api/responder/config                → { engine, responderModel?, responderEffort?, responderWebSearch? } → engine-specific keys (web search: one shared key) in ~/.sight/config.json
 GET  /api/health
 ```
 

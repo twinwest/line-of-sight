@@ -12,6 +12,9 @@ export interface SightConfig {
   codexResponderModel?: string;
   /** Effort used only for Codex Ask invocations. Sight defaults to medium. */
   codexResponderEffort?: string;
+  /** Let Ask answers search the web (both CLIs). Off by default: a search
+   *  query can carry words from the session to the provider's search. */
+  responderWebSearch?: boolean;
   /** Keep side chats (question, answers, and the conversation snapshot taken
    *  when the question was asked) after their transcript leaves the disk.
    *  Off = SPEC B9 as written: they go with the session. */
@@ -36,16 +39,20 @@ export const CLAUDE_ASK_DEFAULTS = { model: 'sonnet', effort: 'medium' } as cons
  * this mapping here prevents either responder from reading the other one's
  * model names. */
 export function responderSettings(engine: ResponderEngine, config: SightConfig):
-    { model: string; effort: string } {
+    { model: string; effort: string; webSearch: boolean } {
+  // one switch for both CLIs: it is a privacy choice, not an engine one
+  const webSearch = config.responderWebSearch === true;
   if (engine === 'codex-cli') {
     return {
       model: config.codexResponderModel || codexDefaultModel(codexModels()),
       effort: config.codexResponderEffort || CODEX_ASK_DEFAULTS.effort,
+      webSearch,
     };
   }
   return {
     model: config.responderModel || CLAUDE_ASK_DEFAULTS.model,
     effort: config.responderEffort || CLAUDE_ASK_DEFAULTS.effort,
+    webSearch,
   };
 }
 

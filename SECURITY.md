@@ -21,16 +21,19 @@ release only.
   `Origin` are refused.
 - **No remote loads from rendered content.** Transcripts and answers are
   untrusted. A Content Security Policy stops them from loading remote images.
-- **Responder safeguards.** Claude Code runs with only `Read`, `Grep`, `Glob`
-  and `WebSearch` (`--tools`; every other tool, including ones added by future
-  CLI versions, does not exist in the run) and no MCP servers. Web search
-  queries go to Anthropic's search service; there is no tool that fetches an
-  arbitrary URL. `--restricted` makes the read tools refuse any path outside
-  the project and the session's transcript directory. Codex runs
-  model-generated commands under `--sandbox read-only`; commands that stay
-  inside that sandbox cannot write files or use command-level network access.
-  Its web search is pinned to `cached` (OpenAI's index; no page is fetched),
-  whatever the Codex configuration says. See the Codex limitations below.
+- **Responder safeguards.** Claude Code runs with only `Read`, `Grep` and
+  `Glob` (`--tools`; every other tool, including ones added by future CLI
+  versions, does not exist in the run) and no MCP servers. `--restricted`
+  makes the read tools refuse any path outside the project and the session's
+  transcript directory. Codex runs model-generated commands under
+  `--sandbox read-only`; commands that stay inside that sandbox cannot write
+  files or use command-level network access. See the Codex limitations below.
+- **Web search is off unless you turn it on.** Sight disables it for both
+  CLIs, whatever their own configuration says. Turned on in the Ask panel,
+  Claude Code gets `WebSearch` (queries go to Anthropic's search) and Codex
+  gets `cached` search (OpenAI's index; never live page fetches). Neither
+  gets a tool that fetches an arbitrary URL. A search query can contain
+  words from your session.
 - **No telemetry.** Sight itself makes no telemetry or application network
   requests. When you ask a question, it launches your own agent CLI; that CLI
   talks to its model service and may use capabilities enabled in its own
