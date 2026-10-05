@@ -220,11 +220,18 @@ function unwrapPaste(blocks: RenderBlock[]): RenderBlock[] {
   return blocks.map((b) => b.type === 'text' ? { ...b, markdown: b.markdown.replace(PASTED_TAG, '') } : b);
 }
 
-/** First user prompt lines that are CLI plumbing, not a real prompt. */
-function isRealPrompt(line: Json, text: string): boolean {
-  if (line.isMeta === true) return false;
-  const t = text.trimStart();
-  return t.length > 0 && !t.startsWith('<');
+/** Title text of a user prompt, or null for CLI plumbing. A skill or prompt
+ *  command the user typed leads with <command-message> and titles as
+ *  `/name args`; local commands (/clear, /model) lead with <command-name>. */
+function promptTitle(line: Json, text: string): string | null {
+  if (line.isMeta === true) return null;
+  const t = text.trim();
+  if (t.startsWith('<command-message>')) {
+    const name = /<command-name>([^<]+)<\/command-name>/.exec(t)?.[1];
+    const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(t)?.[1]?.trim();
+    return name ? [name, args].filter(Boolean).join(' ') : null;
+  }
+  return t.length > 0 && !t.startsWith('<') ? t : null;
 }
 
 export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'projects')): AgentAdapter {
@@ -368,8 +375,9 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         const cwd = str(line.cwd);
         if (cwd) patch.projectDir = cwd;
         const prompt = typeof content === 'string' && blocks[0]?.type === 'text' ? blocks[0].markdown : null;
-        if (type === 'user' && prompt !== null && isRealPrompt(line, prompt)) {
-          patch.title = truncate(prompt.trim(), 120);
+        const title = type === 'user' && prompt !== null ? promptTitle(line, prompt) : null;
+        if (title) {
+          patch.title = truncate(title, 120);
           patch.titleSource = 'prompt';
         }
         return [{

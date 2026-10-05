@@ -62,6 +62,22 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(ev.sessionPatch?.title).toBe('内容不要自己推。');
   });
 
+  it('a skill command the user typed titles the session; local commands do not', () => {
+    const title = (content: string) => {
+      const [ev] = adapter.parseLine(JSON.stringify({ type: 'user', uuid: 'u1', parentUuid: null,
+        timestamp: '2026-10-05T18:52:05.000Z', cwd: '/x', message: { role: 'user', content } }), ctx);
+      return ev?.kind === 'message' ? ev.sessionPatch?.title : undefined;
+    };
+    expect(title('<command-message>podcast-read</command-message>\n<command-name>/podcast-read</command-name>\n'
+      + '<command-args>https://www.youtube.com/watch?v=_DfqnpSbMfE</command-args>'))
+      .toBe('/podcast-read https://www.youtube.com/watch?v=_DfqnpSbMfE');
+    expect(title('<command-message>distill</command-message>\n<command-name>/distill</command-name>')).toBe('/distill');
+    expect(title('<command-name>/model</command-name>\n            <command-message>model</command-message>\n'
+      + '            <command-args>opus</command-args>')).toBeUndefined();
+    expect(title('<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n'
+      + '            <command-args></command-args>')).toBeUndefined();
+  });
+
   it('isMeta user lines (CLI-injected, never shown as user speech) become meta', () => {
     const caption = JSON.stringify({ type: 'user', isMeta: true, turnCompanion: true, uuid: 'm1', parentUuid: 'p1',
       timestamp: '2026-09-14T19:42:32.807Z', cwd: '/x',
