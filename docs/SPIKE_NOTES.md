@@ -933,3 +933,20 @@ completion. Two shapes seen on completion: `action: {type: "search", query}`
 with a text query, and `action: {type: "other"}` with the query set to a
 URL (a page opened, here from a `web_search="cached"` run).
 
+
+## Addendum 2026-10-05 — slash-command user lines: skill vs local command
+
+CLI 2.1.289. Every slash command lands as a `user` line with string content
+and `isMeta` unset, in one of two shapes, distinguished by the first tag:
+
+- Skill or prompt command (the user's task; the model runs it):
+  `<command-message>podcast-read</command-message>\n<command-name>/podcast-read</command-name>\n<command-args>https://…</command-args>`
+  (`<command-args>` absent when there are none).
+- Local command (/clear, /model, /effort, /compact, /agents, /plugin):
+  `<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args></command-args>`.
+
+Surveyed every local transcript: 6 skill lines, 140+ local, no exception to
+the tag order. A `system`/`local_command` child follows /clear and /agents
+but not /model, so it is not a usable signal. The CLI writes no `ai-title`
+for a session whose only human input is a skill command, so the adapter
+titles it `/name args` from that line; local commands never title.
