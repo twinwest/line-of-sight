@@ -55,6 +55,18 @@ describe('buildTurns (step folding: prose always visible)', () => {
     ]);
   });
 
+  it('a VS Code prompt (injected context blocks, typed text last) is a prompt; tag-only lines still fold', () => {
+    const ctxBlock = { type: 'text' as const, markdown: '<ide_opened_file>The user opened the file /x.ts in the IDE.</ide_opened_file>' };
+    const vscode: StoredEvent = { id: 'v1', seq: ++seq, kind: 'message', role: 'user', ts: 0,
+      body: [ctxBlock, { type: 'text', markdown: 'why does this fail?' }] };
+    const tagOnly: StoredEvent = { id: 'x1', seq: ++seq, kind: 'message', role: 'user', ts: 0,
+      body: [ctxBlock, { type: 'text', markdown: '<terminal name="zsh">ls</terminal>' }] };
+    const events = [prompt('p1'), tool('t1'), tagOnly, vscode, tool('t2'), toolResult('r2'), narration('c1')];
+    expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual([
+      'p1', 'fold(t1,x1)', 'v1', 'fold(t2,r2)', 'c1',
+    ]);
+  });
+
   it('a single non-prose event stays inline', () => {
     const events = [prompt('p1'), tool('t1'), narration('c1')];
     expect(shape(buildTurns(events, claudeCodeDialect, { foldTail: true }))).toEqual(['p1', 't1', 'c1']);

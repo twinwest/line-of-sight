@@ -91,6 +91,26 @@ describe('claudeCode.parseLine on real fixture lines', () => {
     expect(adapter.parseLine(carrier, ctx)[0]).toMatchObject({ kind: 'message', role: 'user' });
   });
 
+  it('non-human-origin lines with prose fold as meta; human and tag-only lines stay messages', () => {
+    const user = (uuid: string, origin: unknown, content: unknown) => JSON.stringify({ type: 'user', uuid,
+      timestamp: '2026-10-07T19:42:32.807Z', ...(origin ? { origin } : {}), message: { role: 'user', content } });
+    const ideBlock = { type: 'text', text: '<ide_opened_file>The user opened the file /x.ts in the IDE.</ide_opened_file>' };
+    // a channel message, and an agent message shaped like a VS Code prompt
+    expect(adapter.parseLine(user('c1', { kind: 'channel', server: 's' },
+      'A message arrived from s:\n<channel source="s">hi</channel>'), ctx)[0]).toMatchObject({ kind: 'meta' });
+    expect(adapter.parseLine(user('c2', { kind: 'peer' },
+      [{ type: 'text', text: '<cross-session-message from="a">do x</cross-session-message>' },
+        { type: 'text', text: 'IMPORTANT: This is NOT from your user' }]), ctx)[0]).toMatchObject({ kind: 'meta' });
+    // VS Code panel prompt: origin human, context block first
+    expect(adapter.parseLine(user('h1', { kind: 'human' }, [ideBlock, { type: 'text', text: 'fix it' }]), ctx)[0])
+      .toMatchObject({ kind: 'message', role: 'user' });
+    // task-notification is tag-only: stays a message for the plumbing card
+    expect(adapter.parseLine(user('t1', { kind: 'task-notification' },
+      '<task-notification><summary>done</summary></task-notification>'), ctx)[0]).toMatchObject({ kind: 'message' });
+    // no origin (older CLIs, -p, subagent prompts): unchanged
+    expect(adapter.parseLine(user('n1', null, 'plain prompt'), ctx)[0]).toMatchObject({ kind: 'message' });
+  });
+
   it('tool_result with array content flattens to output text', () => {
     const all = lines.flatMap((l) => adapter.parseLine(l, ctx));
     const results = all.flatMap((e) => e.kind === 'message' ? e.blocks : [])

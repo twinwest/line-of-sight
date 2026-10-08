@@ -366,7 +366,14 @@ export function claudeCodeAdapter(root = path.join(os.homedir(), '.claude', 'pro
         // bodies, usage-limit auto-continue, slash-command expansions, the
         // local-command caveat. Fold them as meta; a tool_result carrier
         // stays a message so the viewer can still pair it with its tool_use.
-        if (type === 'user' && line.isMeta === true && !blocks.some((b) => b.type === 'tool_result')) {
+        // origin.kind names the sender: a non-human one (peer session,
+        // channel, plugin, coordinator, …) with prose in it would read as the
+        // user speaking, so it folds too. Tag-only lines (task-notification)
+        // stay messages for the dialect's plumbing card.
+        const origin = str((line.origin as Json | undefined)?.kind);
+        const notHuman = origin !== null && origin !== 'human'
+          && blocks.some((b) => b.type === 'text' && !b.markdown.trimStart().startsWith('<'));
+        if (type === 'user' && (line.isMeta === true || notHuman) && !blocks.some((b) => b.type === 'tool_result')) {
           const text = blocks.find((b) => b.type === 'text');
           const label = `user: ${text?.type === 'text' ? truncate(text.markdown.trim(), 80) : 'meta'}`;
           return [{ kind: 'meta', id, ts, label, raw: line, parentId }];

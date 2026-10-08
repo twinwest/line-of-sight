@@ -292,6 +292,8 @@ export function isToolFlow(role: string | null, blocks: RenderBlock[]): boolean 
 /** CLI-plumbing user message (task notifications, command wrappers, …). */
 function plumbingOf(event: StoredEvent, dialect: Dialect): Plumbing | null {
   if (event.kind !== 'message' || event.role !== 'user' || !Array.isArray(event.body)) return null;
+  // one block the user typed makes it a prompt (see isUserPrompt)
+  if ((event.body as RenderBlock[]).some((b) => b.type === 'text' && dialect.plumbing(b.markdown) === null)) return null;
   const first = (event.body as RenderBlock[]).find((b) => b.type === 'text');
   return first?.type === 'text' ? dialect.plumbing(first.markdown) : null;
 }
@@ -374,7 +376,16 @@ export const EventRow = memo(function EventRow({ event }: { event: StoredEvent }
             : <CopyButton text={md} label="⧉" title="Copy Markdown" />}
         </div>
       )}
-      {blocks.map((b, i) => <Block key={i} block={b} eventId={event.id} />)}
+      {blocks.map((b, i) => {
+        // context injected into a prompt (VS Code <ide_opened_file>, …) folds: not the user speaking
+        const p = event.role === 'user' && b.type === 'text' ? dialect.plumbing(b.markdown) : null;
+        return p && b.type === 'text'
+          ? <details key={i} className="fold tool">
+              <summary>⏵ {p.label}</summary>
+              <pre className="fold-body scrolly pre-wrap">{b.markdown}</pre>
+            </details>
+          : <Block key={i} block={b} eventId={event.id} />;
+      })}
     </div>
   );
 });
