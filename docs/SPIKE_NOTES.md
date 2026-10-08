@@ -950,3 +950,28 @@ the tag order. A `system`/`local_command` child follows /clear and /agents
 but not /model, so it is not a usable signal. The CLI writes no `ai-title`
 for a session whose only human input is a skill command, so the adapter
 titles it `/name args` from that line; local commands never title.
+
+## Addendum 2026-10-07 — VS Code extension prompts; `origin.kind` on user lines
+
+The VS Code extension (2.1.293) bundles its own CLI and writes to the same
+`~/.claude/projects/<cwd>/<uuid>.jsonl` (lines carry `entrypoint:
+"claude-vscode"`; `sessions/<pid>.json` is written too). Its chat panel sends
+each prompt as a content **array**, context first and the typed text last:
+`[<ide_opened_file>… | <ide_selection>…, image/document blocks,
+<terminal name=…>…, <browser …>…, "<typed text>"]`. A file is almost always
+open, so the first text block is nearly always a tag. The terminal CLI under
+`/ide` records the same context as `attachment` lines (`opened_file_in_ide`,
+`selected_lines_in_ide`) instead. So a prompt is any user line with at least
+one non-tag text block, not just one whose first block is untagged.
+
+User lines carry `origin: {kind}` naming the sender (CLI 2.1.291 enum: human,
+peer, channel, observer, slack-ping, task-notification, coordinator,
+observer-activity, auto-continuation, plugin, unclassified). The extension
+sends `{kind: "human"}`, and the CLI persists it. Local survey: 1309 human,
+125 task-notification, 76 peer (also `isMeta`), 2 auto-continuation; older
+lines, `-p` runs, slash-command lines and subagent prompts have none. The CLI
+renders every non-human sender as one string (peer: `Another Claude session
+sent a message: <agent-message…>`, channel: `A message arrived from X:\n
+<channel…>`), but a non-human line with prose is folded regardless of shape,
+so a future tag+prose agent message can't pass as the user. Tag-only lines
+(task-notification) stay messages for the plumbing card.

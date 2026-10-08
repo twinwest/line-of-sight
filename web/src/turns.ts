@@ -32,13 +32,12 @@ function isVisible(e: StoredEvent, dialect: Dialect): boolean {
 
 /** A real user prompt: not a tool_result carrier, not CLI plumbing
  *  (<command-name>, <task-notification>, … — the dialect knows the shapes).
+ *  Any non-plumbing text block counts: VS Code panel prompts lead with
+ *  injected <ide_opened_file>/<ide_selection> blocks, the typed text last.
  *  Also the draft card's "the conversation moved on" signal. */
 export function isUserPrompt(e: StoredEvent, dialect: Dialect): boolean {
   if (e.kind !== 'message' || e.role !== 'user') return false;
-  const bs = blocks(e);
-  if (bs.length === 0 || bs.every((b) => b.type === 'tool_result' || b.type === 'raw')) return false;
-  const firstText = bs.find((b) => b.type === 'text');
-  return firstText?.type === 'text' && dialect.plumbing(firstText.markdown) === null;
+  return blocks(e).some((b) => b.type === 'text' && dialect.plumbing(b.markdown) === null);
 }
 
 function countToolCalls(events: StoredEvent[]): number {
