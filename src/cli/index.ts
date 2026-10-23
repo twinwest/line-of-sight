@@ -66,6 +66,9 @@ function readPid(): number | null {
 function spawnDaemon(): void {
   fs.mkdirSync(SIGHT_DIR, { recursive: true });
   const child = spawn(process.execPath, [DAEMON_ENTRY], { detached: true, stdio: 'ignore' });
+  // spawn failures arrive as an async 'error' event; unheard, it kills the
+  // wrapper and orphans the agent on the terminal (fail-open)
+  child.on('error', () => {});
   child.unref();
 }
 
@@ -83,7 +86,8 @@ async function startDaemon(): Promise<boolean> {
 
 function openBrowser(): void {
   const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(cmd, [URL_BASE], { detached: true, stdio: 'ignore' }).unref();
+  // no opener on PATH (headless Linux, WSL, containers): no tab, nothing else
+  spawn(cmd, [URL_BASE], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
 }
 
 /** `sight claude|codex [args...]` — fail-open wrapper (SPEC B4, ARCHITECTURE §8).
