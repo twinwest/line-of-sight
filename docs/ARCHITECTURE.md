@@ -76,6 +76,7 @@ line-of-sight/
       dialects/     # per-agent presentation policy (pure functions; see §9)
   web/              # vite react app (built to web/dist, served by daemon)
   test/
+  tools/verify/   # run the real app in isolation and drive it as a user (dev-only)
   docs/
 ```
 
