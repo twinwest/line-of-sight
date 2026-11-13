@@ -2,7 +2,9 @@
 
 Behavior-level inventory of what a user can do in Line of Sight, and how to
 prove each part with `sight-verify.mjs`. Read the file for the feature a
-change touches; walk all of them, top to bottom, for a broad regression.
+change touches. For a broad regression, `node tools/verify/sight-verify.mjs walk`
+runs every drive script below in order; the CLI file is shell commands and
+is run by hand.
 
 ## Baseline preconditions
 
@@ -11,7 +13,8 @@ change touches; walk all of them, top to bottom, for a broad regression.
   `node tools/verify/sight-verify.mjs drive`.
 - Each `drive` run is a fresh browser with empty localStorage.
 - Snippets that append to a seeded transcript change the instance for later
-  runs. `cleanup` and `launch` restore the seeds.
+  runs. Every script must still pass on such an instance (`walk` twice in a
+  row is the check); `cleanup` and `launch` restore the seeds.
 
 ## Features
 

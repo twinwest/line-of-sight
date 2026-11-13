@@ -31,7 +31,8 @@ parse; `docs/SPEC.md` is what v1 is and, just as important, is not.
 - A change to user-visible behaviour is proven in the real app, not only by
   unit tests: `tools/verify/README.md` launches an isolated instance, drives
   it the way a user does, and keeps screenshots. Update the matching file
-  under `tools/verify/features/` in the same PR.
+  under `tools/verify/features/` in the same PR;
+  `node tools/verify/sight-verify.mjs walk` must pass.
 - Keep it lean: no speculative abstractions beyond `Adapter` and `Responder`.
   Deferred features (SPEC §6) are not scaffolded "for later".
 - A fix in one adapter must not change another adapter's behaviour. If it has

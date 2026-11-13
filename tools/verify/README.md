@@ -83,8 +83,8 @@ In scope:
   clipboard read/write granted.
 - `shot(name)`: saves `<name>.png` into this launch's evidence directory and
   prints its path.
-- `select(locator)`: selects a single-line element's text with a real mouse
-  drag. Use it for select-to-ask; a scripted `Selection` fires no `mouseup`.
+- `select(locator)`: scrolls a single-line element to the middle of the pane
+  and selects its text with a real mouse drag. Use it for select-to-ask; a scripted `Selection` fires no `mouseup`.
 - `seeds`: see Launch.
 
 The script is a Node async function body, so `await import('node:fs')` works.
@@ -96,6 +96,19 @@ Selectors: the viewer has few ARIA labels or data attributes. Stable handles
 are `.event[data-mid]` (one per message), visible text, `title` attributes
 and placeholders. Class names are the fallback and are listed per feature
 under [`features/`](features/). Wait on a locator, never on a fixed sleep.
+
+To check the whole feature map at once:
+
+```bash
+node tools/verify/sight-verify.mjs walk
+```
+
+`walk` runs the drive script of every file under `features/`, in the order
+`features/README.md` lists them, each in its own browser. It prints `ok` or
+`FAIL` per feature, saves `failure-<feature>.png` for each failure, and
+exits 1 if any failed. Run it after a change to `web/` to find the feature
+files the change made stale, and before reporting a broad regression check.
+A feature file without a drive script (the CLI one) is reported as skipped.
 
 The CLI goes through the same isolation:
 
