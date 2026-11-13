@@ -6,9 +6,9 @@ change touches; walk all of them, top to bottom, for a broad regression.
 
 ## Baseline preconditions
 
-- `npm run build`, then `launch`, then a clean `doctor` (see `../SKILL.md`).
+- `npm run build`, then `launch`, then a clean `doctor` (see `../README.md`).
 - Every snippet is a `drive` script: pipe it to
-  `node .claude/skills/verify-sight/sight-verify.mjs drive`.
+  `node tools/verify/sight-verify.mjs drive`.
 - Each `drive` run is a fresh browser with empty localStorage.
 - Snippets that append to a seeded transcript change the instance for later
   runs. `cleanup` and `launch` restore the seeds.

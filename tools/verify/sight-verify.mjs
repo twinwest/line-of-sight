@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Verification harness for Line of Sight: an isolated daemon (its own HOME and
 // port, seeded from test/fixtures) plus a headless-Chrome driver.
-// Usage and proof standards: SKILL.md next to this file.
+// Usage and proof standards: README.md next to this file.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // One knob isolates a second instance: the port also names the scratch dir.
 const PORT = Number(process.env.SIGHT_VERIFY_PORT) || 2121;
 const DIR = path.join(os.tmpdir(), `sight-verify-${PORT}`);
@@ -46,7 +46,7 @@ const getJson = async (p) => {
 };
 const readState = () => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch { return null; } };
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-// ponytail: `ps` is POSIX-only; swap for a health-pid match if Windows ever matters.
+// `ps` is POSIX-only; swap for a health-pid match if Windows ever matters.
 const isDaemon = (pid) => {
   try { return execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).includes('daemon/main.js'); }
   catch { return false; }

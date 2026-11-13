@@ -20,7 +20,7 @@ These are shell commands, not `drive` scripts. `sight-verify.mjs sight …`
 runs the built CLI with the isolated HOME and port.
 
 ```bash
-V=.claude/skills/verify-sight/sight-verify.mjs
+V=tools/verify/sight-verify.mjs
 node $V sight status; echo "exit=$?"        # daemon running on http://127.0.0.1:2121 (pid …, v…), exit=0
 node $V sight stats                         # note the viewer_open total
 echo "await page.goto('/')" | node $V drive
