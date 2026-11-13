@@ -13,7 +13,8 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const PORT = Number(process.env.SIGHT_VERIFY_PORT) || 2121;
 const DIR = path.join(os.tmpdir(), `sight-verify-${PORT}`);
 const HOME = path.join(DIR, 'home');
-const EVIDENCE = path.join(DIR, 'evidence');
+// One subdirectory per launch, so a run's proof is never mixed with an older run's.
+const evidenceDir = (st) => path.join(DIR, 'evidence', st.run);
 const STATE = path.join(DIR, 'state.json');
 const BASE = `http://127.0.0.1:${PORT}`;
 // Every path the daemon touches hangs off os.homedir(), so a fake HOME keeps
@@ -63,18 +64,19 @@ async function launch() {
   if (!fs.existsSync(DAEMON) || !fs.existsSync(WEB)) die('no build: run `npm run build` first');
   if (await getJson('/api/health')) die(`port ${PORT} is taken; set SIGHT_VERIFY_PORT to another port`);
   fs.rmSync(HOME, { recursive: true, force: true });
-  fs.mkdirSync(EVIDENCE, { recursive: true });
+  const run = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  fs.mkdirSync(evidenceDir({ run }), { recursive: true });
   for (const s of Object.values(SEEDS)) {
     fs.mkdirSync(path.dirname(s.file), { recursive: true });
     fs.copyFileSync(path.join(REPO, s.from), s.file);
   }
   const child = spawn(process.execPath, [DAEMON], { env: ENV, detached: true, stdio: 'ignore' });
   child.unref();
-  fs.writeFileSync(STATE, JSON.stringify({ pid: child.pid }));
+  fs.writeFileSync(STATE, JSON.stringify({ pid: child.pid, run }));
   // Ready = both seeded sessions ingested, not merely the port answering.
   for (let i = 0; i < 100 && !(await seeded()); i++) await sleep(100);
   if (!(await seeded())) die(`daemon did not become ready; see ${path.join(HOME, '.sight/daemon.log')}, then run cleanup`);
-  console.log(`ready: ${BASE}\nhome: ${HOME}\nevidence: ${EVIDENCE}`);
+  console.log(`ready: ${BASE}\nhome: ${HOME}\nevidence: ${evidenceDir({ run })}`);
 }
 
 async function doctor() {
@@ -99,6 +101,8 @@ async function doctor() {
 // Runs a Playwright script (stdin, or a file argument) against a fresh headless
 // Chrome. In scope: page (baseURL = this instance), shot(name), select(locator), seeds.
 async function drive(file) {
+  const st = readState();
+  if (!st) die('not launched; run launch first');
   const code = fs.readFileSync(file ?? 0, 'utf8');
   const { chromium } = await import('playwright-core');
   const browser = await chromium.launch({ channel: 'chrome' });
@@ -111,7 +115,7 @@ async function drive(file) {
   page.on('console', (m) => { if (m.type() === 'error') console.log('[console.error]', m.text()); });
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   const shot = async (name) => {
-    const f = path.join(EVIDENCE, `${name}.png`);
+    const f = path.join(evidenceDir(st), `${name}.png`);
     await page.screenshot({ path: f });
     console.log('evidence:', f);
   };
@@ -147,9 +151,10 @@ function sight(args) {
 
 async function cleanup() {
   // Only pids recorded inside our own scratch dir, and only if they are a daemon.
+  const st = readState();
   let pidFile = null;
   try { pidFile = Number(fs.readFileSync(path.join(HOME, '.sight/daemon.pid'), 'utf8')); } catch { /* none */ }
-  for (const pid of new Set([readState()?.pid, pidFile].filter(Boolean))) {
+  for (const pid of new Set([st?.pid, pidFile].filter(Boolean))) {
     if (!alive(pid) || !isDaemon(pid)) continue;
     process.kill(pid, 'SIGTERM');
     for (let i = 0; i < 50 && alive(pid); i++) await sleep(100);
@@ -157,7 +162,7 @@ async function cleanup() {
   }
   fs.rmSync(HOME, { recursive: true, force: true });
   fs.rmSync(STATE, { force: true });
-  console.log(`removed ${HOME}\nevidence kept: ${EVIDENCE}`);
+  console.log(`removed ${HOME}\nevidence kept: ${st ? evidenceDir(st) : path.join(DIR, 'evidence')}`);
 }
 
 const [cmd, ...rest] = process.argv.slice(2);

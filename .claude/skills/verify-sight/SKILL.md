@@ -24,7 +24,7 @@ The helper never touches the user's own Sight. It starts a second daemon with
 `HOME` pointed at a scratch directory and `SIGHT_PORT=2121`, so `~/.sight`,
 `~/.claude`, `~/.codex` and the daemon on port 2020 are out of reach.
 
-Scratch dir: `$TMPDIR/sight-verify-2121/` (`home/`, `evidence/`, `state.json`).
+Scratch dir: `$TMPDIR/sight-verify-2121/` (`home/`, `evidence/<launch time>/`, `state.json`).
 `launch` prints the absolute paths. To run a second instance side by side, set
 `SIGHT_VERIFY_PORT=<port>` on every command; the port also names the scratch dir.
 
@@ -86,7 +86,8 @@ In scope:
 
 - `page`: a Playwright `Page`, `baseURL` set to the isolated instance, 1280×800,
   clipboard read/write granted.
-- `shot(name)`: saves `evidence/<name>.png` and prints its path.
+- `shot(name)`: saves `<name>.png` into this launch's evidence directory and
+  prints its path.
 - `select(locator)`: selects a single-line element's text with a real mouse
   drag. Use it for select-to-ask; a scripted `Selection` fires no `mouseup`.
 - `seeds`: see Launch.
@@ -94,7 +95,7 @@ In scope:
 The script is a Node async function body, so `await import('node:fs')` works.
 Browser `console.error` and uncaught page errors are printed as
 `[console.error]` / `[pageerror]`; treat any of them as a finding. When a
-script throws, the helper saves `evidence/failure.png` first.
+script throws, the helper saves `failure.png` there first.
 
 Selectors: the viewer has few ARIA labels or data attributes. Stable handles
 are `.event[data-mid]` (one per message), visible text, `title` attributes
@@ -110,8 +111,10 @@ node .claude/skills/verify-sight/sight-verify.mjs sight stats
 
 ## Evidence
 
-Evidence lives in `$TMPDIR/sight-verify-2121/evidence/` and survives
-`cleanup`. Report the absolute paths `shot` printed.
+Each `launch` gets its own directory,
+`$TMPDIR/sight-verify-2121/evidence/<launch time>/`, which survives
+`cleanup`. A proof is the screenshots of the current launch only; older
+directories are earlier runs. Report the absolute paths `shot` printed.
 
 A proof must meet all of these:
 
