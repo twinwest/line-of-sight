@@ -6,7 +6,7 @@ credentials, and internal context. Security reports are taken seriously.
 ## Reporting a vulnerability
 
 Report privately through GitHub:
-[Report a vulnerability](https://github.com/twinwest/line-of-sight/security/advisories/new).
+[Report a vulnerability](https://github.com/rayvqian/line-of-sight/security/advisories/new).
 Please do not open a public issue.
 
 Include the output of `sight version`, your Claude Code or Codex CLI version,

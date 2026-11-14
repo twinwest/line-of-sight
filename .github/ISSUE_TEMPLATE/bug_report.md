@@ -5,7 +5,7 @@ labels: bug
 ---
 
 <!-- Security issue? Report it privately instead:
-https://github.com/twinwest/line-of-sight/security/advisories/new -->
+https://github.com/rayvqian/line-of-sight/security/advisories/new -->
 
 **What happened**
 
