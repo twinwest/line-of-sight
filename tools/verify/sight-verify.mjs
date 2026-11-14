@@ -100,10 +100,9 @@ async function doctor() {
 
 // Runs a Playwright script (stdin, or a file argument) against a fresh headless
 // Chrome. In scope: page (baseURL = this instance), shot(name), select(locator), seeds.
-async function drive(file) {
+async function drive(code, failShot = 'failure') {
   const st = readState();
   if (!st) die('not launched; run launch first');
-  const code = fs.readFileSync(file ?? 0, 'utf8');
   const { chromium } = await import('playwright-core');
   const browser = await chromium.launch({ channel: 'chrome' });
   const context = await browser.newContext({
@@ -122,7 +121,12 @@ async function drive(file) {
   // Select a single-line element's text with a real mouse drag: the Ask button
   // listens for mouseup, which a scripted Selection never fires.
   const select = async (locator) => {
-    const b = await locator.evaluate((el) => {
+    const b = await locator.evaluate(async (el) => {
+      // Centre it first: off-screen text cannot be dragged, and a drag that
+      // starts at the pane's edge makes the browser autoscroll the text away.
+      // Two frames let the app's own scroll handler run before the drag.
+      el.scrollIntoView({ block: 'center' });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const r = document.createRange();
       r.selectNodeContents(el);
       const q = r.getBoundingClientRect();
@@ -137,11 +141,28 @@ async function drive(file) {
   try {
     await new AsyncFunction('page', 'shot', 'select', 'seeds', code)(page, shot, select, SEEDS);
   } catch (e) {
-    await shot('failure').catch(() => {});
+    await shot(failShot).catch(() => {});
     throw e;
   } finally {
     await browser.close();
   }
+}
+
+// Runs every feature file's drive script, in the order features/README.md
+// lists them, each in its own browser: one answer to "is the map still true?"
+async function walk() {
+  const dir = path.join(REPO, 'tools/verify/features');
+  const files = [...fs.readFileSync(path.join(dir, 'README.md'), 'utf8').matchAll(/\]\(([\w-]+)\.md\)/g)].map((m) => m[1]);
+  const failed = [];
+  for (const name of files) {
+    const code = [...fs.readFileSync(path.join(dir, `${name}.md`), 'utf8').matchAll(/^```js\n([\s\S]*?)^```$/gm)].map((m) => m[1]).join('\n');
+    if (!code) { console.log(`\n=== ${name}: skipped, no drive script (run its shell commands by hand)`); continue; }
+    console.log(`\n=== ${name}`);
+    try { await drive(code, `failure-${name}`); console.log(`ok   ${name}`); }
+    catch (e) { failed.push(name); console.log(`FAIL ${name} — ${String(e.message).split('\n')[0]}`); }
+  }
+  if (failed.length) die(`\nwalk failed: ${failed.join(', ')}`);
+  console.log('\nwalk passed');
 }
 
 // The built CLI against the isolated instance: `sight-verify.mjs sight status`.
@@ -169,7 +190,8 @@ const [cmd, ...rest] = process.argv.slice(2);
 switch (cmd) {
   case 'launch': await launch(); break;
   case 'doctor': await doctor(); break;
-  case 'drive': await drive(rest[0]); break;
+  case 'drive': await drive(fs.readFileSync(rest[0] ?? 0, 'utf8')); break;
+  case 'walk': await walk(); break;
   case 'sight': sight(rest); break;
   case 'cleanup': await cleanup(); break;
   default:
@@ -177,6 +199,7 @@ switch (cmd) {
   launch            seed an isolated HOME from test/fixtures and start the daemon on port ${PORT}
   doctor            read-only health check of that instance (exit 1 on any FAIL)
   drive [file]      run a Playwright script (stdin or file) in headless Chrome; scope: page, shot(name), select(locator), seeds
+  walk              run every drive script under features/, in README order (exit 1 on any FAIL)
   sight <args...>   run the built sight CLI against the isolated instance
   cleanup           stop the daemon this harness started and remove its HOME (evidence is kept)
 SIGHT_VERIFY_PORT picks another port and scratch dir (default 2121).`);

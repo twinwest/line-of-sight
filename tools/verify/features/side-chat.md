@@ -60,6 +60,9 @@ after Delete the marker is gone and the chip reads `Asks · 0`.
 - A scripted selection (`locator.selectText()`, `Selection.addRange`) does
   not show the Ask button; it listens for `mouseup`. Use `select()`.
 - `select()` drags across one line. For text that wraps, pick a shorter element.
+- A drag that starts at the edge of the transcript pane makes the browser
+  autoscroll, the text leaves the pointer, and nothing is selected. `select()`
+  centres the element first; a hand-written drag must do the same.
 - Delete closes the panel first and removes the side chat a moment later.
   Wait for the marker to detach, not for the panel.
 - The selection must sit inside a single message. Dragging across two
