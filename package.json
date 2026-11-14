@@ -67,9 +67,9 @@
   "author": "Ray Qian",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/twinwest/line-of-sight.git"
+    "url": "git+https://github.com/rayvqian/line-of-sight.git"
   },
-  "homepage": "https://github.com/twinwest/line-of-sight#readme",
+  "homepage": "https://github.com/rayvqian/line-of-sight#readme",
   "files": [
     "dist",
     "web/dist"

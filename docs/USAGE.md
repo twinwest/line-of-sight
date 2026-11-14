@@ -90,7 +90,7 @@ See `sight --help` for all commands and `~/.sight/daemon.log` for startup errors
 
 Transcript formats change between CLI versions; unrecognized entries fall
 back to raw JSON. If something renders incorrectly,
-[open an issue](https://github.com/twinwest/line-of-sight/issues) with your
+[open an issue](https://github.com/rayvqian/line-of-sight/issues) with your
 CLI version and the summary from `sight inspect <transcript.jsonl>`.
 Review the output for private information before sharing it.
 
